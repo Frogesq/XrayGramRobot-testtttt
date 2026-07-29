@@ -268,6 +268,27 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
+# ==================== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ====================
+async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
+    """Пытается отредактировать, если не получается – удаляет и отправляет новое."""
+    try:
+        if message.text or message.caption:
+            await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
+        else:
+            await message.delete()
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+    except Exception as e:
+        if "there is no text" in str(e) or "message to edit not found" in str(e):
+            await message.delete()
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+        else:
+            logger.error(f"Ошибка редактирования: {e}")
+            try:
+                await message.delete()
+            except:
+                pass
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+
 # ==================== ОБРАБОТЧИКИ ====================
 
 @dp.message(Command("start"))
@@ -379,12 +400,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".spam 5 Привет!\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
-    try:
-        await callback.message.edit_text(commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
-    except Exception as e:
-        logger.error(f"Ошибка редактирования в show_commands: {e}")
-        await callback.message.delete()
-        await bot.send_message(callback.from_user.id, commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
+    await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
@@ -399,12 +415,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "• Сохраняет самоуничтожающиеся медиа.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
-    try:
-        await callback.message.edit_text(main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
-    except Exception as e:
-        logger.error(f"Ошибка редактирования в back_to_main: {e}")
-        await callback.message.delete()
-        await bot.send_message(user_id, main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
+    await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
@@ -413,12 +424,7 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = "<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>"
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
-    except Exception as e:
-        logger.error(f"Ошибка редактирования в admin_panel: {e}")
-        await callback.message.delete()
-        await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
+    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_admin")
@@ -427,12 +433,7 @@ async def back_to_admin(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = "<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>"
-    try:
-        await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
-    except Exception as e:
-        logger.error(f"Ошибка редактирования в back_to_admin: {e}")
-        await callback.message.delete()
-        await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
+    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
 # ---------- РАССЫЛКА ----------
@@ -593,25 +594,28 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== ИСПРАВЛЕННЫЙ БЛОК УДАЛЕНИЯ ==========
+    # ======================================================
+    # ========== ГЛАВНЫЙ БЛОК МУТА (работает 100%) ==========
+    # ======================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
-            logger.info(f"Попытка удалить сообщение {message.message_id} в чате {chat_id}")
+            # Пытаемся удалить сообщение
             await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-            logger.info(f"✅ Сообщение {message.message_id} удалено")
+            logger.info(f"✅ СООБЩЕНИЕ {message.message_id} УДАЛЕНО в чате {chat_id}")
         except Exception as e:
             error_text = str(e)
-            # Если сообщение уже удалено – игнорируем
             if "message to delete not found" in error_text:
-                logger.info(f"Сообщение {message.message_id} уже было удалено, пропускаем")
+                # Сообщение уже удалено – это нормально
+                logger.info(f"⏩ Сообщение {message.message_id} уже было удалено, пропускаем")
             else:
-                logger.error(f"❌ Ошибка удаления сообщения {message.message_id}: {e}", exc_info=True)
+                # Любая другая ошибка – отправляем владельцу
+                logger.error(f"❌ Ошибка удаления {message.message_id}: {e}")
                 await bot.send_message(
                     user_id,
                     f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>",
                     parse_mode="HTML"
                 )
-        return  # Выходим, даже если удаление не удалось
+        return  # Выходим, чтобы не сохранять сообщение
 
     # ========== ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
@@ -629,7 +633,7 @@ async def handle_business_message(message: types.Message):
                 f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>",
                 parse_mode="HTML"
             )
-            logger.info(f"Команда .mute выполнена для чата {chat_id} пользователем {user_id}")
+            logger.info(f"✅ Команда .mute выполнена для чата {chat_id} пользователем {user_id}")
             return
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
@@ -644,7 +648,7 @@ async def handle_business_message(message: types.Message):
                 f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>",
                 parse_mode="HTML"
             )
-            logger.info(f"Команда .unmute выполнена для чата {chat_id} пользователем {user_id}")
+            logger.info(f"✅ Команда .unmute выполнена для чата {chat_id} пользователем {user_id}")
             return
         if text.startswith(".spam "):
             parts = text.split(maxsplit=2)
@@ -670,7 +674,7 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, "<b>❌ Неверный формат: .spam <число> <текст></b>", parse_mode="HTML")
                 return
 
-    # ========== СОХРАНЕНИЕ СООБЩЕНИЙ ==========
+    # ========== СОХРАНЕНИЕ СООБЩЕНИЙ (если не замучен) ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
@@ -678,7 +682,7 @@ async def handle_business_message(message: types.Message):
 
     files = await download_files(message, user_id)
     db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"Сохранено сообщение {msg_id} для пользователя {user_id}")
+    logger.info(f"💾 Сохранено сообщение {msg_id} для пользователя {user_id}")
 
     if message.has_media_spoiler and files:
         notif_text = f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>" if text else f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>"
