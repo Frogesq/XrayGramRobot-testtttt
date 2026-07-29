@@ -55,32 +55,14 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ С ЦВЕТНЫМИ КНОПКАМИ ====================
+# ==================== КЛАВИАТУРЫ (без цвета, для совместимости) ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [
-            InlineKeyboardButton(
-                text="🔗 Подключить бота",
-                callback_data="show_instruction",
-                style="primary"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📋 Команды",
-                callback_data="show_commands",
-                style="success"
-            )
-        ]
+        [InlineKeyboardButton(text="🔗 Подключить бота", callback_data="show_instruction")],
+        [InlineKeyboardButton(text="📋 Команды", callback_data="show_commands")]
     ]
     if is_admin:
-        kb.append([
-            InlineKeyboardButton(
-                text="⚙️ Админ-панель",
-                callback_data="admin_panel",
-                style="danger"
-            )
-        ])
+        kb.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -89,105 +71,46 @@ def subscription_keyboard(action: str = None):
         callback_data += f"|{action}"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📢 Подписаться на канал",
-                    url="https://t.me/NovoeTelegram"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Проверить подписку",
-                    callback_data=callback_data,
-                    style="success"
-                )
-            ]
+            [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
+            [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=callback_data)]
         ]
     )
 
 def instruction_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
         ]
     )
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📢 Рассылка",
-                    callback_data="broadcast",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📄 Список пользователей (txt)",
-                    callback_data="users_txt",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔗 Активные подключения",
-                    callback_data="active_connections",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast")],
+            [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt")],
+            [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
         ]
     )
 
 def cancel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="❌ Отмена",
-                    callback_data="cancel_broadcast",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast")]
         ]
     )
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад в админ-панель",
-                    callback_data="back_to_admin",
-                    style="primary"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin")]
         ]
     )
 
 def commands_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
         ]
     )
 
@@ -270,7 +193,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
 
 # ==================== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ====================
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
-    """Пытается отредактировать, если не получается – удаляет и отправляет новое."""
     try:
         if message.text or message.caption:
             await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
@@ -559,7 +481,7 @@ async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
     user_id = connection.user.id
     db.set_connection(bc_id, user_id)
-    logger.info(f"Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
+    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
 
     if not db.is_user_registered(user_id):
         user = connection.user
@@ -574,18 +496,18 @@ async def handle_business_connection(connection: BusinessConnection):
             parse_mode="HTML"
         )
     except Exception as e:
-        logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+        logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
 
 @dp.business_message()
 async def handle_business_message(message: types.Message):
     bc_id = message.business_connection_id
     if not bc_id:
-        logger.warning("business_connection_id отсутствует")
+        logger.warning("[MUTE] business_connection_id отсутствует")
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id:
-        logger.warning(f"Неизвестное bc_id: {bc_id}")
+        logger.warning(f"[MUTE] Неизвестное bc_id: {bc_id}")
         return
     if not db.is_user_registered(user_id):
         return
@@ -594,34 +516,33 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ======================================================
-    # ========== ГЛАВНЫЙ БЛОК МУТА (работает 100%) ==========
-    # ======================================================
+    # =========================================================
+    # ========== БЛОК МУТА (ГАРАНТИРОВАННОЕ УДАЛЕНИЕ) ==========
+    # =========================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
-            # Пытаемся удалить сообщение
+            # Пытаемся удалить сообщение (для бизнес-чатов не нужен business_connection_id)
             await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-            logger.info(f"✅ СООБЩЕНИЕ {message.message_id} УДАЛЕНО в чате {chat_id}")
+            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
         except Exception as e:
             error_text = str(e)
             if "message to delete not found" in error_text:
-                # Сообщение уже удалено – это нормально
-                logger.info(f"⏩ Сообщение {message.message_id} уже было удалено, пропускаем")
+                logger.info(f"[MUTE] ⏩ Сообщение {message.message_id} уже удалено, пропускаем")
             else:
-                # Любая другая ошибка – отправляем владельцу
-                logger.error(f"❌ Ошибка удаления {message.message_id}: {e}")
+                logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
                 await bot.send_message(
                     user_id,
                     f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>",
                     parse_mode="HTML"
                 )
-        return  # Выходим, чтобы не сохранять сообщение
+        return  # Выходим, не сохраняем
 
     # ========== ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
+            # Отправляем уведомление собеседнику
             await bot.send_message(
                 chat_id,
                 "<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>",
@@ -633,7 +554,7 @@ async def handle_business_message(message: types.Message):
                 f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>",
                 parse_mode="HTML"
             )
-            logger.info(f"✅ Команда .mute выполнена для чата {chat_id} пользователем {user_id}")
+            logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
             return
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
@@ -648,7 +569,7 @@ async def handle_business_message(message: types.Message):
                 f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>",
                 parse_mode="HTML"
             )
-            logger.info(f"✅ Команда .unmute выполнена для чата {chat_id} пользователем {user_id}")
+            logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
             return
         if text.startswith(".spam "):
             parts = text.split(maxsplit=2)
@@ -682,7 +603,7 @@ async def handle_business_message(message: types.Message):
 
     files = await download_files(message, user_id)
     db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"💾 Сохранено сообщение {msg_id} для пользователя {user_id}")
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
 
     if message.has_media_spoiler and files:
         notif_text = f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>" if text else f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>"
