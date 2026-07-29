@@ -15,7 +15,6 @@ from aiogram.types import (
 )
 from database import Database
 
-# ==================== ЗАГРУЗКА ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ====================
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -27,44 +26,47 @@ try:
 except ValueError:
     raise ValueError("ADMIN_ID должен быть числом")
 
-# ==================== НАСТРОЙКИ ====================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (ТОЛЬКО ПРОВЕРЕННЫЕ ID) ====================
+# ==================== PREMIUM ЭМОДЗИ (ВАШИ ID) ====================
 PREMIUM_EMOJI = {
-    "✅": "5206607081334906820",   # галочка
-    "❌": "5210952531676504517",   # крестик
-    "⚠️": "5447644880824181073",   # предупреждение
-    "🔇": "5388632425314140043",   # выключенный динамик
-    "🔊": "5388632425314140043",   # громкий динамик (тот же ID)
-    "💬": "5443038326535759644",   # чат
-    "📖": "5460795800101594035",   # цитата
-    "❓": "5436113877181941026",   # знак вопроса
-    "📄": "5877485980901971030",   # значок данных
-    "✏️": "5925001822572908226",   # кисточка
-    "🗑️": "6007942490076745785",   # очистка
-    "📢": "5424818078833715060",   # объявление
-    "⬅️": "5877536313623711363",   # стрелка влево
+    "✅": "5206607081334906820",
+    "❌": "5210952531676504517",
+    "⚠️": "5447644880824181073",
+    "🔇": "5388632425314140043",
+    "🔊": "5388632425314140043",
+    "💬": "5443038326535759644",
+    "📖": "5460795800101594035",
+    "❓": "5436113877181941026",
+    "📄": "5877485980901971030",
+    "✏️": "5925001822572908226",
+    "🗑️": "6007942490076745785",
+    "📢": "5424818078833715060",
+    "⬅️": "5877536313623711363",
+    "⛔": "5354435465021373780",
+    "🔗": "5271604874419647061",
+    "📋": "5334544901428229844",
+    "⚙️": "5341715473882955310",
+    "👋": "5217508498606147980",
+    "🤖": "5372981976804366741",
+    "1️⃣": "5382322671679708881",
 }
 
 def premium(text: str) -> str:
-    """Заменяет эмодзи на премиум-версии, если ID есть, иначе оставляет как есть."""
     for emoji, emoji_id in PREMIUM_EMOJI.items():
         if emoji in text:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
-# ==================== ЛОГГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# ==================== СОЗДАНИЕ БОТА ====================
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
@@ -75,7 +77,6 @@ if os.path.exists(INSTRUCTION_IMAGE_PATH):
 else:
     logger.warning("❌ Картинка инструкции НЕ найдена")
 
-# ==================== FSM ====================
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
@@ -84,14 +85,14 @@ def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text=premium("🔗 Подключить бота"),  # 🔗 не заменяется (нет ID)
+                text=premium("🔗 Подключить бота"),
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text=premium("📋 Команды"),          # 📋 не заменяется
+                text=premium("📋 Команды"),
                 callback_data="show_commands",
                 style="success"
             )
@@ -100,7 +101,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text=premium("⚙️ Админ-панель"),    # ⚙️ не заменяется
+                text=premium("⚙️ Админ-панель"),
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -161,7 +162,7 @@ def admin_panel_keyboard():
             ],
             [
                 InlineKeyboardButton(
-                    text=premium("🔗 Активные подключения"),  # 🔗 не заменяется
+                    text=premium("🔗 Активные подключения"),
                     callback_data="active_connections",
                     style="primary"
                 )
@@ -291,7 +292,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
-# ==================== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ====================
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
     try:
@@ -617,7 +617,7 @@ async def handle_business_message(message: types.Message):
     is_owner = (sender_id == user_id)
 
     # =========================================================
-    # ========== БЛОК МУТА (работает через delete_business_messages) ==========
+    # ========== БЛОК МУТА (через delete_business_messages) ==========
     # =========================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
