@@ -55,14 +55,32 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ (без цвета, для совместимости) ====================
+# ==================== КЛАВИАТУРЫ С ЦВЕТНЫМИ КНОПКАМИ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(text="🔗 Подключить бота", callback_data="show_instruction")],
-        [InlineKeyboardButton(text="📋 Команды", callback_data="show_commands")]
+        [
+            InlineKeyboardButton(
+                text="🔗 Подключить бота",
+                callback_data="show_instruction",
+                style="primary"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 Команды",
+                callback_data="show_commands",
+                style="success"
+            )
+        ]
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
+        kb.append([
+            InlineKeyboardButton(
+                text="⚙️ Админ-панель",
+                callback_data="admin_panel",
+                style="danger"
+            )
+        ])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -71,46 +89,105 @@ def subscription_keyboard(action: str = None):
         callback_data += f"|{action}"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
-            [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=callback_data)]
+            [
+                InlineKeyboardButton(
+                    text="📢 Подписаться на канал",
+                    url="https://t.me/NovoeTelegram"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Проверить подписку",
+                    callback_data=callback_data,
+                    style="success"
+                )
+            ]
         ]
     )
 
 def instruction_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast")],
-            [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt")],
-            [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data="broadcast",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📄 Список пользователей (txt)",
+                    callback_data="users_txt",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Активные подключения",
+                    callback_data="active_connections",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def cancel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast")]
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="cancel_broadcast",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад в админ-панель",
+                    callback_data="back_to_admin",
+                    style="primary"
+                )
+            ]
         ]
     )
 
 def commands_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
@@ -517,12 +594,16 @@ async def handle_business_message(message: types.Message):
     is_owner = (sender_id == user_id)
 
     # =========================================================
-    # ========== БЛОК МУТА (ГАРАНТИРОВАННОЕ УДАЛЕНИЕ) ==========
+    # ========== БЛОК МУТА (100% рабочая логика) ==============
     # =========================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
-            # Пытаемся удалить сообщение (для бизнес-чатов не нужен business_connection_id)
-            await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
+            # Удаляем сообщение с передачей business_connection_id
+            await bot.delete_message(
+                chat_id=chat_id,
+                message_id=message.message_id,
+                business_connection_id=bc_id
+            )
             logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
         except Exception as e:
             error_text = str(e)
@@ -542,7 +623,6 @@ async def handle_business_message(message: types.Message):
         text = message.text.strip()
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
-            # Отправляем уведомление собеседнику
             await bot.send_message(
                 chat_id,
                 "<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>",
