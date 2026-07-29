@@ -55,16 +55,32 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ (без style, но с эмодзи) ====================
-# (оставляем обычные кнопки, чтобы избежать проблем с версией aiogram)
-
+# ==================== КЛАВИАТУРЫ С ЦВЕТНЫМИ КНОПКАМИ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(text="🔗 Подключить бота", callback_data="show_instruction")],
-        [InlineKeyboardButton(text="📋 Команды", callback_data="show_commands")]
+        [
+            InlineKeyboardButton(
+                text="🔗 Подключить бота",
+                callback_data="show_instruction",
+                style="primary"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="📋 Команды",
+                callback_data="show_commands",
+                style="success"
+            )
+        ]
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
+        kb.append([
+            InlineKeyboardButton(
+                text="⚙️ Админ-панель",
+                callback_data="admin_panel",
+                style="danger"
+            )
+        ])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -73,46 +89,105 @@ def subscription_keyboard(action: str = None):
         callback_data += f"|{action}"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
-            [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=callback_data)]
+            [
+                InlineKeyboardButton(
+                    text="📢 Подписаться на канал",
+                    url="https://t.me/NovoeTelegram"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Проверить подписку",
+                    callback_data=callback_data,
+                    style="success"
+                )
+            ]
         ]
     )
 
 def instruction_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast")],
-            [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt")],
-            [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections")],
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="📢 Рассылка",
+                    callback_data="broadcast",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📄 Список пользователей (txt)",
+                    callback_data="users_txt",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔗 Активные подключения",
+                    callback_data="active_connections",
+                    style="primary"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def cancel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast")]
+            [
+                InlineKeyboardButton(
+                    text="❌ Отмена",
+                    callback_data="cancel_broadcast",
+                    style="danger"
+                )
+            ]
         ]
     )
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад в админ-панель",
+                    callback_data="back_to_admin",
+                    style="primary"
+                )
+            ]
         ]
     )
 
 def commands_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
+            [
+                InlineKeyboardButton(
+                    text="⬅️ Назад",
+                    callback_data="back_to_main",
+                    style="danger"
+                )
+            ]
         ]
     )
 
@@ -290,7 +365,6 @@ async def show_instruction(callback: types.CallbackQuery):
     await show_instruction_logic(user_id)
     await callback.answer()
 
-# ====== ИСПРАВЛЕННЫЙ ОБРАБОТЧИК КОМАНД (убрал HTML-ошибку) ======
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
     commands_text = (
@@ -308,8 +382,7 @@ async def show_commands(callback: types.CallbackQuery):
     try:
         await callback.message.edit_text(commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
     except Exception as e:
-        logger.error(f"Ошибка редактирования сообщения в show_commands: {e}")
-        # Если редактирование не удалось – отправляем новое сообщение
+        logger.error(f"Ошибка редактирования в show_commands: {e}")
         await callback.message.delete()
         await bot.send_message(callback.from_user.id, commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
     await callback.answer()
@@ -520,19 +593,24 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== ИСПРАВЛЕННЫЙ БЛОК УДАЛЕНИЯ (без business_connection_id) ==========
+    # ========== ИСПРАВЛЕННЫЙ БЛОК УДАЛЕНИЯ ==========
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             logger.info(f"Попытка удалить сообщение {message.message_id} в чате {chat_id}")
             await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
             logger.info(f"✅ Сообщение {message.message_id} удалено")
         except Exception as e:
-            logger.error(f"❌ Ошибка удаления сообщения {message.message_id}: {e}", exc_info=True)
-            await bot.send_message(
-                user_id,
-                f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>",
-                parse_mode="HTML"
-            )
+            error_text = str(e)
+            # Если сообщение уже удалено – игнорируем
+            if "message to delete not found" in error_text:
+                logger.info(f"Сообщение {message.message_id} уже было удалено, пропускаем")
+            else:
+                logger.error(f"❌ Ошибка удаления сообщения {message.message_id}: {e}", exc_info=True)
+                await bot.send_message(
+                    user_id,
+                    f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>",
+                    parse_mode="HTML"
+                )
         return  # Выходим, даже если удаление не удалось
 
     # ========== ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ==========
@@ -606,7 +684,6 @@ async def handle_business_message(message: types.Message):
         notif_text = f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>" if text else f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>"
         await send_notification(user_id, notif_text, files)
 
-# ========== ОСТАЛЬНЫЕ ОБРАБОТЧИКИ ==========
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
     bc_id = message.business_connection_id
