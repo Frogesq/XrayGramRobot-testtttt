@@ -33,6 +33,39 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
+# ==================== PREMIUM ЭМОДЗИ ====================
+# ID можно взять на https://zulut30.github.io/premium-telegram-emoji/
+PREMIUM_EMOJI = {
+    "🔗": "1234567890",   # пример ID (замените на реальный)
+    "📋": "1234567891",
+    "⚙️": "1234567892",
+    "⬅️": "1234567893",
+    "📢": "1234567894",
+    "✅": "1234567895",
+    "❌": "1234567896",
+    "🔇": "1234567897",
+    "🔊": "1234567898",
+    "💬": "1234567899",
+    "📖": "1234567900",
+    "❓": "1234567901",
+    "📄": "1234567902",
+    "🔗": "1234567903",
+    "⚠️": "1234567904",
+    "✏️": "1234567905",
+    "💾": "1234567906",
+    "🗑️": "1234567907",
+    "🔴": "1234567908",
+    "🟢": "1234567909",
+    "🔵": "1234567910",
+}
+
+def premium(text: str) -> str:
+    """Заменяет обычные эмодзи на теги Premium-эмодзи"""
+    for emoji, emoji_id in PREMIUM_EMOJI.items():
+        if emoji in text:
+            text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
+    return text
+
 # ==================== ЛОГГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
@@ -55,19 +88,19 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ С ЦВЕТНЫМИ КНОПКАМИ ====================
+# ==================== КЛАВИАТУРЫ С ЦВЕТНЫМИ КНОПКАМИ И PREMIUM ЭМОДЗИ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text="🔗 Подключить бота",
+                text=premium("🔗 Подключить бота"),
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text="📋 Команды",
+                text=premium("📋 Команды"),
                 callback_data="show_commands",
                 style="success"
             )
@@ -76,7 +109,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text="⚙️ Админ-панель",
+                text=premium("⚙️ Админ-панель"),
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -91,13 +124,13 @@ def subscription_keyboard(action: str = None):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📢 Подписаться на канал",
+                    text=premium("📢 Подписаться на канал"),
                     url="https://t.me/NovoeTelegram"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="✅ Проверить подписку",
+                    text=premium("✅ Проверить подписку"),
                     callback_data=callback_data,
                     style="success"
                 )
@@ -110,7 +143,7 @@ def instruction_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад",
+                    text=premium("⬅️ Назад"),
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -123,28 +156,28 @@ def admin_panel_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="📢 Рассылка",
+                    text=premium("📢 Рассылка"),
                     callback_data="broadcast",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="📄 Список пользователей (txt)",
+                    text=premium("📄 Список пользователей (txt)"),
                     callback_data="users_txt",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="🔗 Активные подключения",
+                    text=premium("🔗 Активные подключения"),
                     callback_data="active_connections",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад",
+                    text=premium("⬅️ Назад"),
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -157,7 +190,7 @@ def cancel_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="❌ Отмена",
+                    text=premium("❌ Отмена"),
                     callback_data="cancel_broadcast",
                     style="danger"
                 )
@@ -170,7 +203,7 @@ def back_to_admin_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад в админ-панель",
+                    text=premium("⬅️ Назад в админ-панель"),
                     callback_data="back_to_admin",
                     style="primary"
                 )
@@ -183,7 +216,7 @@ def commands_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⬅️ Назад",
+                    text=premium("⬅️ Назад"),
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -255,7 +288,7 @@ def format_user_info(user: types.User) -> str:
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
         if files:
-            await bot.send_document(chat_id, types.FSInputFile(files[0]), caption=text, parse_mode=parse_mode)
+            await bot.send_document(chat_id, types.FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
             for file_path in files[1:]:
                 await bot.send_document(chat_id, types.FSInputFile(file_path))
             for file_path in files:
@@ -264,12 +297,13 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
                 except:
                     pass
         else:
-            await bot.send_message(chat_id, text, parse_mode=parse_mode)
+            await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
 # ==================== БЕЗОПАСНОЕ РЕДАКТИРОВАНИЕ ====================
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
+    new_text = premium(new_text)
     try:
         if message.text or message.caption:
             await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
@@ -297,12 +331,12 @@ async def start_command(message: types.Message):
     db.register_user(user_id, user.username or "", user.first_name or "", user.last_name or "")
 
     if not await is_subscribed(user_id):
-        text = "<b>📢 Для использования бота необходимо подписаться на наш канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>"
+        text = premium("<b>📢 Для использования бота необходимо подписаться на наш канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>")
         await message.answer(text, reply_markup=subscription_keyboard(), parse_mode="HTML")
         return
 
     is_admin = (user_id == ADMIN_ID)
-    main_text = (
+    main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!\n\n"
         "🤖 Что умеет бот:\n"
         "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
@@ -324,7 +358,7 @@ async def check_subscription(callback: types.CallbackQuery):
             await show_instruction_logic(user_id)
         else:
             is_admin = (user_id == ADMIN_ID)
-            main_text = (
+            main_text = premium(
                 "<b>👋 Добро пожаловать в XrayGram!\n\n"
                 "🤖 Что умеет бот:\n"
                 "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
@@ -338,7 +372,7 @@ async def check_subscription(callback: types.CallbackQuery):
         await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и нажмите снова.", show_alert=True)
 
 async def show_instruction_logic(user_id: int):
-    instruction_text = (
+    instruction_text = premium(
         "<b>📖 Инструкция по подключению XrayGram\n\n"
         "1️⃣ Убедитесь, что у вас есть подписка Телеграм Премиум.\n"
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
@@ -376,7 +410,7 @@ async def show_instruction_logic(user_id: int):
 async def show_instruction(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     if not await is_subscribed(user_id):
-        text = "<b>📢 Для доступа к инструкции необходимо подписаться на канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>"
+        text = premium("<b>📢 Для доступа к инструкции необходимо подписаться на канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>")
         await callback.message.edit_text(text, reply_markup=subscription_keyboard("show_instruction"), parse_mode="HTML")
         await callback.answer()
         return
@@ -387,7 +421,7 @@ async def show_instruction(callback: types.CallbackQuery):
 
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
-    commands_text = (
+    commands_text = premium(
         "<b>📋 Список доступных команд\n\n"
         "Эти команды работают в личных чатах, где активен бизнес-режим.\n\n"
         "🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
@@ -406,7 +440,7 @@ async def show_commands(callback: types.CallbackQuery):
 async def back_to_main(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     is_admin = (user_id == ADMIN_ID)
-    main_text = (
+    main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!\n\n"
         "🤖 Что умеет бот:\n"
         "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
@@ -422,7 +456,7 @@ async def admin_panel(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    text = "<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>"
+    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
     await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
@@ -431,7 +465,7 @@ async def back_to_admin(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    text = "<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>"
+    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
     await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
@@ -442,7 +476,7 @@ async def broadcast_start(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     await callback.message.delete()
-    text = "<b>📢 Введите текст или отправьте медиа для рассылки\n\nВсе зарегистрированные пользователи получат это сообщение.\nДля отмены нажмите кнопку ниже.</b>"
+    text = premium("<b>📢 Введите текст или отправьте медиа для рассылки\n\nВсе зарегистрированные пользователи получат это сообщение.\nДля отмены нажмите кнопку ниже.</b>")
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=cancel_keyboard())
     await state.set_state(BroadcastStates.waiting_for_content)
     await callback.answer()
@@ -454,7 +488,7 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
         return
     await state.clear()
     await callback.message.delete()
-    text = "<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>"
+    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
@@ -469,7 +503,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     users = cursor.fetchall()
 
     if not users:
-        await message.answer("<b>📭 Нет зарегистрированных пользователей.</b>", parse_mode="HTML")
+        await message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
         await state.clear()
         return
 
@@ -488,7 +522,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
             logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
             failed += 1
 
-    result_text = f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>"
+    result_text = premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>")
     await message.answer(result_text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
 
@@ -504,7 +538,7 @@ async def users_txt(callback: types.CallbackQuery):
     users = cursor.fetchall()
 
     if not users:
-        await callback.message.answer("<b>📭 Нет зарегистрированных пользователей.</b>", parse_mode="HTML")
+        await callback.message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
         await callback.answer()
         return
 
@@ -523,7 +557,7 @@ async def users_txt(callback: types.CallbackQuery):
     file_bytes = content.encode("utf-8")
     await callback.message.answer_document(
         BufferedInputFile(file_bytes, filename="users_list.txt"),
-        caption="<b>📄 Список всех пользователей (txt)</b>",
+        caption=premium("<b>📄 Список всех пользователей (txt)</b>"),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -539,14 +573,14 @@ async def active_connections(callback: types.CallbackQuery):
     cursor.execute("SELECT DISTINCT user_id FROM connections")
     conn_users = cursor.fetchall()
     if not conn_users:
-        text = "<b>🔗 Активные подключения\n\nНет пользователей с активным бизнес-подключением.</b>"
+        text = premium("<b>🔗 Активные подключения\n\nНет пользователей с активным бизнес-подключением.</b>")
     else:
         user_ids = [row[0] for row in conn_users]
         placeholders = ",".join("?" for _ in user_ids)
         cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", user_ids)
         users = cursor.fetchall()
         lines = [f"• {u[2] or ''} {u[3] or ''} (@{u[1]}) - ID: {u[0]}" for u in users]
-        text = f"<b>🔗 Активные подключения ({len(users)})\n\n" + "\n".join(lines) + "</b>"
+        text = premium(f"<b>🔗 Активные подключения ({len(users)})\n\n" + "\n".join(lines) + "</b>")
 
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await callback.answer()
@@ -567,9 +601,9 @@ async def handle_business_connection(connection: BusinessConnection):
     try:
         await bot.send_message(
             user_id,
-            "<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
-            "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
-            "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>",
+            premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
+                    "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
+                    "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
             parse_mode="HTML"
         )
     except Exception as e:
@@ -594,11 +628,10 @@ async def handle_business_message(message: types.Message):
     is_owner = (sender_id == user_id)
 
     # =========================================================
-    # ========== ГЛАВНЫЙ БЛОК МУТА (работает через delete_business_messages) ==
+    # ========== ГЛАВНЫЙ БЛОК МУТА (через delete_business_messages) ==
     # =========================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
-            # ✅ Правильный метод для бизнес-аккаунтов
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
@@ -612,10 +645,10 @@ async def handle_business_message(message: types.Message):
                 logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
                 await bot.send_message(
                     user_id,
-                    f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>",
+                    premium(f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>"),
                     parse_mode="HTML"
                 )
-        return  # Выходим, не сохраняем
+        return
 
     # ========== ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
@@ -624,13 +657,13 @@ async def handle_business_message(message: types.Message):
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
                 chat_id,
-                "<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>",
+                premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>"),
                 business_connection_id=bc_id,
                 parse_mode="HTML"
             )
             await bot.send_message(
                 user_id,
-                f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>",
+                premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
                 parse_mode="HTML"
             )
             logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
@@ -639,13 +672,13 @@ async def handle_business_message(message: types.Message):
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(
                 chat_id,
-                "<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>",
+                premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
                 business_connection_id=bc_id,
                 parse_mode="HTML"
             )
             await bot.send_message(
                 user_id,
-                f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>",
+                premium(f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>"),
                 parse_mode="HTML"
             )
             logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
@@ -659,7 +692,7 @@ async def handle_business_message(message: types.Message):
                     if count <= 0:
                         raise ValueError
                 except (ValueError, IndexError):
-                    await bot.send_message(user_id, "<b>❌ Неверный формат: .spam <число> <текст></b>", parse_mode="HTML")
+                    await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                     return
                 for i in range(count):
                     await bot.send_message(
@@ -668,10 +701,10 @@ async def handle_business_message(message: types.Message):
                         business_connection_id=bc_id
                     )
                     await asyncio.sleep(0.3)
-                await bot.send_message(user_id, f"<b>✅ Отправлено {count} сообщений в чат {chat_id}</b>", parse_mode="HTML")
+                await bot.send_message(user_id, premium(f"<b>✅ Отправлено {count} сообщений в чат {chat_id}</b>"), parse_mode="HTML")
                 return
             else:
-                await bot.send_message(user_id, "<b>❌ Неверный формат: .spam <число> <текст></b>", parse_mode="HTML")
+                await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
     # ========== СОХРАНЕНИЕ СООБЩЕНИЙ (если не замучен) ==========
@@ -685,7 +718,7 @@ async def handle_business_message(message: types.Message):
     logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
 
     if message.has_media_spoiler and files:
-        notif_text = f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>" if text else f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>"
+        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
         await send_notification(user_id, notif_text, files)
 
 @dp.edited_business_message()
@@ -727,7 +760,7 @@ async def handle_edited_business_message(message: types.Message):
     else:
         files_list = []
 
-    notif_text = f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>"
+    notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
     await send_notification(user_id, notif_text, files_list)
 
 @dp.deleted_business_messages()
@@ -749,7 +782,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         else:
             files_list = []
 
-        notif_text = f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>" if text else f"<b>❌ Сообщение удалено от {fullname}</b>"
+        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
         await send_notification(user_id, notif_text, files_list)
 
         db.delete_message(bc_id, msg_id)
@@ -764,7 +797,7 @@ async def main():
         raise
 
     await bot.set_my_commands([
-        types.BotCommand(command="start", description="Главное меню")
+        types.BotCommand(command="start", description=premium("Главное меню"))
     ])
     await dp.start_polling(bot)
 
