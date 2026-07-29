@@ -594,17 +594,16 @@ async def handle_business_message(message: types.Message):
     is_owner = (sender_id == user_id)
 
     # =========================================================
-    # ========== БЛОК МУТА (100% рабочая логика) ==============
+    # ========== ГЛАВНЫЙ БЛОК МУТА (работает через delete_business_messages) ==
     # =========================================================
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
-            # Удаляем сообщение с передачей business_connection_id
-            await bot.delete_message(
-                chat_id=chat_id,
-                message_id=message.message_id,
-                business_connection_id=bc_id
+            # ✅ Правильный метод для бизнес-аккаунтов
+            await bot.delete_business_messages(
+                business_connection_id=bc_id,
+                message_ids=[message.message_id]
             )
-            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
+            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО (business)")
         except Exception as e:
             error_text = str(e)
             if "message to delete not found" in error_text:
