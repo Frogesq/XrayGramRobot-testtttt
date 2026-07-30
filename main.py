@@ -13,6 +13,8 @@ from aiogram.types import (
     BusinessConnection, BusinessMessagesDeleted,
     BufferedInputFile, FSInputFile
 )
+from aiogram.client.session.aiohttp import AiohttpSession
+from aiohttp import TCPConnector
 from database import Database
 
 load_dotenv()
@@ -31,7 +33,7 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (С ВАШИМИ ID ЦИФР) ====================
+# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -70,7 +72,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-bot = Bot(token=BOT_TOKEN)
+# ==================== ОПТИМИЗИРОВАННАЯ СЕССИЯ ====================
+connector = TCPConnector(limit=100, limit_per_host=30, ttl_dns_cache=300)
+session = AiohttpSession(connector=connector)
+bot = Bot(token=BOT_TOKEN, session=session)
+
 dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
@@ -83,6 +89,7 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
+# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -218,6 +225,7 @@ def commands_keyboard():
         ]
     )
 
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -313,8 +321,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# Обработчики команд и callback'ов
-
+# ==================== ОБРАБОТЧИКИ ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -596,6 +603,7 @@ async def handle_business_connection(connection: BusinessConnection):
         user = connection.user
         db.register_user(user_id, user.username, user.first_name, user.last_name)
 
+    # Отправляем приветствие пользователю
     try:
         await bot.send_message(
             user_id,
@@ -606,6 +614,23 @@ async def handle_business_connection(connection: BusinessConnection):
         )
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
+
+    # ========== УВЕДОМЛЕНИЕ АДМИНИСТРАТОРУ ==========
+    try:
+        user = connection.user
+        full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
+        username = f"@{user.username}" if user.username else "без username"
+        await bot.send_message(
+            ADMIN_ID,
+            premium(f"<b>🔔 Новое подключение!</b>\n\n"
+                    f"👤 <b>Пользователь:</b> {full_name}\n"
+                    f"📱 <b>Username:</b> {username}\n"
+                    f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+                    f"🔗 <b>bc_id:</b> <code>{bc_id}</code>"),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"[CONN] Не удалось отправить уведомление админу: {e}")
 
 @dp.business_message()
 async def handle_business_message(message: types.Message):
@@ -656,9 +681,21 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # Команды владельца
+    # ========== КОМАНДЫ ВЛАДЕЛЬЦА (с удалением сообщения команды) ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
+
+        # Удаляем сообщение с командой (чтобы скрыть её в чате)
+        try:
+            await bot.delete_business_messages(
+                business_connection_id=bc_id,
+                message_ids=[message.message_id]
+            )
+            logger.info(f"[CMD] Сообщение с командой '{text}' удалено")
+        except Exception as e:
+            logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
+
+        # Обработка команд
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -793,6 +830,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
         db.delete_message(bc_id, msg_id)
 
+# ==================== ЗАПУСК ====================
 async def main():
     try:
         me = await bot.get_me()
