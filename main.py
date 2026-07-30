@@ -13,8 +13,6 @@ from aiogram.types import (
     BusinessConnection, BusinessMessagesDeleted,
     BufferedInputFile, FSInputFile
 )
-from aiogram.client.session.aiohttp import AiohttpSession
-from aiohttp import TCPConnector
 from database import Database
 
 load_dotenv()
@@ -72,7 +70,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Глобальные объекты (без сессии и бота – они будут созданы в main)
 dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
@@ -317,7 +314,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, bot: Bot, rep
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ (все получают bot через зависимость) ====================
+# ==================== ОБРАБОТЧИКИ (все получают bot через DI) ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message, bot: Bot):
     user = message.from_user
@@ -576,7 +573,7 @@ async def active_connections(callback: types.CallbackQuery, bot: Bot):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await callback.answer()
 
-# ==================== БИЗНЕС-ОБРАБОТЧИКИ (теперь с bot) ====================
+# ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection, bot: Bot):
     bc_id = connection.id
@@ -595,7 +592,6 @@ async def handle_business_connection(connection: BusinessConnection, bot: Bot):
         user = connection.user
         db.register_user(user_id, user.username, user.first_name, user.last_name)
 
-    # Отправляем приветствие пользователю
     try:
         await bot.send_message(
             user_id,
@@ -633,7 +629,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
 
     user_id = db.get_user_by_bc_id(bc_id)
 
-    # Fallback, если bc_id не найден в БД (например, после перезапуска)
     if not user_id and message.from_user:
         user_id = message.from_user.id
         logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
@@ -824,10 +819,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted, bot: 
 
 # ==================== ЗАПУСК ====================
 async def main():
-    # Создаём оптимизированную сессию внутри event loop
-    connector = TCPConnector(limit=100, limit_per_host=30, ttl_dns_cache=300)
-    session = AiohttpSession(connector=connector)
-    bot = Bot(token=BOT_TOKEN, session=session)
+    bot = Bot(token=BOT_TOKEN)
 
     try:
         me = await bot.get_me()
