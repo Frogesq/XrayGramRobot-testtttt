@@ -31,9 +31,8 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (ЗАМЕНИТЕ ID ДЛЯ ЦИФР) ====================
+# ==================== PREMIUM ЭМОДЗИ (С ВАШИМИ ID ЦИФР) ====================
 PREMIUM_EMOJI = {
-    # === Проверенные ID (работают) ===
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
     "⚠️": "5447644880824181073",
@@ -53,22 +52,18 @@ PREMIUM_EMOJI = {
     "⚙️": "5341715473882955310",
     "👋": "5217508498606147980",
     "🤖": "5372981976804366741",
-
-    # === ЦИФРЫ – ЗАМЕНИТЕ ID НА СВОИ ===
-    "1️⃣": "5382322671679708881",   # найдите в каталоге "one"
-    "2️⃣": "5381990043642502553",   # "two"
-    "3️⃣": "5381879959335738545",   # "three"
-    "4️⃣": "5382054253403577563",   # "four"
+    "1️⃣": "5382322671679708881",
+    "2️⃣": "5381990043642502553",
+    "3️⃣": "5381879959335738545",
+    "4️⃣": "5382054253403577563",
 }
 
 def premium(text: str) -> str:
-    """Заменяет эмодзи на премиум-версии в текстовых сообщениях."""
     for emoji, emoji_id in PREMIUM_EMOJI.items():
-        if emoji in text and "ВАШ_ID" not in emoji_id:
+        if emoji in text:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
-# ==================== ЛОГГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -88,7 +83,6 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ (ТОЛЬКО ОБЫЧНЫЕ ЭМОДЗИ) ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -224,7 +218,6 @@ def commands_keyboard():
         ]
     )
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -320,7 +313,8 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ ====================
+# Обработчики команд и callback'ов
+
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -466,7 +460,6 @@ async def back_to_admin(callback: types.CallbackQuery):
     await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
-# ---------- РАССЫЛКА ----------
 @dp.callback_query(lambda c: c.data == "broadcast")
 async def broadcast_start(callback: types.CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
@@ -523,7 +516,6 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     await message.answer(result_text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
 
-# ---------- СПИСОК ПОЛЬЗОВАТЕЛЕЙ ----------
 @dp.callback_query(lambda c: c.data == "users_txt")
 async def users_txt(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -559,7 +551,6 @@ async def users_txt(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-# ---------- АКТИВНЫЕ ПОДКЛЮЧЕНИЯ ----------
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -583,12 +574,23 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
+
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
     user_id = connection.user.id
+    is_enabled = connection.is_enabled
+
+    if not is_enabled:
+        logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
+        # Опционально удалить запись
+        # db.conn.execute("DELETE FROM connections WHERE bc_id=?", (bc_id,))
+        # db.conn.commit()
+        return
+
+    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}, enabled={is_enabled}")
+
     db.set_connection(bc_id, user_id)
-    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
 
     if not db.is_user_registered(user_id):
         user = connection.user
@@ -613,17 +615,27 @@ async def handle_business_message(message: types.Message):
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
+
+    # Fallback, если bc_id не найден в БД (например, после перезапуска)
+    if not user_id and message.from_user:
+        user_id = message.from_user.id
+        logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
+
     if not user_id:
-        logger.warning(f"[MUTE] Неизвестное bc_id: {bc_id}")
+        logger.warning(f"[MUTE] Не удалось определить user_id для bc_id={bc_id}")
         return
+
     if not db.is_user_registered(user_id):
-        return
+        if message.from_user:
+            db.register_user(user_id, message.from_user.username or "", message.from_user.first_name or "", message.from_user.last_name or "")
+        else:
+            db.register_user(user_id, "", "Unknown", "")
 
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== БЛОК МУТА ==========
+    # Мут
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
@@ -644,7 +656,7 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ========== КОМАНДЫ ВЛАДЕЛЬЦА ==========
+    # Команды владельца
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
         if text == ".mute":
@@ -701,7 +713,7 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
-    # ========== СОХРАНЕНИЕ ==========
+    # Сохранение
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
@@ -781,7 +793,6 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
         db.delete_message(bc_id, msg_id)
 
-# ==================== ЗАПУСК ====================
 async def main():
     try:
         me = await bot.get_me()
