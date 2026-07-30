@@ -31,7 +31,6 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (ВАШИ ID) ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -85,29 +84,11 @@ class BroadcastStates(StatesGroup):
 # ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [
-            InlineKeyboardButton(
-                text="🔗 Подключить бота",
-                callback_data="show_instruction",
-                style="primary"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📋 Команды",
-                callback_data="show_commands",
-                style="success"
-            )
-        ]
+        [InlineKeyboardButton(text="🔗 Подключить бота", callback_data="show_instruction", style="primary")],
+        [InlineKeyboardButton(text="📋 Команды", callback_data="show_commands", style="success")]
     ]
     if is_admin:
-        kb.append([
-            InlineKeyboardButton(
-                text="⚙️ Админ-панель",
-                callback_data="admin_panel",
-                style="danger"
-            )
-        ])
+        kb.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -116,105 +97,46 @@ def subscription_keyboard(action: str = None):
         callback_data += f"|{action}"
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📢 Подписаться на канал",
-                    url="https://t.me/NovoeTelegram"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Проверить подписку",
-                    callback_data=callback_data,
-                    style="success"
-                )
-            ]
+            [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
+            [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=callback_data, style="success")]
         ]
     )
 
 def instruction_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
         ]
     )
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📢 Рассылка",
-                    callback_data="broadcast",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📄 Список пользователей (txt)",
-                    callback_data="users_txt",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="🔗 Активные подключения",
-                    callback_data="active_connections",
-                    style="primary"
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast", style="primary")],
+            [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt", style="primary")],
+            [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections", style="primary")],
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
         ]
     )
 
 def cancel_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="❌ Отмена",
-                    callback_data="cancel_broadcast",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast", style="danger")]
         ]
     )
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад в админ-панель",
-                    callback_data="back_to_admin",
-                    style="primary"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]
         ]
     )
 
 def commands_keyboard():
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⬅️ Назад",
-                    callback_data="back_to_main",
-                    style="danger"
-                )
-            ]
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
         ]
     )
 
@@ -314,7 +236,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, bot: Bot, rep
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ (все получают bot через DI) ====================
+# ==================== ОБРАБОТЧИКИ ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message, bot: Bot):
     user = message.from_user
@@ -584,7 +506,7 @@ async def handle_business_connection(connection: BusinessConnection, bot: Bot):
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
         return
 
-    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}, enabled={is_enabled}")
+    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
 
     db.set_connection(bc_id, user_id)
 
@@ -603,7 +525,6 @@ async def handle_business_connection(connection: BusinessConnection, bot: Bot):
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
 
-    # Уведомление администратору
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -647,17 +568,16 @@ async def handle_business_message(message: types.Message, bot: Bot):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # Мут
+    # ========== БЛОК МУТА ==========
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
             )
-            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО (business)")
+            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
         except Exception as e:
-            error_text = str(e)
-            if "message to delete not found" in error_text:
+            if "message to delete not found" in str(e):
                 logger.info(f"[MUTE] ⏩ Сообщение {message.message_id} уже удалено, пропускаем")
             else:
                 logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
@@ -668,11 +588,10 @@ async def handle_business_message(message: types.Message, bot: Bot):
                 )
         return
 
-    # Команды владельца (с удалением сообщения команды)
+    # ========== КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
-        # Удаляем сообщение с командой
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
@@ -682,7 +601,6 @@ async def handle_business_message(message: types.Message, bot: Bot):
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
 
-        # Обработка команд
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -737,7 +655,7 @@ async def handle_business_message(message: types.Message, bot: Bot):
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
-    # Сохранение
+    # ========== СОХРАНЕНИЕ ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
@@ -797,16 +715,27 @@ async def handle_edited_business_message(message: types.Message, bot: Bot):
 async def handle_deleted_business_messages(event: BusinessMessagesDeleted, bot: Bot):
     bc_id = event.business_connection_id
     user_id = db.get_user_by_bc_id(bc_id)
-    if not user_id or not db.is_user_registered(user_id):
+
+    if not user_id:
+        logger.warning(f"[DELETE] Неизвестный bc_id: {bc_id}")
         return
+
+    if not db.is_user_registered(user_id):
+        logger.warning(f"[DELETE] Пользователь {user_id} не зарегистрирован")
+        return
+
+    logger.info(f"[DELETE] Получено удаление {len(event.message_ids)} сообщений для пользователя {user_id}")
 
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
+            logger.info(f"[DELETE] Сообщение {msg_id} не найдено в БД")
             continue
+
         fullname = data["fullname"]
         text = data["text"] or ""
         files = data["files"]
+
         if files:
             files_list = json.loads(files) if isinstance(files, str) else files
         else:
@@ -816,6 +745,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted, bot: 
         await send_notification(user_id, notif_text, bot, files_list)
 
         db.delete_message(bc_id, msg_id)
+        logger.info(f"[DELETE] Сообщение {msg_id} удалено из БД")
 
 # ==================== ЗАПУСК ====================
 async def main():
