@@ -607,7 +607,7 @@ async def handle_business_connection(connection: BusinessConnection):
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
 
-    # ====== УВЕДОМЛЕНИЕ АДМИНИСТРАТОРУ ======
+    # Уведомление администратору
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -633,7 +633,15 @@ async def handle_business_message(message: types.Message):
 
     user_id = db.get_user_by_bc_id(bc_id)
 
-    # Fallback, если bc_id не найден в БД (например, после перезапуска)
+    # ====== ФИКС: если bc_id не найден, но это владелец — создаём связь ======
+    if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
+        db.set_connection(bc_id, ADMIN_ID)
+        if not db.is_user_registered(ADMIN_ID):
+            db.register_user(ADMIN_ID, message.from_user.username or "", message.from_user.first_name or "", message.from_user.last_name or "")
+        user_id = ADMIN_ID
+        logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}, user_id={ADMIN_ID}")
+
+    # Fallback, если bc_id не найден в БД (для других случаев)
     if not user_id and message.from_user:
         user_id = message.from_user.id
         logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
