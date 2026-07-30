@@ -31,8 +31,9 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (ВАШИ ID) ====================
+# ==================== PREMIUM ЭМОДЗИ (ЗАМЕНИТЕ ID ДЛЯ ЦИФР) ====================
 PREMIUM_EMOJI = {
+    # === Проверенные ID (работают) ===
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
     "⚠️": "5447644880824181073",
@@ -52,15 +53,22 @@ PREMIUM_EMOJI = {
     "⚙️": "5341715473882955310",
     "👋": "5217508498606147980",
     "🤖": "5372981976804366741",
-    "1️⃣": "5382322671679708881",
+
+    # === ЦИФРЫ – ЗАМЕНИТЕ ID НА СВОИ ===
+    "1️⃣": "5382322671679708881",   # найдите в каталоге "one"
+    "2️⃣": "5381990043642502553",   # "two"
+    "3️⃣": "5381879959335738545",   # "three"
+    "4️⃣": "5382054253403577563",   # "four"
 }
 
 def premium(text: str) -> str:
+    """Заменяет эмодзи на премиум-версии в текстовых сообщениях."""
     for emoji, emoji_id in PREMIUM_EMOJI.items():
-        if emoji in text:
+        if emoji in text and "ВАШ_ID" not in emoji_id:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
+# ==================== ЛОГГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -80,19 +88,19 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== КЛАВИАТУРЫ ====================
+# ==================== КЛАВИАТУРЫ (ТОЛЬКО ОБЫЧНЫЕ ЭМОДЗИ) ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text=premium("🔗 Подключить бота"),
+                text="🔗 Подключить бота",
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text=premium("📋 Команды"),
+                text="📋 Команды",
                 callback_data="show_commands",
                 style="success"
             )
@@ -101,7 +109,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text=premium("⚙️ Админ-панель"),
+                text="⚙️ Админ-панель",
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -116,13 +124,13 @@ def subscription_keyboard(action: str = None):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("📢 Подписаться на канал"),
+                    text="📢 Подписаться на канал",
                     url="https://t.me/NovoeTelegram"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=premium("✅ Проверить подписку"),
+                    text="✅ Проверить подписку",
                     callback_data=callback_data,
                     style="success"
                 )
@@ -135,7 +143,7 @@ def instruction_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("⬅️ Назад"),
+                    text="⬅️ Назад",
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -148,28 +156,28 @@ def admin_panel_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("📢 Рассылка"),
+                    text="📢 Рассылка",
                     callback_data="broadcast",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=premium("📄 Список пользователей (txt)"),
+                    text="📄 Список пользователей (txt)",
                     callback_data="users_txt",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=premium("🔗 Активные подключения"),
+                    text="🔗 Активные подключения",
                     callback_data="active_connections",
                     style="primary"
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=premium("⬅️ Назад"),
+                    text="⬅️ Назад",
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -182,7 +190,7 @@ def cancel_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("❌ Отмена"),
+                    text="❌ Отмена",
                     callback_data="cancel_broadcast",
                     style="danger"
                 )
@@ -195,7 +203,7 @@ def back_to_admin_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("⬅️ Назад в админ-панель"),
+                    text="⬅️ Назад в админ-панель",
                     callback_data="back_to_admin",
                     style="primary"
                 )
@@ -208,7 +216,7 @@ def commands_keyboard():
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=premium("⬅️ Назад"),
+                    text="⬅️ Назад",
                     callback_data="back_to_main",
                     style="danger"
                 )
@@ -575,7 +583,6 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
-
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
@@ -616,9 +623,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # =========================================================
-    # ========== БЛОК МУТА (через delete_business_messages) ==========
-    # =========================================================
+    # ========== БЛОК МУТА ==========
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
@@ -639,7 +644,7 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ========== ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ==========
+    # ========== КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
         if text == ".mute":
@@ -696,7 +701,7 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
-    # ========== СОХРАНЕНИЕ СООБЩЕНИЙ (если не замучен) ==========
+    # ========== СОХРАНЕНИЕ ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
