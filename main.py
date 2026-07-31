@@ -32,7 +32,9 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
+# ==================== PREMIUM ЭМОДЗИ (ЗАМЕНИТЕ ID НА СВОИ) ====================
 PREMIUM_EMOJI = {
+    # Проверенные ID
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
     "⚠️": "5447644880824181073",
@@ -56,11 +58,12 @@ PREMIUM_EMOJI = {
     "2️⃣": "5381990043642502553",
     "3️⃣": "5381879959335738545",
     "4️⃣": "5382054253403577563",
+    "👩‍🎓": "ВАШ_ID_ДЛЯ_ЭТОГО_ЭМОДЗИ",  # замените на реальный ID
 }
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
-        if emoji in text:
+        if emoji in text and "ВАШ_ID" not in emoji_id:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
@@ -83,8 +86,8 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ИГРА (В ПАМЯТИ, КАК У ВСЕХ) ====================
-ttt_games = {}  # chat_id -> {"board": [...], "turn": "X" или "O", "player_x": id, "player_o": id}
+# ==================== TTT ИГРА ====================
+ttt_games = {}
 
 def ttt_board_to_text(board: list, turn: str, player_x_name: str, player_o_name: str) -> str:
     symbols = []
@@ -125,7 +128,7 @@ def ttt_check_winner(board: list) -> str | None:
         return "draw"
     return None
 
-def ttt_keyboard(board: list, game_id: int):
+def ttt_keyboard(board: list, game_id: str):
     kb = []
     for i in range(0, 9, 3):
         row = []
@@ -498,7 +501,7 @@ async def start_ttt(message: types.Message):
             return
     
     board = [" "] * 9
-    game_id = int(time.time())
+    game_id = f"ttt_{chat_id}_{int(time.time())}"
     
     ttt_games[chat_id] = {
         "board": board,
@@ -539,7 +542,7 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка!")
         return
     
-    game_id = int(parts[1])
+    game_id = parts[1]
     cell = int(parts[2])
     
     if chat_id not in ttt_games:
@@ -547,6 +550,11 @@ async def ttt_callback(callback: types.CallbackQuery):
         return
     
     game = ttt_games[chat_id]
+    
+    if game["game_id"] != game_id:
+        await callback.answer("❌ Игра не найдена!")
+        return
+    
     board = game["board"]
     turn = game["turn"]
     player_x = game["player_x"]
