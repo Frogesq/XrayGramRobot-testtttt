@@ -224,6 +224,21 @@ class Database:
         """, (player_o, chat_id))
         self.conn.commit()
 
+    def get_ttt_game_by_id(self, chat_id, game_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ? AND game_id = ?", (chat_id, game_id))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "chat_id": row["chat_id"],
+                "board": json.loads(row["board"]),
+                "turn": row["turn"],
+                "player_x": row["player_x"],
+                "player_o": row["player_o"],
+                "game_id": row["game_id"]
+            }
+        return None
+
     # ==================== СТАТИСТИКА ====================
     def get_users_count(self):
         cursor = self.conn.cursor()
