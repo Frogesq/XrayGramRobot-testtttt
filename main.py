@@ -83,7 +83,9 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ИГРА ====================
+# ==================== TTT ИГРА (В ПАМЯТИ, КАК У ВСЕХ) ====================
+ttt_games = {}  # chat_id -> {"board": [...], "turn": "X" или "O", "player_x": id, "player_o": id}
+
 def ttt_board_to_text(board: list, turn: str, player_x_name: str, player_o_name: str) -> str:
     symbols = []
     for i, cell in enumerate(board):
@@ -123,7 +125,7 @@ def ttt_check_winner(board: list) -> str | None:
         return "draw"
     return None
 
-def ttt_keyboard(board: list, game_id: str):
+def ttt_keyboard(board: list, game_id: int):
     kb = []
     for i in range(0, 9, 3):
         row = []
@@ -453,7 +455,7 @@ async def start_duel(message: types.Message):
         await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
         return
     
-    msg = await message.answer(premium("<b>⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!</b>"))
+    msg = await message.answer("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!", parse_mode="HTML")
     
     stages = [
         "⚔️ 3...",
@@ -465,19 +467,18 @@ async def start_duel(message: types.Message):
     
     for stage in stages:
         await asyncio.sleep(0.7)
-        await msg.edit_text(premium(f"<b>{stage}</b>"))
+        await msg.edit_text(f"<b>{stage}</b>", parse_mode="HTML")
     
     await asyncio.sleep(0.5)
     
-    # Исправлено: только пользователь может выиграть
-    winner = user_id
+    winner = random.choice([user_id, "собеседник"])
     
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
     else:
         result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
     
-    await msg.edit_text(premium(f"<b>{result}</b>"))
+    await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
 
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
@@ -487,33 +488,29 @@ async def start_ttt(message: types.Message):
         await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
         return
     
-    cursor = db.conn.cursor()
-    cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
-    existing = cursor.fetchone()
-    
-    if existing:
-        board = json.loads(existing[1])
-        winner = ttt_check_winner(board)
+    if chat_id in ttt_games:
+        game = ttt_games[chat_id]
+        winner = ttt_check_winner(game["board"])
         if winner:
-            db.conn.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
-            db.conn.commit()
+            del ttt_games[chat_id]
         else:
             await message.answer(premium("<b>⚠️ Игра уже идёт в этом чате!</b>"))
             return
     
-    game_id = f"ttt_{chat_id}_{int(time.time())}"
     board = [" "] * 9
+    game_id = int(time.time())
     
-    cursor.execute("""
-        INSERT OR REPLACE INTO ttt_games (chat_id, board, turn, player_x, player_o, game_id)
-        VALUES (?, ?, ?, ?, ?, ?)
-    """, (chat_id, json.dumps(board), "X", user_id, 0, game_id))
-    db.conn.commit()
+    ttt_games[chat_id] = {
+        "board": board,
+        "turn": "X",
+        "player_x": user_id,
+        "player_o": 0,
+        "game_id": game_id
+    }
     
     player_x_name = format_user_info(message.from_user)
     
-    await bot.send_message(
-        chat_id,
+    await message.answer(
         ttt_board_to_text(board, "X", player_x_name, "Ожидание соперника..."),
         parse_mode="HTML",
         reply_markup=ttt_keyboard(board, game_id)
@@ -531,8 +528,8 @@ async def ttt_callback(callback: types.CallbackQuery):
         return
     
     if data.startswith("ttt_end_"):
-        db.conn.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
-        db.conn.commit()
+        if chat_id in ttt_games:
+            del ttt_games[chat_id]
         await callback.message.delete()
         await callback.answer("🔴 Игра завершена!")
         return
@@ -542,21 +539,18 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка!")
         return
     
-    game_id = parts[1]
+    game_id = int(parts[1])
     cell = int(parts[2])
     
-    cursor = db.conn.cursor()
-    cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ? AND game_id = ?", (chat_id, game_id))
-    row = cursor.fetchone()
-    
-    if not row:
+    if chat_id not in ttt_games:
         await callback.answer("❌ Игра не найдена!")
         return
     
-    board = json.loads(row[1])
-    turn = row[2]
-    player_x = row[3]
-    player_o = row[4]
+    game = ttt_games[chat_id]
+    board = game["board"]
+    turn = game["turn"]
+    player_x = game["player_x"]
+    player_o = game["player_o"]
     
     if turn == "X" and user_id != player_x:
         await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
@@ -566,8 +560,7 @@ async def ttt_callback(callback: types.CallbackQuery):
         return
     if turn == "O" and player_o == 0:
         player_o = user_id
-        cursor.execute("UPDATE ttt_games SET player_o = ? WHERE chat_id = ?", (player_o, chat_id))
-        db.conn.commit()
+        game["player_o"] = user_id
     
     if board[cell] != " ":
         await callback.answer("⏳ Это место уже занято!")
@@ -577,9 +570,6 @@ async def ttt_callback(callback: types.CallbackQuery):
     winner = ttt_check_winner(board)
     
     if winner:
-        db.conn.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
-        db.conn.commit()
-        
         player_x_name = format_user_info(await bot.get_chat(player_x))
         player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Игрок O"
         
@@ -594,12 +584,12 @@ async def ttt_callback(callback: types.CallbackQuery):
             f"{ttt_board_to_text(board, turn, player_x_name, player_o_name)}\n\n{result_text}",
             parse_mode="HTML"
         )
+        del ttt_games[chat_id]
         await callback.answer("🏆 Игра завершена!")
         return
     
     new_turn = "O" if turn == "X" else "X"
-    cursor.execute("UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?", (json.dumps(board), new_turn, chat_id))
-    db.conn.commit()
+    game["turn"] = new_turn
     
     player_x_name = format_user_info(await bot.get_chat(player_x))
     player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание соперника..."
