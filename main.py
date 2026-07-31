@@ -3,7 +3,6 @@ import logging
 import os
 import json
 import time
-import random
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -32,10 +31,10 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
+# ==================== PREMIUM ЭМОДЗИ (С ВАШИМИ ID ЦИФР) ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
-    "⭕": "5388490718567050872",
     "⚠️": "5447644880824181073",
     "🔇": "5388632425314140043",
     "🔊": "5388632425314140043",
@@ -61,7 +60,7 @@ PREMIUM_EMOJI = {
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
-        if emoji in text and "ВАШ_ID" not in emoji_id:
+        if emoji in text:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
@@ -84,87 +83,6 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ====================
-ttt_games = {}
-
-def ttt_board_display(board: list) -> str:
-    lines = []
-    for i in range(0, 9, 3):
-        row = board[i:i+3]
-        row_symbols = []
-        for cell in row:
-            if cell == "X":
-                row_symbols.append("❌")
-            elif cell == "O":
-                row_symbols.append("⭕")
-            else:
-                row_symbols.append("⬜")
-        lines.append("".join(row_symbols))
-    return "\n".join(lines)
-
-def ttt_check_winner(board: list) -> str | None:
-    win_combinations = [
-        [0, 1, 2], [3, 4, 5], [6, 7, 8],
-        [0, 3, 6], [1, 4, 7], [2, 5, 8],
-        [0, 4, 8], [2, 4, 6]
-    ]
-    for combo in win_combinations:
-        if board[combo[0]] == board[combo[1]] == board[combo[2]] and board[combo[0]] != " ":
-            return board[combo[0]]
-    if " " not in board:
-        return "draw"
-    return None
-
-def ttt_keyboard(board: list, game_id: int):
-    kb = []
-    for i in range(0, 9, 3):
-        row = []
-        for j in range(3):
-            cell = i + j
-            if board[cell] == " ":
-                row.append(InlineKeyboardButton(
-                    text="⬜",
-                    callback_data=f"ttt_{game_id}_{cell}",
-                    style="primary"
-                ))
-            else:
-                row.append(InlineKeyboardButton(
-                    text="❌" if board[cell] == "X" else "⭕",
-                    callback_data="ttt_no",
-                    style="secondary"
-                ))
-        kb.append(row)
-    kb.append([InlineKeyboardButton(
-        text="🔴 Завершить",
-        callback_data=f"ttt_end_{game_id}",
-        style="danger"
-    )])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
-
-# ==================== АНИМАЦИЯ ====================
-async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
-    msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
-    
-    current_text = ""
-    last_text = ""
-    for i, char in enumerate(text):
-        current_text += char
-        if current_text != last_text:
-            try:
-                await msg.edit_text(f"<b>{current_text}</b>", parse_mode="HTML")
-                last_text = current_text
-            except:
-                pass
-        await asyncio.sleep(delay)
-    
-    await asyncio.sleep(0.5)
-    if current_text != last_text:
-        try:
-            await msg.edit_text(f"<b>{current_text}</b>", parse_mode="HTML")
-        except:
-            pass
-
-# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -300,7 +218,6 @@ def commands_keyboard():
         ]
     )
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -376,7 +293,28 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
-# ==================== ОБРАБОТЧИКИ КОМАНД ====================
+async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
+    new_text = premium(new_text)
+    try:
+        if message.text or message.caption:
+            await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
+        else:
+            await message.delete()
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+    except Exception as e:
+        if "there is no text" in str(e) or "message to edit not found" in str(e):
+            await message.delete()
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+        else:
+            logger.error(f"Ошибка редактирования: {e}")
+            try:
+                await message.delete()
+            except:
+                pass
+            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+
+# Обработчики команд и callback'ов
+
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -399,193 +337,6 @@ async def start_command(message: types.Message):
     )
     await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
-@dp.message(Command("duel"))
-async def cmd_duel(message: types.Message):
-    await start_duel(message)
-
-@dp.message(Command("ttt"))
-async def cmd_ttt(message: types.Message):
-    await start_ttt(message)
-
-@dp.message(Command("anim"))
-async def cmd_anim(message: types.Message):
-    text = message.text.replace("/anim", "").strip()
-    if not text:
-        await message.answer(premium("<b>❌ Напишите текст для анимации!\nПример: /anim Привет мир!</b>"))
-        return
-    await animate_text(message.chat.id, text, message)
-
-# ==================== ФУНКЦИИ ДЛЯ ИГР ====================
-
-async def start_duel(message: types.Message):
-    chat_id = message.chat.id
-    user_id = message.from_user.id
-    
-    if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
-        return
-    
-    msg = await message.answer("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!", parse_mode="HTML")
-    
-    stages = [
-        "⚔️ 3...",
-        "⚔️ 2...",
-        "⚔️ 1...",
-        "🔫 ПРИЦЕЛИВАЙСЯ!",
-        "💥 ВЫСТРЕЛ!"
-    ]
-    
-    for stage in stages:
-        await asyncio.sleep(0.7)
-        await msg.edit_text(f"<b>{stage}</b>", parse_mode="HTML")
-    
-    await asyncio.sleep(0.5)
-    
-    winner = random.choice([user_id, "собеседник"])
-    
-    if winner == user_id:
-        result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
-    else:
-        result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
-    
-    await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
-
-async def start_ttt(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
-        return
-    
-    if chat_id in ttt_games:
-        game = ttt_games[chat_id]
-        winner = ttt_check_winner(game["board"])
-        if winner:
-            del ttt_games[chat_id]
-        else:
-            await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
-            return
-    
-    board = [" "] * 9
-    game_id = int(time.time())
-    
-    ttt_games[chat_id] = {
-        "board": board,
-        "turn": "X",
-        "player_x": user_id,
-        "player_o": 0,
-        "game_id": game_id
-    }
-    
-    player_x_name = format_user_info(message.from_user)
-    
-    await message.answer(
-        f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-        f"Ход: <b>❌ ({player_x_name})</b>\n"
-        f"⬜⬜⬜\n⬜⬜⬜\n⬜⬜⬜",
-        parse_mode="HTML",
-        reply_markup=ttt_keyboard(board, game_id)
-    )
-
-# ==================== TTT CALLBACK ====================
-@dp.callback_query(lambda c: c.data.startswith("ttt_"))
-async def ttt_callback(callback: types.CallbackQuery):
-    data = callback.data
-    user_id = callback.from_user.id
-    chat_id = callback.message.chat.id
-    
-    if data == "ttt_no":
-        await callback.answer("⏳ Занято!")
-        return
-    
-    if data.startswith("ttt_end_"):
-        game_id = int(data.replace("ttt_end_", ""))
-        if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
-            del ttt_games[chat_id]
-        await callback.message.delete()
-        await callback.answer("🔴 Игра завершена!")
-        return
-    
-    parts = data.split("_")
-    if len(parts) != 3:
-        await callback.answer("❌ Ошибка!")
-        return
-    
-    try:
-        game_id = int(parts[1])
-        cell = int(parts[2])
-    except:
-        await callback.answer("❌ Ошибка!")
-        return
-    
-    if chat_id not in ttt_games:
-        await callback.answer("❌ Игра не найдена!")
-        return
-    
-    game = ttt_games[chat_id]
-    
-    if game["game_id"] != game_id:
-        await callback.answer("❌ Игра не найдена!")
-        return
-    
-    board = game["board"]
-    turn = game["turn"]
-    player_x = game["player_x"]
-    player_o = game["player_o"]
-    
-    if turn == "X" and user_id != player_x:
-        await callback.answer("⏳ Ход крестиков!", show_alert=True)
-        return
-    if turn == "O" and user_id != player_o and player_o != 0:
-        await callback.answer("⏳ Ход ноликов!", show_alert=True)
-        return
-    if turn == "O" and player_o == 0:
-        player_o = user_id
-        game["player_o"] = user_id
-    
-    if board[cell] != " ":
-        await callback.answer("⏳ Занято!")
-        return
-    
-    board[cell] = turn
-    winner = ttt_check_winner(board)
-    
-    if winner:
-        player_x_name = format_user_info(await bot.get_chat(player_x))
-        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Игрок O"
-        
-        if winner == "X":
-            result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
-        elif winner == "O":
-            result_text = f"🏆 <b>Победили НОЛИКИ! ({player_o_name})</b>"
-        else:
-            result_text = "🤝 <b>Ничья!</b>"
-        
-        await callback.message.edit_text(
-            f"{ttt_board_display(board)}\n\n{result_text}",
-            parse_mode="HTML"
-        )
-        del ttt_games[chat_id]
-        await callback.answer("🏆 Игра завершена!")
-        return
-    
-    new_turn = "O" if turn == "X" else "X"
-    game["turn"] = new_turn
-    
-    player_x_name = format_user_info(await bot.get_chat(player_x))
-    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание..."
-    
-    await callback.message.edit_text(
-        f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-        f"Ход: <b>{'❌' if new_turn == 'X' else '⭕'} ({player_x_name if new_turn == 'X' else player_o_name})</b>\n"
-        f"{ttt_board_display(board)}",
-        parse_mode="HTML",
-        reply_markup=ttt_keyboard(board, game_id)
-    )
-    await callback.answer()
-
-# ==================== ОСТАЛЬНЫЕ CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -666,21 +417,14 @@ async def show_commands(callback: types.CallbackQuery):
         "Эти команды работают в личных чатах, где активен бизнес-режим.\n\n"
         "🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
         "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
-        "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
-        "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
-        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n\n"
+        "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n\n"
         "Примеры:\n"
         ".mute\n"
         ".unmute\n"
-        ".spam 5 Привет!\n"
-        ".duel\n"
-        ".ttt\n"
-        ".anim Привет мир!\n\n"
+        ".spam 5 Привет!\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
-    await callback.message.delete()
-    await bot.send_message(callback.from_user.id, commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
+    await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
@@ -695,7 +439,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "• Сохраняет самоуничтожающиеся медиа.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
-    await callback.message.edit_text(main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
+    await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
@@ -704,7 +448,7 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
+    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_admin")
@@ -713,7 +457,7 @@ async def back_to_admin(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
+    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "broadcast")
@@ -830,6 +574,7 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
+
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
@@ -838,9 +583,12 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
+        # Опционально удалить запись
+        # db.conn.execute("DELETE FROM connections WHERE bc_id=?", (bc_id,))
+        # db.conn.commit()
         return
 
-    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
+    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}, enabled={is_enabled}")
 
     db.set_connection(bc_id, user_id)
 
@@ -859,6 +607,7 @@ async def handle_business_connection(connection: BusinessConnection):
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
 
+    # Уведомление администратору
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -884,6 +633,7 @@ async def handle_business_message(message: types.Message):
 
     user_id = db.get_user_by_bc_id(bc_id)
 
+    # ====== ФИКС: если bc_id не найден, но это владелец — создаём связь ======
     if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
         db.set_connection(bc_id, ADMIN_ID)
         if not db.is_user_registered(ADMIN_ID):
@@ -891,6 +641,7 @@ async def handle_business_message(message: types.Message):
         user_id = ADMIN_ID
         logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}, user_id={ADMIN_ID}")
 
+    # Fallback, если bc_id не найден в БД (для других случаев)
     if not user_id and message.from_user:
         user_id = message.from_user.id
         logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
@@ -909,10 +660,11 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
+    # ====== УДАЛЯЕМ СООБЩЕНИЕ С КОМАНДОЙ (если владелец) ======
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
+        # Удаляем сообщение с командой
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
@@ -922,6 +674,7 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
 
+        # Обработка команд
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -937,7 +690,6 @@ async def handle_business_message(message: types.Message):
             )
             logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
             return
-
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -953,7 +705,6 @@ async def handle_business_message(message: types.Message):
             )
             logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
             return
-
         if text.startswith(".spam "):
             parts = text.split(maxsplit=2)
             if len(parts) >= 3:
@@ -977,35 +728,20 @@ async def handle_business_message(message: types.Message):
             else:
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
-
-        if text == ".duel":
-            await start_duel(message)
-            return
-
-        if text == ".ttt":
-            await start_ttt(message)
-            return
-
-        if text.startswith(".anim "):
-            anim_text = text.replace(".anim", "").strip()
-            if not anim_text:
-                await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
-                return
-            await animate_text(chat_id, anim_text, message)
-            return
-
+        # Если команда не распознана – выходим (чтобы не сохранять её как обычное сообщение)
         return
 
-    # ========== МУТ ==========
+    # ====== МУТ (для обычных сообщений от собеседника) ======
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
             )
-            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
+            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО (business)")
         except Exception as e:
-            if "message to delete not found" in str(e):
+            error_text = str(e)
+            if "message to delete not found" in error_text:
                 logger.info(f"[MUTE] ⏩ Сообщение {message.message_id} уже удалено, пропускаем")
             else:
                 logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
@@ -1016,7 +752,7 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ========== СОХРАНЕНИЕ ==========
+    # ====== СОХРАНЕНИЕ СООБЩЕНИЙ (если не замучен) ======
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
