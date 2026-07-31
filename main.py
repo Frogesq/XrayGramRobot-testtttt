@@ -486,6 +486,7 @@ async def start_ttt(message: types.Message):
         await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
         return
     
+    # Проверяем, есть ли игра в БД
     cursor = db.conn.cursor()
     cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
     existing = cursor.fetchone()
