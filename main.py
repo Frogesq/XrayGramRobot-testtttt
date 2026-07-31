@@ -84,9 +84,7 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ИГРА (С СОБЕСЕДНИКОМ) ====================
-TTT_GAMES = {}
-
+# ==================== TTT ИГРА (СОХРАНЕНИЕ В БД) ====================
 def ttt_board_to_text(board: list, turn: str, player_x_name: str, player_o_name: str) -> str:
     symbols = []
     for i, cell in enumerate(board):
@@ -151,6 +149,24 @@ def ttt_keyboard(board: list, game_id: str):
         style="danger"
     )])
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+# ==================== АНИМАЦИЯ (ПОЯВЛЕНИЕ ТЕКСТА ПО БУКВАМ) ====================
+async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
+    """Отправляет сообщение с анимацией появления текста по буквам."""
+    msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
+    
+    current_text = ""
+    for i, char in enumerate(text):
+        current_text += char
+        try:
+            await msg.edit_text(f"<b>{current_text}</b>", parse_mode="HTML")
+        except:
+            pass
+        await asyncio.sleep(delay)
+    
+    # Финальное сообщение
+    await asyncio.sleep(1)
+    await msg.edit_text(f"<b>✅ {current_text}</b>", parse_mode="HTML")
 
 # ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
@@ -384,7 +400,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ КОМАНД (для обычных сообщений вне бизнеса) ====================
+# ==================== ОБРАБОТЧИКИ КОМАНД ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -407,6 +423,8 @@ async def start_command(message: types.Message):
     )
     await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
+# ==================== НОВЫЕ КОМАНДЫ ====================
+
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
     await start_duel(message)
@@ -415,37 +433,15 @@ async def cmd_duel(message: types.Message):
 async def cmd_ttt(message: types.Message):
     await start_ttt(message)
 
+@dp.message(Command("anim"))
+async def cmd_anim(message: types.Message):
+    text = message.text.replace("/anim", "").strip()
+    if not text:
+        await message.answer(premium("<b>❌ Напишите текст для анимации!\nПример: /anim Привет мир!</b>"))
+        return
+    await animate_text(message.chat.id, text, message)
+
 # ==================== ФУНКЦИИ ДЛЯ ИГР ====================
-async def start_ttt(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
-        return
-    
-    if chat_id in TTT_GAMES:
-        await message.answer(premium("<b>⚠️ Игра уже идёт в этом чате!</b>"))
-        return
-    
-    game_id = f"ttt_{chat_id}_{int(time.time())}"
-    board = [" "] * 9
-    
-    TTT_GAMES[chat_id] = {
-        "board": board,
-        "turn": "X",
-        "player_x": user_id,
-        "player_o": None,
-        "game_id": game_id
-    }
-    
-    player_x_name = format_user_info(message.from_user)
-    
-    await safe_edit_or_send(
-        message,
-        ttt_board_to_text(board, "X", player_x_name, "Ожидание соперника..."),
-        ttt_keyboard(board, game_id)
-    )
 
 async def start_duel(message: types.Message):
     chat_id = message.chat.id
@@ -457,22 +453,64 @@ async def start_duel(message: types.Message):
     
     msg = await message.answer(premium("<b>⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!</b>"))
     
-    for i in range(3, 0, -1):
+    # Эпичная анимация
+    stages = [
+        "⚔️ 3...",
+        "⚔️ 2...",
+        "⚔️ 1...",
+        "🔫 ПРИЦЕЛИВАЙСЯ!",
+        "💥 ВЫСТРЕЛ!"
+    ]
+    
+    for stage in stages:
         await asyncio.sleep(0.7)
-        await msg.edit_text(premium(f"<b>⚔️ {i}...</b>"))
+        await msg.edit_text(premium(f"<b>{stage}</b>"))
     
     await asyncio.sleep(0.5)
-    await msg.edit_text(premium("<b>🔫 ДУЭЛЬ!</b>"))
-    await asyncio.sleep(0.5)
     
+    # Случайный победитель
     winner = random.choice([user_id, "собеседник"])
     
     if winner == user_id:
-        result = premium(f"<b>🏆 Победитель: {format_user_info(message.from_user)}!</b> 🎉")
+        result = premium(f"<b>🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!</b>\n\n🎉 Выстрел был точным! Противник повержен! 🎉")
     else:
-        result = premium("<b>🏆 Победитель: ваш СОБЕСЕДНИК!</b> 🎉")
+        result = premium("<b>🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!</b>\n\n💀 Вы были быстрее, но удача была на его стороне...")
     
     await msg.edit_text(result)
+
+async def start_ttt(message: types.Message):
+    user_id = message.from_user.id
+    chat_id = message.chat.id
+    
+    if message.chat.type != "private":
+        await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
+        return
+    
+    # Проверяем, есть ли игра в БД
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
+    existing = cursor.fetchone()
+    
+    if existing:
+        await message.answer(premium("<b>⚠️ Игра уже идёт в этом чате!</b>"))
+        return
+    
+    game_id = f"ttt_{chat_id}_{int(time.time())}"
+    board = [" "] * 9
+    
+    cursor.execute("""
+        INSERT OR REPLACE INTO ttt_games (chat_id, board, turn, player_x, player_o, game_id)
+        VALUES (?, ?, ?, ?, ?, ?)
+    """, (chat_id, json.dumps(board), "X", user_id, 0, game_id))
+    db.conn.commit()
+    
+    player_x_name = format_user_info(message.from_user)
+    
+    await safe_edit_or_send(
+        message,
+        ttt_board_to_text(board, "X", player_x_name, "Ожидание соперника..."),
+        ttt_keyboard(board, game_id)
+    )
 
 # ==================== TTT CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("ttt_"))
@@ -486,10 +524,10 @@ async def ttt_callback(callback: types.CallbackQuery):
         return
     
     if data.startswith("ttt_end_"):
-        if chat_id in TTT_GAMES:
-            del TTT_GAMES[chat_id]
-            await callback.message.delete()
-            await callback.answer("🔴 Игра завершена!")
+        db.conn.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        db.conn.commit()
+        await callback.message.delete()
+        await callback.answer("🔴 Игра завершена!")
         return
     
     parts = data.split("_")
@@ -500,37 +538,44 @@ async def ttt_callback(callback: types.CallbackQuery):
     game_id = parts[1]
     cell = int(parts[2])
     
-    if chat_id not in TTT_GAMES:
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ? AND game_id = ?", (chat_id, game_id))
+    row = cursor.fetchone()
+    
+    if not row:
         await callback.answer("❌ Игра не найдена!")
         return
     
-    game = TTT_GAMES[chat_id]
-    board = game["board"]
+    board = json.loads(row[1])
+    turn = row[2]
+    player_x = row[3]
+    player_o = row[4]
     
-    if game["turn"] == "X":
-        if user_id != game["player_x"]:
-            await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
-            return
-    else:
-        if game["player_o"] and user_id != game["player_o"]:
-            await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
-            return
-    
-    if game["player_o"] is None and game["turn"] == "O":
-        game["player_o"] = user_id
-        logger.info(f"[TTT] Игрок O определён: {user_id}")
+    # Проверяем, чей ход
+    if turn == "X" and user_id != player_x:
+        await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
+        return
+    if turn == "O" and user_id != player_o and player_o != 0:
+        await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
+        return
+    if turn == "O" and player_o == 0:
+        player_o = user_id
+        cursor.execute("UPDATE ttt_games SET player_o = ? WHERE chat_id = ?", (player_o, chat_id))
+        db.conn.commit()
     
     if board[cell] != " ":
         await callback.answer("⏳ Это место уже занято!")
         return
     
-    board[cell] = game["turn"]
+    board[cell] = turn
     winner = ttt_check_winner(board)
     
     if winner:
-        del TTT_GAMES[chat_id]
-        player_x_name = format_user_info(await bot.get_chat(game["player_x"])) if game["player_x"] else "Игрок X"
-        player_o_name = format_user_info(await bot.get_chat(game["player_o"])) if game["player_o"] else "Игрок O"
+        db.conn.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        db.conn.commit()
+        
+        player_x_name = format_user_info(await bot.get_chat(player_x))
+        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Игрок O"
         
         if winner == "X":
             result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
@@ -540,25 +585,31 @@ async def ttt_callback(callback: types.CallbackQuery):
             result_text = "🤝 <b>Ничья!</b>"
         
         await callback.message.edit_text(
-            f"{ttt_board_to_text(board, game['turn'], player_x_name, player_o_name)}\n\n{result_text}",
+            f"{ttt_board_to_text(board, turn, player_x_name, player_o_name)}\n\n{result_text}",
             parse_mode="HTML"
         )
         await callback.answer("🏆 Игра завершена!")
         return
     
-    game["turn"] = "O" if game["turn"] == "X" else "X"
+    # Меняем ход
+    new_turn = "O" if turn == "X" else "X"
+    cursor.execute("UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?", (json.dumps(board), new_turn, chat_id))
+    db.conn.commit()
     
-    player_x_name = format_user_info(await bot.get_chat(game["player_x"])) if game["player_x"] else "Игрок X"
-    player_o_name = format_user_info(await bot.get_chat(game["player_o"])) if game["player_o"] else "Игрок O"
+    player_x_name = format_user_info(await bot.get_chat(player_x))
+    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание соперника..."
     
     await callback.message.edit_text(
-        ttt_board_to_text(board, game["turn"], player_x_name, player_o_name),
+        ttt_board_to_text(board, new_turn, player_x_name, player_o_name),
         parse_mode="HTML",
         reply_markup=ttt_keyboard(board, game_id)
     )
     await callback.answer()
 
 # ==================== ОСТАЛЬНЫЕ CALLBACK-ОБРАБОТЧИКИ ====================
+# (все остальные callback'и остаются без изменений, я их не трогаю для краткости)
+# Но в полной версии они должны быть, поэтому я их включаю.
+
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -641,13 +692,15 @@ async def show_commands(callback: types.CallbackQuery):
         "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
         "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n\n"
+        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
+        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n\n"
         "Примеры:\n"
         ".mute\n"
         ".unmute\n"
         ".spam 5 Привет!\n"
         ".duel\n"
-        ".ttt\n\n"
+        ".ttt\n"
+        ".anim Привет мир!\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -957,6 +1010,14 @@ async def handle_business_message(message: types.Message):
 
         if text == ".ttt":
             await start_ttt(message)
+            return
+
+        if text.startswith(".anim "):
+            anim_text = text.replace(".anim", "").strip()
+            if not anim_text:
+                await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
+                return
+            await animate_text(chat_id, anim_text, message)
             return
 
         # Если команда не распознана – просто выходим
