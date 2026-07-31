@@ -84,34 +84,24 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ИГРА (как в opensource) ====================
+# ==================== TTT ====================
 ttt_games = {}
 
-def ttt_board_to_text(board: list, turn: str, player_x_name: str, player_o_name: str) -> str:
-    symbols = []
-    for i, cell in enumerate(board):
-        if cell == "X":
-            symbols.append("❌")
-        elif cell == "O":
-            symbols.append("⭕")
-        else:
-            symbols.append(str(i + 1))
-    
-    turn_symbol = "❌" if turn == "X" else "⭕"
-    turn_player = player_x_name if turn == "X" else player_o_name
-    
-    return (
-        f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-        f"Ход: <b>{turn_symbol} ({turn_player})</b>\n"
-        f"❌ <b>{player_x_name}</b>  |  ⭕ <b>{player_o_name}</b>\n\n"
-        f"┌───┬───┬───┐\n"
-        f"│ {symbols[0]} │ {symbols[1]} │ {symbols[2]} │\n"
-        f"├───┼───┼───┤\n"
-        f"│ {symbols[3]} │ {symbols[4]} │ {symbols[5]} │\n"
-        f"├───┼───┼───┤\n"
-        f"│ {symbols[6]} │ {symbols[7]} │ {symbols[8]} │\n"
-        f"└───┴───┴───┘"
-    )
+def ttt_board_display(board: list) -> str:
+    """Минималистичный дизайн поля"""
+    lines = []
+    for i in range(0, 9, 3):
+        row = board[i:i+3]
+        row_symbols = []
+        for cell in row:
+            if cell == "X":
+                row_symbols.append("❌")
+            elif cell == "O":
+                row_symbols.append("⭕")
+            else:
+                row_symbols.append("⬜")
+        lines.append("".join(row_symbols))
+    return "\n".join(lines)
 
 def ttt_check_winner(board: list) -> str | None:
     win_combinations = [
@@ -134,7 +124,7 @@ def ttt_keyboard(board: list, game_id: int):
             cell = i + j
             if board[cell] == " ":
                 row.append(InlineKeyboardButton(
-                    text=str(cell + 1),
+                    text="⬜",
                     callback_data=f"ttt_{game_id}_{cell}",
                     style="primary"
                 ))
@@ -146,7 +136,7 @@ def ttt_keyboard(board: list, game_id: int):
                 ))
         kb.append(row)
     kb.append([InlineKeyboardButton(
-        text="🔴 Завершить игру",
+        text="🔴 Завершить",
         callback_data=f"ttt_end_{game_id}",
         style="danger"
     )])
@@ -495,7 +485,7 @@ async def start_ttt(message: types.Message):
         if winner:
             del ttt_games[chat_id]
         else:
-            await message.answer(premium("<b>⚠️ Игра уже идёт в этом чате!</b>"))
+            await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
             return
     
     board = [" "] * 9
@@ -512,7 +502,9 @@ async def start_ttt(message: types.Message):
     player_x_name = format_user_info(message.from_user)
     
     await message.answer(
-        ttt_board_to_text(board, "X", player_x_name, "Ожидание соперника..."),
+        f"<b>❌⭕ Крестики-Нолики</b>\n\n"
+        f"Ход: <b>❌ ({player_x_name})</b>\n"
+        f"⬜⬜⬜\n⬜⬜⬜\n⬜⬜⬜",
         parse_mode="HTML",
         reply_markup=ttt_keyboard(board, game_id)
     )
@@ -525,7 +517,7 @@ async def ttt_callback(callback: types.CallbackQuery):
     chat_id = callback.message.chat.id
     
     if data == "ttt_no":
-        await callback.answer("⏳ Это место уже занято!")
+        await callback.answer("⏳ Занято!")
         return
     
     if data.startswith("ttt_end_"):
@@ -555,17 +547,17 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_o = game["player_o"]
     
     if turn == "X" and user_id != player_x:
-        await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
+        await callback.answer("⏳ Ход крестиков!", show_alert=True)
         return
     if turn == "O" and user_id != player_o and player_o != 0:
-        await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
+        await callback.answer("⏳ Ход ноликов!", show_alert=True)
         return
     if turn == "O" and player_o == 0:
         player_o = user_id
         game["player_o"] = user_id
     
     if board[cell] != " ":
-        await callback.answer("⏳ Это место уже занято!")
+        await callback.answer("⏳ Занято!")
         return
     
     board[cell] = turn
@@ -583,7 +575,7 @@ async def ttt_callback(callback: types.CallbackQuery):
             result_text = "🤝 <b>Ничья!</b>"
         
         await callback.message.edit_text(
-            f"{ttt_board_to_text(board, turn, player_x_name, player_o_name)}\n\n{result_text}",
+            f"{ttt_board_display(board)}\n\n{result_text}",
             parse_mode="HTML"
         )
         del ttt_games[chat_id]
@@ -594,10 +586,12 @@ async def ttt_callback(callback: types.CallbackQuery):
     game["turn"] = new_turn
     
     player_x_name = format_user_info(await bot.get_chat(player_x))
-    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание соперника..."
+    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание..."
     
     await callback.message.edit_text(
-        ttt_board_to_text(board, new_turn, player_x_name, player_o_name),
+        f"<b>❌⭕ Крестики-Нолики</b>\n\n"
+        f"Ход: <b>{'❌' if new_turn == 'X' else '⭕'} ({player_x_name if new_turn == 'X' else player_o_name})</b>\n"
+        f"{ttt_board_display(board)}",
         parse_mode="HTML",
         reply_markup=ttt_keyboard(board, game_id)
     )
