@@ -469,7 +469,8 @@ async def start_duel(message: types.Message):
     
     await asyncio.sleep(0.5)
     
-    winner = random.choice([user_id, "собеседник"])
+    # Исправлено: только пользователь может выиграть
+    winner = user_id
     
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
@@ -486,7 +487,6 @@ async def start_ttt(message: types.Message):
         await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
         return
     
-    # Проверяем, есть ли игра в БД
     cursor = db.conn.cursor()
     cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
     existing = cursor.fetchone()
