@@ -88,7 +88,6 @@ class BroadcastStates(StatesGroup):
 ttt_games = {}
 
 def ttt_board_display(board: list) -> str:
-    """Минималистичный дизайн поля"""
     lines = []
     for i in range(0, 9, 3):
         row = board[i:i+3]
@@ -533,14 +532,23 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка!")
         return
     
-    game_id = int(parts[1])
-    cell = int(parts[2])
+    try:
+        game_id = int(parts[1])
+        cell = int(parts[2])
+    except:
+        await callback.answer("❌ Ошибка!")
+        return
     
     if chat_id not in ttt_games:
         await callback.answer("❌ Игра не найдена!")
         return
     
     game = ttt_games[chat_id]
+    
+    if game["game_id"] != game_id:
+        await callback.answer("❌ Игра не найдена!")
+        return
+    
     board = game["board"]
     turn = game["turn"]
     player_x = game["player_x"]
