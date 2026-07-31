@@ -376,26 +376,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
-async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
-    new_text = premium(new_text)
-    try:
-        if message.text or message.caption:
-            await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
-        else:
-            await message.delete()
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception as e:
-        if "there is no text" in str(e) or "message to edit not found" in str(e):
-            await message.delete()
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
-        else:
-            logger.error(f"Ошибка редактирования: {e}")
-            try:
-                await message.delete()
-            except:
-                pass
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
-
 # ==================== ОБРАБОТЧИКИ КОМАНД ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
@@ -699,7 +679,8 @@ async def show_commands(callback: types.CallbackQuery):
         ".anim Привет мир!\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
-    await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
+    await callback.message.delete()
+    await bot.send_message(callback.from_user.id, commands_text, parse_mode="HTML", reply_markup=commands_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
@@ -714,7 +695,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "• Сохраняет самоуничтожающиеся медиа.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
-    await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
+    await callback.message.edit_text(main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
@@ -723,7 +704,7 @@ async def admin_panel(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
-    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "back_to_admin")
@@ -732,7 +713,7 @@ async def back_to_admin(callback: types.CallbackQuery):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
-    await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "broadcast")
