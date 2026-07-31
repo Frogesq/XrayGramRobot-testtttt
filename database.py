@@ -9,6 +9,8 @@ class Database:
 
     def _init_tables(self):
         cursor = self.conn.cursor()
+        
+        # Таблица пользователей
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -18,12 +20,16 @@ class Database:
                 registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Таблица подключений (business_connection_id -> user_id)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 bc_id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL
             )
         """)
+        
+        # Таблица сообщений
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 bc_id TEXT,
@@ -37,6 +43,8 @@ class Database:
                 PRIMARY KEY (bc_id, msg_id)
             )
         """)
+        
+        # Таблица замученных чатов
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS muted_chats (
                 user_id INTEGER,
@@ -44,8 +52,29 @@ class Database:
                 PRIMARY KEY (user_id, chat_id)
             )
         """)
+        
+        # Таблица для игр в крестики-нолики
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ttt_games (
+                chat_id INTEGER PRIMARY KEY,
+                board TEXT,
+                turn TEXT,
+                player_x INTEGER,
+                player_o INTEGER,
+                game_id TEXT
+            )
+        """)
+        
+        # Индексы для ускорения запросов
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
+        
         self.conn.commit()
 
+    # ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -60,6 +89,12 @@ class Database:
         cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,))
         return cursor.fetchone() is not None
 
+    def get_user(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
+        return cursor.fetchone()
+
+    # ==================== РАБОТА С ПОДКЛЮЧЕНИЯМИ ====================
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -71,6 +106,17 @@ class Database:
         row = cursor.fetchone()
         return row["user_id"] if row else None
 
+    def delete_connection(self, bc_id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM connections WHERE bc_id = ?", (bc_id,))
+        self.conn.commit()
+
+    def get_all_connections(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT bc_id, user_id FROM connections")
+        return cursor.fetchall()
+
+    # ==================== РАБОТА С СООБЩЕНИЯМИ ====================
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
@@ -104,6 +150,17 @@ class Database:
         cursor.execute("DELETE FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
         self.conn.commit()
 
+    def get_messages_by_user(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM messages WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        return cursor.fetchall()
+
+    def get_messages_by_chat(self, bc_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
+        return cursor.fetchall()
+
+    # ==================== РАБОТА С MUTE ====================
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -118,6 +175,75 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM muted_chats WHERE user_id = ? AND chat_id = ?", (user_id, chat_id))
         return cursor.fetchone() is not None
+
+    def get_muted_chats(self, user_id: int):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
+        return [row["chat_id"] for row in cursor.fetchall()]
+
+    # ==================== РАБОТА С ИГРАМИ (TTT) ====================
+    def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO ttt_games (chat_id, board, turn, player_x, player_o, game_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (chat_id, json.dumps(board), turn, player_x, player_o, game_id))
+        self.conn.commit()
+
+    def get_ttt_game(self, chat_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "chat_id": row["chat_id"],
+                "board": json.loads(row["board"]),
+                "turn": row["turn"],
+                "player_x": row["player_x"],
+                "player_o": row["player_o"],
+                "game_id": row["game_id"]
+            }
+        return None
+
+    def delete_ttt_game(self, chat_id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        self.conn.commit()
+
+    def update_ttt_game(self, chat_id, board, turn):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?
+        """, (json.dumps(board), turn, chat_id))
+        self.conn.commit()
+
+    def update_ttt_player_o(self, chat_id, player_o):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE ttt_games SET player_o = ? WHERE chat_id = ?
+        """, (player_o, chat_id))
+        self.conn.commit()
+
+    # ==================== СТАТИСТИКА ====================
+    def get_users_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        return cursor.fetchone()[0]
+
+    def get_messages_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM messages")
+        return cursor.fetchone()[0]
+
+    def get_connections_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM connections")
+        return cursor.fetchone()[0]
+
+    def get_muted_chats_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM muted_chats")
+        return cursor.fetchone()[0]
 
     def close(self):
         self.conn.close()
