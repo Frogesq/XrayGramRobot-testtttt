@@ -3,6 +3,7 @@ import logging
 import os
 import json
 import time
+import random
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -31,7 +32,6 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (С ВАШИМИ ID ЦИФР) ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -83,6 +83,30 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
+# ==================== АНИМАЦИЯ ====================
+async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
+    msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
+    
+    current_text = ""
+    last_text = ""
+    for i, char in enumerate(text):
+        current_text += char
+        if current_text != last_text:
+            try:
+                await msg.edit_text(f"<b>{current_text}</b>", parse_mode="HTML")
+                last_text = current_text
+            except:
+                pass
+        await asyncio.sleep(delay)
+    
+    await asyncio.sleep(0.5)
+    if current_text != last_text:
+        try:
+            await msg.edit_text(f"<b>{current_text}</b>", parse_mode="HTML")
+        except:
+            pass
+
+# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -218,6 +242,7 @@ def commands_keyboard():
         ]
     )
 
+# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -313,18 +338,12 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# Обработчики команд и callback'ов
-
+# ==================== ОБРАБОТЧИКИ КОМАНД ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
     user_id = user.id
     db.register_user(user_id, user.username or "", user.first_name or "", user.last_name or "")
-
-    if not await is_subscribed(user_id):
-        text = premium("<b>📢 Для использования бота необходимо подписаться на наш канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>")
-        await message.answer(text, reply_markup=subscription_keyboard(), parse_mode="HTML")
-        return
 
     is_admin = (user_id == ADMIN_ID)
     main_text = premium(
@@ -337,6 +356,54 @@ async def start_command(message: types.Message):
     )
     await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
+@dp.message(Command("duel"))
+async def cmd_duel(message: types.Message):
+    await start_duel(message)
+
+@dp.message(Command("anim"))
+async def cmd_anim(message: types.Message):
+    text = message.text.replace("/anim", "").strip()
+    if not text:
+        await message.answer(premium("<b>❌ Напишите текст для анимации!\nПример: /anim Привет мир!</b>"))
+        return
+    await animate_text(message.chat.id, text, message)
+
+# ==================== ФУНКЦИИ ДЛЯ ИГР ====================
+
+async def start_duel(message: types.Message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    if message.chat.type != "private":
+        await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
+        return
+    
+    msg = await message.answer("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!", parse_mode="HTML")
+    
+    stages = [
+        "⚔️ 3...",
+        "⚔️ 2...",
+        "⚔️ 1...",
+        "🔫 ПРИЦЕЛИВАЙСЯ!",
+        "💥 ВЫСТРЕЛ!"
+    ]
+    
+    for stage in stages:
+        await asyncio.sleep(0.7)
+        await msg.edit_text(f"<b>{stage}</b>", parse_mode="HTML")
+    
+    await asyncio.sleep(0.5)
+    
+    winner = random.choice([user_id, "собеседник"])
+    
+    if winner == user_id:
+        result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
+    else:
+        result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
+    
+    await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
+
+# ==================== ОСТАЛЬНЫЕ CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -417,11 +484,15 @@ async def show_commands(callback: types.CallbackQuery):
         "Эти команды работают в личных чатах, где активен бизнес-режим.\n\n"
         "🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
         "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
-        "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n\n"
+        "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
+        "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
+        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n\n"
         "Примеры:\n"
         ".mute\n"
         ".unmute\n"
-        ".spam 5 Привет!\n\n"
+        ".spam 5 Привет!\n"
+        ".duel\n"
+        ".anim Привет мир!\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -574,7 +645,6 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.answer()
 
 # ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
-
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
@@ -583,12 +653,9 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
-        # Опционально удалить запись
-        # db.conn.execute("DELETE FROM connections WHERE bc_id=?", (bc_id,))
-        # db.conn.commit()
         return
 
-    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}, enabled={is_enabled}")
+    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
 
     db.set_connection(bc_id, user_id)
 
@@ -607,7 +674,6 @@ async def handle_business_connection(connection: BusinessConnection):
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
 
-    # Уведомление администратору
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -633,7 +699,6 @@ async def handle_business_message(message: types.Message):
 
     user_id = db.get_user_by_bc_id(bc_id)
 
-    # ====== ФИКС: если bc_id не найден, но это владелец — создаём связь ======
     if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
         db.set_connection(bc_id, ADMIN_ID)
         if not db.is_user_registered(ADMIN_ID):
@@ -641,7 +706,6 @@ async def handle_business_message(message: types.Message):
         user_id = ADMIN_ID
         logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}, user_id={ADMIN_ID}")
 
-    # Fallback, если bc_id не найден в БД (для других случаев)
     if not user_id and message.from_user:
         user_id = message.from_user.id
         logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
@@ -660,11 +724,10 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== УДАЛЯЕМ СООБЩЕНИЕ С КОМАНДОЙ (если владелец) ======
+    # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
-        # Удаляем сообщение с командой
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
@@ -674,7 +737,6 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
 
-        # Обработка команд
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -690,6 +752,7 @@ async def handle_business_message(message: types.Message):
             )
             logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
             return
+
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -705,6 +768,7 @@ async def handle_business_message(message: types.Message):
             )
             logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
             return
+
         if text.startswith(".spam "):
             parts = text.split(maxsplit=2)
             if len(parts) >= 3:
@@ -728,20 +792,31 @@ async def handle_business_message(message: types.Message):
             else:
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
-        # Если команда не распознана – выходим (чтобы не сохранять её как обычное сообщение)
+
+        if text == ".duel":
+            await start_duel(message)
+            return
+
+        if text.startswith(".anim "):
+            anim_text = text.replace(".anim", "").strip()
+            if not anim_text:
+                await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
+                return
+            await animate_text(chat_id, anim_text, message)
+            return
+
         return
 
-    # ====== МУТ (для обычных сообщений от собеседника) ======
+    # ========== МУТ ==========
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
             )
-            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО (business)")
+            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
         except Exception as e:
-            error_text = str(e)
-            if "message to delete not found" in error_text:
+            if "message to delete not found" in str(e):
                 logger.info(f"[MUTE] ⏩ Сообщение {message.message_id} уже удалено, пропускаем")
             else:
                 logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
@@ -752,7 +827,7 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ====== СОХРАНЕНИЕ СООБЩЕНИЙ (если не замучен) ======
+    # ========== СОХРАНЕНИЕ ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
