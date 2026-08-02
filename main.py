@@ -32,9 +32,8 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ (ЗАМЕНИТЕ ID НА СВОИ) ====================
+# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
-    # Проверенные ID
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
     "⚠️": "5447644880824181073",
@@ -58,17 +57,16 @@ PREMIUM_EMOJI = {
     "2️⃣": "5381990043642502553",
     "3️⃣": "5381879959335738545",
     "4️⃣": "5382054253403577563",
-    # ЗАМЕНИТЕ ЭТИ ID НА СВОИ
-    "⚔️": "5408935401442267103",    # ищите "crossed swords"
-    "⭕": "5411225014148014586",    # ищите "circle" или "O"
-    "🔄": "5264727218734524899", # ищите "counterclockwise arrows"
+    "⚔️": "5408935401442267103",
+    "⭕": "5411225014148014586",
+    "🔄": "5264727218734524899",
 }
 
 EMPTY = "ㅤ"
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
-        if emoji in text and "ВАШ_ID" not in emoji_id:
+        if emoji in text:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
@@ -91,77 +89,59 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT (как в open-source) ====================
-class TicTacToe:
-    def __init__(self):
-        self.board = [" "] * 9
-        self.current_player = "X"
-        self.players = {}
-
-    def make_move(self, position: int) -> bool:
-        if self.board[position] != " ":
-            return False
-        self.board[position] = self.current_player
-        return True
-
-    def switch_player(self):
-        self.current_player = "O" if self.current_player == "X" else "X"
-
-    def check_winner(self) -> str | None:
-        win_combinations = [
-            [0, 1, 2], [3, 4, 5], [6, 7, 8],
-            [0, 3, 6], [1, 4, 7], [2, 5, 8],
-            [0, 4, 8], [2, 4, 6]
-        ]
-        for combo in win_combinations:
-            if self.board[combo[0]] == self.board[combo[1]] == self.board[combo[2]] and self.board[combo[0]] != " ":
-                return self.board[combo[0]]
-        if " " not in self.board:
-            return "draw"
-        return None
-
-    def get_board_display(self) -> str:
-        display = ""
-        for i in range(0, 9, 3):
-            row = self.board[i:i+3]
-            row_symbols = []
-            for cell in row:
-                if cell == "X":
-                    row_symbols.append("❌")
-                elif cell == "O":
-                    row_symbols.append("⭕")
-                else:
-                    row_symbols.append(EMPTY)
-            display += "".join(row_symbols) + "\n"
-        return display.strip()
-
-    def get_keyboard(self, game_id: int):
-        kb = []
-        for i in range(0, 9, 3):
-            row = []
-            for j in range(3):
-                cell = i + j
-                if self.board[cell] == " ":
-                    row.append(InlineKeyboardButton(
-                        text=EMPTY,
-                        callback_data=f"ttt_{game_id}_{cell}",
-                        style="primary"
-                    ))
-                else:
-                    row.append(InlineKeyboardButton(
-                        text="❌" if self.board[cell] == "X" else "⭕",
-                        callback_data="ttt_no",
-                        style="secondary"
-                    ))
-            kb.append(row)
-        kb.append([InlineKeyboardButton(
-            text="🔴 Завершить",
-            callback_data=f"ttt_end_{game_id}",
-            style="danger"
-        )])
-        return InlineKeyboardMarkup(inline_keyboard=kb)
-
+# ==================== TTT ====================
 ttt_games = {}
+
+def ttt_board_to_text(board) -> str:
+    result = ""
+    for i in range(0, 9, 3):
+        for j in range(3):
+            cell = board[i+j]
+            if cell == "X":
+                result += "❌"
+            elif cell == "O":
+                result += "⭕"
+            else:
+                result += EMPTY
+        result += "\n"
+    return result.strip()
+
+def ttt_check_winner(board) -> str | None:
+    win = [
+        [0,1,2], [3,4,5], [6,7,8],
+        [0,3,6], [1,4,7], [2,5,8],
+        [0,4,8], [2,4,6]
+    ]
+    for combo in win:
+        if board[combo[0]] == board[combo[1]] == board[combo[2]] and board[combo[0]] != " ":
+            return board[combo[0]]
+    if " " not in board:
+        return "draw"
+    return None
+
+def ttt_keyboard(board, game_id):
+    kb = []
+    for i in range(0, 9, 3):
+        row = []
+        for j in range(3):
+            cell = i + j
+            if board[cell] == " ":
+                row.append(InlineKeyboardButton(
+                    text=EMPTY,
+                    callback_data=f"ttt_{game_id}_{cell}"
+                ))
+            else:
+                row.append(InlineKeyboardButton(
+                    text="❌" if board[cell] == "X" else "⭕",
+                    callback_data="ttt_no"
+                ))
+        kb.append(row)
+    kb.append([InlineKeyboardButton(
+        text="🔴 Завершить",
+        callback_data=f"ttt_end_{game_id}",
+        style="danger"
+    )])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 # ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
@@ -429,9 +409,9 @@ async def start_command(message: types.Message):
     main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote>-- Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "-- Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "-- Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
@@ -499,10 +479,15 @@ async def start_ttt(message: types.Message):
         await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
         return
     
-    game = TicTacToe()
-    game.players["X"] = user_id
+    board = [" "] * 9
     game_id = int(time.time())
-    ttt_games[chat_id] = game
+    ttt_games[chat_id] = {
+        "board": board,
+        "turn": "X",
+        "player_x": user_id,
+        "player_o": 0,
+        "game_id": game_id
+    }
     
     player_x_name = format_user_info(message.from_user)
     
@@ -513,7 +498,7 @@ async def start_ttt(message: types.Message):
             f"{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}"
         ),
         parse_mode="HTML",
-        reply_markup=game.get_keyboard(game_id)
+        reply_markup=ttt_keyboard(board, game_id)
     )
 
 # ==================== TTT CALLBACK ====================
@@ -528,7 +513,8 @@ async def ttt_callback(callback: types.CallbackQuery):
         return
     
     if data.startswith("ttt_end_"):
-        if chat_id in ttt_games:
+        game_id = int(data.replace("ttt_end_", ""))
+        if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
             del ttt_games[chat_id]
         await callback.message.delete()
         await callback.answer("🔴 Игра завершена!")
@@ -541,7 +527,7 @@ async def ttt_callback(callback: types.CallbackQuery):
     
     try:
         game_id = int(parts[1])
-        position = int(parts[2])
+        cell = int(parts[2])
     except:
         await callback.answer("❌ Ошибка!")
         return
@@ -552,27 +538,35 @@ async def ttt_callback(callback: types.CallbackQuery):
     
     game = ttt_games[chat_id]
     
-    # Проверяем, чей ход
-    if game.current_player == "X":
-        if user_id != game.players.get("X"):
-            await callback.answer("⏳ Сейчас ход крестиков!", show_alert=True)
-            return
-    else:
-        if user_id != game.players.get("O", 0) and game.players.get("O") != 0:
-            await callback.answer("⏳ Сейчас ход ноликов!", show_alert=True)
-            return
-        if game.players.get("O") == 0:
-            game.players["O"] = user_id
+    if game["game_id"] != game_id:
+        await callback.answer("❌ Игра не найдена!")
+        return
     
-    if not game.make_move(position):
+    board = game["board"]
+    turn = game["turn"]
+    player_x = game["player_x"]
+    player_o = game["player_o"]
+    
+    if turn == "X" and user_id != player_x:
+        await callback.answer("⏳ Сейчас ход крестиков!", show_alert=True)
+        return
+    if turn == "O" and user_id != player_o and player_o != 0:
+        await callback.answer("⏳ Сейчас ход ноликов!", show_alert=True)
+        return
+    if turn == "O" and player_o == 0:
+        player_o = user_id
+        game["player_o"] = user_id
+    
+    if board[cell] != " ":
         await callback.answer("⏳ Занято!")
         return
     
-    winner = game.check_winner()
+    board[cell] = turn
+    winner = ttt_check_winner(board)
     
     if winner:
-        player_x_name = format_user_info(await bot.get_chat(game.players["X"]))
-        player_o_name = format_user_info(await bot.get_chat(game.players.get("O", 0))) if game.players.get("O") else "Игрок O"
+        player_x_name = format_user_info(await bot.get_chat(player_x))
+        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Игрок O"
         
         if winner == "X":
             result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
@@ -582,26 +576,27 @@ async def ttt_callback(callback: types.CallbackQuery):
             result_text = "🤝 <b>Ничья!</b>"
         
         await callback.message.edit_text(
-            premium(f"{game.get_board_display()}\n\n{result_text}"),
+            premium(f"{ttt_board_to_text(board)}\n\n{result_text}"),
             parse_mode="HTML"
         )
         del ttt_games[chat_id]
         await callback.answer("🏆 Игра завершена!")
         return
     
-    game.switch_player()
+    new_turn = "O" if turn == "X" else "X"
+    game["turn"] = new_turn
     
-    player_x_name = format_user_info(await bot.get_chat(game.players["X"]))
-    player_o_name = format_user_info(await bot.get_chat(game.players.get("O", 0))) if game.players.get("O") else "Ожидание..."
+    player_x_name = format_user_info(await bot.get_chat(player_x))
+    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание..."
     
     await callback.message.edit_text(
         premium(
             f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-            f"Ход: <b>{'❌' if game.current_player == 'X' else '⭕'} ({player_x_name if game.current_player == 'X' else player_o_name})</b>\n"
-            f"{game.get_board_display()}"
+            f"Ход: <b>{'❌' if new_turn == 'X' else '⭕'} ({player_x_name if new_turn == 'X' else player_o_name})</b>\n"
+            f"{ttt_board_to_text(board)}"
         ),
         parse_mode="HTML",
-        reply_markup=game.get_keyboard(game_id)
+        reply_markup=ttt_keyboard(board, game_id)
     )
     await callback.answer()
 
@@ -621,9 +616,9 @@ async def check_subscription(callback: types.CallbackQuery):
             main_text = premium(
                 "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
                 "<b>🤖 Что умеет бот:</b>\n"
-                "<blockquote>-- Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-                "-- Показывает изменения в отредактированных сообщениях (было → стало).\n"
-                "-- Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+                "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+                "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+                "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
                 "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
             )
             await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
@@ -709,9 +704,9 @@ async def back_to_main(callback: types.CallbackQuery):
     main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote>-- Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "-- Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "-- Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
