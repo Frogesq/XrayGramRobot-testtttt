@@ -362,6 +362,17 @@ def format_user_info(user: types.User) -> str:
     full_name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
     return f"{full_name} (@{user.username})" if user.username else f"{full_name} (ID: {user.id})"
 
+async def get_chat_user_name(chat_id: int, user_id: int = None) -> str:
+    """Получает имя пользователя по chat_id (в личных чатах chat_id = user_id)"""
+    try:
+        if user_id:
+            user = await bot.get_chat(user_id)
+        else:
+            user = await bot.get_chat(chat_id)
+        return format_user_info(user)
+    except:
+        return "Собеседник"
+
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
         if files:
@@ -442,14 +453,18 @@ async def start_duel(message: types.Message):
         await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
         return
     
+    # Получаем имя собеседника (в личном чате chat_id = user_id собеседника)
+    opponent_name = await get_chat_user_name(chat_id)
+    user_name = format_user_info(message.from_user)
+    
     msg = await message.answer(premium("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!"), parse_mode="HTML")
     
     stages = [
-        "⚔️ 3...",
-        "⚔️ 2...",
-        "⚔️ 1...",
-        "🔫 ПРИЦЕЛИВАЙСЯ!",
-        "💥 ВЫСТРЕЛ!"
+        f"⚔️ 3...",
+        f"⚔️ 2...",
+        f"⚔️ 1...",
+        f"🔫 ПРИЦЕЛИВАЙСЯ!",
+        f"💥 ВЫСТРЕЛ!"
     ]
     
     for stage in stages:
@@ -458,12 +473,12 @@ async def start_duel(message: types.Message):
     
     await asyncio.sleep(0.5)
     
-    winner = random.choice([user_id, "собеседник"])
+    winner = random.choice([user_id, chat_id])
     
     if winner == user_id:
-        result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
+        result = f"🏆 ПОБЕДИТЕЛЬ: {user_name}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
     else:
-        result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
+        result = f"🏆 ПОБЕДИТЕЛЬ: {opponent_name}!\n\n💀 Вы были быстрее, но удача была на его стороне..."
     
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
 
@@ -547,15 +562,19 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_x = game["player_x"]
     player_o = game["player_o"]
     
+    # ========== ЖЁСТКИЕ ОГРАНИЧЕНИЯ ХОДОВ ==========
     if turn == "X" and user_id != player_x:
-        await callback.answer("⏳ Сейчас ход крестиков!", show_alert=True)
+        await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
         return
-    if turn == "O" and user_id != player_o and player_o != 0:
-        await callback.answer("⏳ Сейчас ход ноликов!", show_alert=True)
-        return
-    if turn == "O" and player_o == 0:
-        player_o = user_id
-        game["player_o"] = user_id
+    if turn == "O":
+        # Если игрок O ещё не определён, запоминаем его
+        if player_o == 0:
+            player_o = user_id
+            game["player_o"] = user_id
+        # Проверяем, что ходит именно игрок O
+        if user_id != player_o:
+            await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
+            return
     
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
