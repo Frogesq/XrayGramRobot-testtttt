@@ -6,6 +6,7 @@ import time
 import random
 import aiohttp
 import base64
+import uuid
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -106,24 +107,36 @@ class BroadcastStates(StatesGroup):
 async def get_gigachat_token() -> str:
     """Получает токен доступа к Gigachat API"""
     try:
-        auth_data = base64.b64encode(
-            f"{GIGACHAT_API_KEY}:".encode()
-        ).decode()
+        # Правильный формат авторизации
+        auth_string = f"{GIGACHAT_API_KEY}"
+        auth_bytes = auth_string.encode('ascii')
+        base64_auth = base64.b64encode(auth_bytes).decode('ascii')
         
         headers = {
-            "Authorization": f"Basic {auth_data}",
-            "RqUID": "12345678-1234-1234-1234-123456789012",
+            "Authorization": f"Basic {base64_auth}",
+            "RqUID": str(uuid.uuid4()),
             "Content-Type": "application/x-www-form-urlencoded"
         }
-        data = {"scope": "GIGACHAT_API_PERS"}
+        
+        data = {
+            "scope": "GIGACHAT_API_PERS"
+        }
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(GIGACHAT_AUTH_URL, headers=headers, data=data, ssl=False) as response:
+            async with session.post(
+                GIGACHAT_AUTH_URL,
+                headers=headers,
+                data=data,
+                ssl=False
+            ) as response:
                 if response.status == 200:
                     result = await response.json()
-                    return result.get("access_token")
+                    token = result.get("access_token")
+                    logger.info("✅ Токен Gigachat получен успешно")
+                    return token
                 else:
-                    logger.error(f"Ошибка получения токена: {response.status}")
+                    error_text = await response.text()
+                    logger.error(f"Ошибка получения токена: {response.status} - {error_text}")
                     return None
     except Exception as e:
         logger.error(f"Ошибка получения токена Gigachat: {e}")
@@ -134,7 +147,7 @@ async def ask_gigachat(question: str) -> str:
     try:
         token = await get_gigachat_token()
         if not token:
-            return "❌ Не удалось получить токен доступа к Gigachat"
+            return "❌ Не удалось получить токен доступа к Gigachat. Проверьте API ключ."
         
         headers = {
             "Authorization": f"Bearer {token}",
@@ -159,7 +172,12 @@ async def ask_gigachat(question: str) -> str:
         }
         
         async with aiohttp.ClientSession() as session:
-            async with session.post(GIGACHAT_API_URL, headers=headers, json=payload, ssl=False) as response:
+            async with session.post(
+                GIGACHAT_API_URL,
+                headers=headers,
+                json=payload,
+                ssl=False
+            ) as response:
                 if response.status == 200:
                     result = await response.json()
                     if "choices" in result and len(result["choices"]) > 0:
@@ -529,31 +547,22 @@ async def cmd_ttt(message: types.Message):
 
 @dp.message(Command("gn"))
 async def cmd_gn(message: types.Message):
-    """Обработчик команды .gn (Gigachat)"""
     user_id = message.from_user.id
     
-    # Проверяем, что это личный чат
     if message.chat.type != "private":
         await message.answer(premium("<b>❌ Команда .gn доступна только в личных чатах!</b>"))
         return
     
-    # Получаем вопрос
     question = message.text.replace("/gn", "").strip()
     if not question:
         await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
         return
     
-    # Отправляем уведомление о начале обработки
     loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
     
     try:
-        # Отправляем вопрос в Gigachat
         answer = await ask_gigachat(question)
-        
-        # Удаляем сообщение "Думаю..."
         await loading_msg.delete()
-        
-        # Отправляем ответ
         await message.answer(
             premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n<b>🤖 Gigachat:</b>\n{answer}"),
             parse_mode="HTML"
