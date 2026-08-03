@@ -4,6 +4,8 @@ import os
 import json
 import time
 import random
+import aiohttp
+import base64
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -30,8 +32,13 @@ except ValueError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
-BANNER_PATH = os.path.join(BASE_DIR, "banner.png")  # путь к баннеру
+BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
+
+# ==================== GIGACHAT НАСТРОЙКИ ====================
+GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
+GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 # ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
@@ -94,6 +101,78 @@ else:
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
+
+# ==================== GIGACHAT ФУНКЦИИ ====================
+async def get_gigachat_token() -> str:
+    """Получает токен доступа к Gigachat API"""
+    try:
+        auth_data = base64.b64encode(
+            f"{GIGACHAT_API_KEY}:".encode()
+        ).decode()
+        
+        headers = {
+            "Authorization": f"Basic {auth_data}",
+            "RqUID": "12345678-1234-1234-1234-123456789012",
+            "Content-Type": "application/x-www-form-urlencoded"
+        }
+        data = {"scope": "GIGACHAT_API_PERS"}
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(GIGACHAT_AUTH_URL, headers=headers, data=data, ssl=False) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    return result.get("access_token")
+                else:
+                    logger.error(f"Ошибка получения токена: {response.status}")
+                    return None
+    except Exception as e:
+        logger.error(f"Ошибка получения токена Gigachat: {e}")
+        return None
+
+async def ask_gigachat(question: str) -> str:
+    """Отправляет вопрос в Gigachat и возвращает ответ"""
+    try:
+        token = await get_gigachat_token()
+        if not token:
+            return "❌ Не удалось получить токен доступа к Gigachat"
+        
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "Accept": "application/json"
+        }
+        
+        payload = {
+            "model": "GigaChat",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "Ты полезный ассистент. Отвечай кратко и по делу."
+                },
+                {
+                    "role": "user",
+                    "content": question
+                }
+            ],
+            "temperature": 0.7,
+            "max_tokens": 1000
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post(GIGACHAT_API_URL, headers=headers, json=payload, ssl=False) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    if "choices" in result and len(result["choices"]) > 0:
+                        return result["choices"][0]["message"]["content"]
+                    else:
+                        return "❌ Не удалось получить ответ от Gigachat"
+                else:
+                    error_text = await response.text()
+                    logger.error(f"Ошибка Gigachat API: {response.status} - {error_text}")
+                    return f"❌ Ошибка Gigachat API: {response.status}"
+    except Exception as e:
+        logger.error(f"Ошибка запроса к Gigachat: {e}")
+        return f"❌ Ошибка: {str(e)}"
 
 # ==================== TTT ====================
 ttt_games = {}
@@ -421,7 +500,6 @@ async def start_command(message: types.Message):
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     
-    # Отправляем баннер, если он есть
     if os.path.exists(BANNER_PATH):
         banner = FSInputFile(BANNER_PATH)
         await message.answer_photo(
@@ -431,7 +509,6 @@ async def start_command(message: types.Message):
             reply_markup=main_menu_keyboard(is_admin)
         )
     else:
-        # Если баннера нет, отправляем просто текст
         await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
 @dp.message(Command("duel"))
@@ -449,6 +526,44 @@ async def cmd_anim(message: types.Message):
 @dp.message(Command("ttt"))
 async def cmd_ttt(message: types.Message):
     await start_ttt(message)
+
+@dp.message(Command("gn"))
+async def cmd_gn(message: types.Message):
+    """Обработчик команды .gn (Gigachat)"""
+    user_id = message.from_user.id
+    
+    # Проверяем, что это личный чат
+    if message.chat.type != "private":
+        await message.answer(premium("<b>❌ Команда .gn доступна только в личных чатах!</b>"))
+        return
+    
+    # Получаем вопрос
+    question = message.text.replace("/gn", "").strip()
+    if not question:
+        await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
+        return
+    
+    # Отправляем уведомление о начале обработки
+    loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
+    
+    try:
+        # Отправляем вопрос в Gigachat
+        answer = await ask_gigachat(question)
+        
+        # Удаляем сообщение "Думаю..."
+        await loading_msg.delete()
+        
+        # Отправляем ответ
+        await message.answer(
+            premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n<b>🤖 Gigachat:</b>\n{answer}"),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        await loading_msg.delete()
+        await message.answer(
+            premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
+            parse_mode="HTML"
+        )
 
 # ==================== ФУНКЦИИ ДЛЯ ИГР ====================
 
@@ -735,14 +850,16 @@ async def show_commands(callback: types.CallbackQuery):
         "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
         "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.</blockquote>\n\n"
+        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
+        "🤖 .gn &lt;вопрос&gt; – задать вопрос Gigachat (ИИ-ассистент).</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
         ".spam 5 Привет!\n"
         ".duel\n"
         ".anim Привет мир!\n"
-        ".ttt</blockquote>\n\n"
+        ".ttt\n"
+        ".gn Как дела?</blockquote>\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -1057,6 +1174,31 @@ async def handle_business_message(message: types.Message):
 
         if text == ".ttt":
             await start_ttt(message)
+            return
+
+        if text.startswith(".gn "):
+            question = text.replace(".gn", "").strip()
+            if not question:
+                await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
+                return
+            
+            loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
+            
+            try:
+                answer = await ask_gigachat(question)
+                await loading_msg.delete()
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n<b>🤖 Gigachat:</b>\n{answer}"),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                await loading_msg.delete()
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
+                    parse_mode="HTML"
+                )
             return
 
         return
