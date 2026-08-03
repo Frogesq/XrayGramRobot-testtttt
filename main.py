@@ -573,10 +573,6 @@ async def cmd_gn(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     
-    if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Команда .gn доступна только в личных чатах!</b>"))
-        return
-    
     question = message.text.replace("/gn", "").strip()
     if not question:
         await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
@@ -589,7 +585,7 @@ async def cmd_gn(message: types.Message):
         answer = giga_chat.get_text_response(messages)
         
         await loading_msg.delete()
-        # Ответ отправляется в тот же чат, где был задан вопрос
+        # ✅ Ответ приходит в ТОТ ЖЕ ЧАТ, где была написана команда
         await bot.send_message(
             chat_id,
             premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -1227,12 +1223,20 @@ async def handle_business_message(message: types.Message):
                 answer = giga_chat.get_text_response(messages)
                 
                 await loading_msg.delete()
-                # Ответ отправляем в тот же чат, где была команда
-                await bot.send_message(
-                    chat_id,
-                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                    parse_mode="HTML"
-                )
+                # ✅ Ответ приходит в ТОТ ЖЕ ЧАТ (business_connection_id для бизнес-чатов)
+                if message.business_connection_id:
+                    await bot.send_message(
+                        chat_id,
+                        premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
+                        parse_mode="HTML",
+                        business_connection_id=bc_id
+                    )
+                else:
+                    await bot.send_message(
+                        chat_id,
+                        premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
+                        parse_mode="HTML"
+                    )
             except Exception as e:
                 await loading_msg.delete()
                 await bot.send_message(
