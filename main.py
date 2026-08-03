@@ -571,6 +571,7 @@ async def cmd_ttt(message: types.Message):
 @dp.message(Command("gn"))
 async def cmd_gn(message: types.Message):
     user_id = message.from_user.id
+    chat_id = message.chat.id
     
     if message.chat.type != "private":
         await message.answer(premium("<b>❌ Команда .gn доступна только в личных чатах!</b>"))
@@ -584,18 +585,20 @@ async def cmd_gn(message: types.Message):
     loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
     
     try:
-        # Отправляем запрос в GigaChat
         messages = [{"role": "user", "content": question}]
         answer = giga_chat.get_text_response(messages)
         
         await loading_msg.delete()
-        await message.answer(
+        # Ответ отправляется в тот же чат, где был задан вопрос
+        await bot.send_message(
+            chat_id,
             premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
             parse_mode="HTML"
         )
     except Exception as e:
         await loading_msg.delete()
-        await message.answer(
+        await bot.send_message(
+            chat_id,
             premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
             parse_mode="HTML"
         )
@@ -1220,13 +1223,13 @@ async def handle_business_message(message: types.Message):
             loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
             
             try:
-                # Отправляем в GigaChat
                 messages = [{"role": "user", "content": question}]
                 answer = giga_chat.get_text_response(messages)
                 
                 await loading_msg.delete()
+                # Ответ отправляем в тот же чат, где была команда
                 await bot.send_message(
-                    user_id,
+                    chat_id,
                     premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
                     parse_mode="HTML"
                 )
