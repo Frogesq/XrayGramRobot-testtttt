@@ -103,14 +103,15 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== GIGACHAT ФУНКЦИИ ====================
+# ==================== GIGACHAT ФУНКЦИИ (ИСПРАВЛЕННЫЕ) ====================
 async def get_gigachat_token() -> str:
     """Получает токен доступа к Gigachat API"""
     try:
-        # Правильный формат авторизации
-        auth_string = f"{GIGACHAT_API_KEY}"
-        auth_bytes = auth_string.encode('ascii')
-        base64_auth = base64.b64encode(auth_bytes).decode('ascii')
+        # ✅ Правильный формат: API ключ должен быть закодирован в Base64 с двоеточием
+        # Формат: base64(API_KEY + ":")
+        auth_string = f"{GIGACHAT_API_KEY}:"
+        auth_bytes = auth_string.encode('utf-8')
+        base64_auth = base64.b64encode(auth_bytes).decode('utf-8')
         
         headers = {
             "Authorization": f"Basic {base64_auth}",
