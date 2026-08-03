@@ -4,9 +4,9 @@ import os
 import json
 import time
 import random
-import aiohttp
-import base64
-import uuid
+import re
+import requests
+import urllib3
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -18,6 +18,9 @@ from aiogram.types import (
     BufferedInputFile, FSInputFile
 )
 from database import Database
+
+# Отключение предупреждений об SSL
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
 
@@ -103,95 +106,114 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== GIGACHAT ФУНКЦИИ (ИСПРАВЛЕННЫЕ) ====================
-async def get_gigachat_token() -> str:
-    """Получает токен доступа к Gigachat API"""
-    try:
-        # ✅ Правильный формат: API ключ должен быть закодирован в Base64 с двоеточием
-        # Формат: base64(API_KEY + ":")
-        auth_string = f"{GIGACHAT_API_KEY}:"
-        auth_bytes = auth_string.encode('utf-8')
-        base64_auth = base64.b64encode(auth_bytes).decode('utf-8')
+# ==================== GIGACHAT (РАБОЧАЯ ВЕРСИЯ) ====================
+class GigaChatAPI:
+    """Класс для работы с GigaChat API"""
+    
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self._access_token = None
+        self._token_expires = 0
+        self._session = requests.Session()
+        self._session.verify = False
+        self._session.timeout = 60
         
-        headers = {
-            "Authorization": f"Basic {base64_auth}",
-            "RqUID": str(uuid.uuid4()),
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        data = {
-            "scope": "GIGACHAT_API_PERS"
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+    def _get_access_token(self) -> str | None:
+        """Получение токена доступа"""
+        if self._access_token and time.time() < self._token_expires:
+            return self._access_token
+            
+        try:
+            headers = {
+                "Authorization": f"Basic {self.api_key}",
+                "Content-Type": "application/x-www-form-urlencoded",
+                "RqUID": "6f0b1291-c7f3-4c6a-a5e7-8a6b5d3e2f1a",
+                "Accept": "application/json"
+            }
+            
+            response = self._session.post(
                 GIGACHAT_AUTH_URL,
                 headers=headers,
-                data=data,
-                ssl=False
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    token = result.get("access_token")
-                    logger.info("✅ Токен Gigachat получен успешно")
+                data={"scope": "GIGACHAT_API_PERS"},
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                token = data.get("access_token")
+                if token:
+                    self._access_token = token
+                    self._token_expires = time.time() + 1500
+                    logger.info("✅ Токен GigaChat получен")
                     return token
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Ошибка получения токена: {response.status} - {error_text}")
-                    return None
-    except Exception as e:
-        logger.error(f"Ошибка получения токена Gigachat: {e}")
+            else:
+                logger.error(f"Ошибка получения токена: {response.status_code} - {response.text}")
+                
+        except Exception as e:
+            logger.error(f"Ошибка получения токена: {e}")
+        
         return None
-
-async def ask_gigachat(question: str) -> str:
-    """Отправляет вопрос в Gigachat и возвращает ответ"""
-    try:
-        token = await get_gigachat_token()
+    
+    def get_text_response(self, messages: list) -> str:
+        """Получение ответа от GigaChat"""
+        token = self._get_access_token()
         if not token:
-            return "❌ Не удалось получить токен доступа к Gigachat. Проверьте API ключ."
+            return "🔧 Сервис временно недоступен. Пожалуйста, попробуйте позже."
         
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        payload = {
-            "model": "GigaChat",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "Ты полезный ассистент. Отвечай кратко и по делу."
-                },
-                {
-                    "role": "user",
-                    "content": question
-                }
-            ],
-            "temperature": 0.7,
-            "max_tokens": 1000
-        }
-        
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
+        try:
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+            
+            system_message = {
+                "role": "system",
+                "content": "Ты - полезный и вежливый ассистент. Отвечай на русском языке подробно и понятно."
+            }
+            
+            data = {
+                "model": "GigaChat",
+                "messages": [system_message] + messages,
+                "temperature": 0.7,
+                "max_tokens": 2000
+            }
+            
+            response = self._session.post(
                 GIGACHAT_API_URL,
                 headers=headers,
-                json=payload,
-                ssl=False
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    if "choices" in result and len(result["choices"]) > 0:
-                        return result["choices"][0]["message"]["content"]
-                    else:
-                        return "❌ Не удалось получить ответ от Gigachat"
-                else:
-                    error_text = await response.text()
-                    logger.error(f"Ошибка Gigachat API: {response.status} - {error_text}")
-                    return f"❌ Ошибка Gigachat API: {response.status}"
-    except Exception as e:
-        logger.error(f"Ошибка запроса к Gigachat: {e}")
-        return f"❌ Ошибка: {str(e)}"
+                json=data,
+                timeout=60
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                if "choices" in result and len(result["choices"]) > 0:
+                    text = result["choices"][0]["message"]["content"]
+                    text = re.sub(r'[`*_\[\]()]', '', text)
+                    text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t').strip()
+                    if text:
+                        return self._format_response(text)
+            
+            return "⚠️ Не удалось получить ответ. Попробуйте переформулировать вопрос."
+            
+        except Exception as e:
+            logger.error(f"Ошибка GigaChat API: {e}")
+            return "❌ Ошибка при обработке запроса. Пожалуйста, попробуйте позже."
+    
+    def _format_response(self, text: str) -> str:
+        """Форматирование ответа"""
+        formatted = "🤖 <b>Ответ:</b>\n\n"
+        
+        paragraphs = text.split('\n\n')
+        for paragraph in paragraphs:
+            if paragraph.strip():
+                formatted += paragraph.strip() + "\n\n"
+        
+        formatted += "─\n💡 Можете задать следующий вопрос"
+        return formatted
+
+# Инициализация GigaChat
+giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
 # ==================== TTT ====================
 ttt_games = {}
@@ -562,10 +584,13 @@ async def cmd_gn(message: types.Message):
     loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
     
     try:
-        answer = await ask_gigachat(question)
+        # Отправляем запрос в GigaChat
+        messages = [{"role": "user", "content": question}]
+        answer = giga_chat.get_text_response(messages)
+        
         await loading_msg.delete()
         await message.answer(
-            premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n<b>🤖 Gigachat:</b>\n{answer}"),
+            premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
             parse_mode="HTML"
         )
     except Exception as e:
@@ -1195,11 +1220,14 @@ async def handle_business_message(message: types.Message):
             loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
             
             try:
-                answer = await ask_gigachat(question)
+                # Отправляем в GigaChat
+                messages = [{"role": "user", "content": question}]
+                answer = giga_chat.get_text_response(messages)
+                
                 await loading_msg.delete()
                 await bot.send_message(
                     user_id,
-                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n<b>🤖 Gigachat:</b>\n{answer}"),
+                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
                     parse_mode="HTML"
                 )
             except Exception as e:
