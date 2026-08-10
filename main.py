@@ -30,7 +30,6 @@ except ValueError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
-BANNER_PATH = os.path.join(BASE_DIR, "banner.png")  # путь к баннеру
 CHANNEL_USERNAME = "@NovoeTelegram"
 
 # ==================== PREMIUM ЭМОДЗИ ====================
@@ -86,11 +85,6 @@ if os.path.exists(INSTRUCTION_IMAGE_PATH):
     logger.info("✅ Картинка инструкции найдена")
 else:
     logger.warning("❌ Картинка инструкции НЕ найдена")
-
-if os.path.exists(BANNER_PATH):
-    logger.info("✅ Баннер найден")
-else:
-    logger.warning("❌ Баннер НЕ найден (файл banner.png отсутствует)")
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
@@ -420,19 +414,7 @@ async def start_command(message: types.Message):
         "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
-    
-    # Отправляем баннер, если он есть
-    if os.path.exists(BANNER_PATH):
-        banner = FSInputFile(BANNER_PATH)
-        await message.answer_photo(
-            photo=banner,
-            caption=main_text,
-            parse_mode="HTML",
-            reply_markup=main_menu_keyboard(is_admin)
-        )
-    else:
-        # Если баннера нет, отправляем просто текст
-        await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
+    await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
@@ -485,8 +467,6 @@ async def start_duel(message: types.Message):
     
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
 
-# ==================== TTT ====================
-
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -521,6 +501,7 @@ async def start_ttt(message: types.Message):
         reply_markup=ttt_keyboard(board, game_id)
     )
 
+# ==================== TTT CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("ttt_"))
 async def ttt_callback(callback: types.CallbackQuery):
     data = callback.data
@@ -566,21 +547,24 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_x = game["player_x"]
     player_o = game["player_o"]
     
-    # ==========================================
-    # ========== ПРОВЕРКА РОЛЕЙ ================
-    # ==========================================
+    # ================================================
+    # ========== СТРОГАЯ ПРОВЕРКА РОЛЕЙ ==============
+    # ================================================
     
     if turn == "X":
+        # Ходят только крестики (владелец)
         if user_id != player_x:
             await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
             return
-    else:
+    else:  # turn == "O"
+        # Если игрок O ещё не определён, запоминаем его
         if player_o == 0:
             player_o = user_id
             game["player_o"] = user_id
             logger.info(f"[TTT] Игрок O определён: {user_id}")
             ttt_games[chat_id] = game
         
+        # Проверяем, что ходит именно игрок O
         if user_id != game["player_o"]:
             await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
             return
