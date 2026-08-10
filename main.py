@@ -4,9 +4,6 @@ import os
 import json
 import time
 import random
-import re
-import requests
-import urllib3
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -18,9 +15,6 @@ from aiogram.types import (
     BufferedInputFile, FSInputFile
 )
 from database import Database
-
-# Отключение предупреждений об SSL
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
 
@@ -36,13 +30,8 @@ except ValueError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
-BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
+BANNER_PATH = os.path.join(BASE_DIR, "banner.png")  # путь к баннеру
 CHANNEL_USERNAME = "@NovoeTelegram"
-
-# ==================== GIGACHAT НАСТРОЙКИ ====================
-GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
-GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
 # ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
@@ -105,115 +94,6 @@ else:
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
-
-# ==================== GIGACHAT (РАБОЧАЯ ВЕРСИЯ) ====================
-class GigaChatAPI:
-    """Класс для работы с GigaChat API"""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self._access_token = None
-        self._token_expires = 0
-        self._session = requests.Session()
-        self._session.verify = False
-        self._session.timeout = 60
-        
-    def _get_access_token(self) -> str | None:
-        """Получение токена доступа"""
-        if self._access_token and time.time() < self._token_expires:
-            return self._access_token
-            
-        try:
-            headers = {
-                "Authorization": f"Basic {self.api_key}",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "RqUID": "6f0b1291-c7f3-4c6a-a5e7-8a6b5d3e2f1a",
-                "Accept": "application/json"
-            }
-            
-            response = self._session.post(
-                GIGACHAT_AUTH_URL,
-                headers=headers,
-                data={"scope": "GIGACHAT_API_PERS"},
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                token = data.get("access_token")
-                if token:
-                    self._access_token = token
-                    self._token_expires = time.time() + 1500
-                    logger.info("✅ Токен GigaChat получен")
-                    return token
-            else:
-                logger.error(f"Ошибка получения токена: {response.status_code} - {response.text}")
-                
-        except Exception as e:
-            logger.error(f"Ошибка получения токена: {e}")
-        
-        return None
-    
-    def get_text_response(self, messages: list) -> str:
-        """Получение ответа от GigaChat"""
-        token = self._get_access_token()
-        if not token:
-            return "🔧 Сервис временно недоступен. Пожалуйста, попробуйте позже."
-        
-        try:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
-            
-            system_message = {
-                "role": "system",
-                "content": "Ты - полезный и вежливый ассистент. Отвечай на русском языке подробно и понятно."
-            }
-            
-            data = {
-                "model": "GigaChat",
-                "messages": [system_message] + messages,
-                "temperature": 0.7,
-                "max_tokens": 2000
-            }
-            
-            response = self._session.post(
-                GIGACHAT_API_URL,
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if "choices" in result and len(result["choices"]) > 0:
-                    text = result["choices"][0]["message"]["content"]
-                    text = re.sub(r'[`*_\[\]()]', '', text)
-                    text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t').strip()
-                    if text:
-                        return self._format_response(text)
-            
-            return "⚠️ Не удалось получить ответ. Попробуйте переформулировать вопрос."
-            
-        except Exception as e:
-            logger.error(f"Ошибка GigaChat API: {e}")
-            return "❌ Ошибка при обработке запроса. Пожалуйста, попробуйте позже."
-    
-    def _format_response(self, text: str) -> str:
-        """Форматирование ответа"""
-        formatted = "🤖 <b>Ответ:</b>\n\n"
-        
-        paragraphs = text.split('\n\n')
-        for paragraph in paragraphs:
-            if paragraph.strip():
-                formatted += paragraph.strip() + "\n\n"
-        
-        formatted += "─\n💡 Можете задать следующий вопрос"
-        return formatted
-
-# Инициализация GigaChat
-giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
 # ==================== TTT ====================
 ttt_games = {}
@@ -541,6 +421,7 @@ async def start_command(message: types.Message):
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     
+    # Отправляем баннер, если он есть
     if os.path.exists(BANNER_PATH):
         banner = FSInputFile(BANNER_PATH)
         await message.answer_photo(
@@ -550,6 +431,7 @@ async def start_command(message: types.Message):
             reply_markup=main_menu_keyboard(is_admin)
         )
     else:
+        # Если баннера нет, отправляем просто текст
         await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
 @dp.message(Command("duel"))
@@ -567,37 +449,6 @@ async def cmd_anim(message: types.Message):
 @dp.message(Command("ttt"))
 async def cmd_ttt(message: types.Message):
     await start_ttt(message)
-
-@dp.message(Command("gn"))
-async def cmd_gn(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    question = message.text.replace("/gn", "").strip()
-    if not question:
-        await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
-        return
-    
-    loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-    
-    try:
-        messages = [{"role": "user", "content": question}]
-        answer = giga_chat.get_text_response(messages)
-        
-        await loading_msg.delete()
-        # ✅ Ответ приходит в ТОТ ЖЕ ЧАТ, где была написана команда
-        await bot.send_message(
-            chat_id,
-            premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        await loading_msg.delete()
-        await bot.send_message(
-            chat_id,
-            premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
-            parse_mode="HTML"
-        )
 
 # ==================== ФУНКЦИИ ДЛЯ ИГР ====================
 
@@ -884,16 +735,14 @@ async def show_commands(callback: types.CallbackQuery):
         "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
         "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
-        "🤖 .gn &lt;вопрос&gt; – задать вопрос Gigachat (ИИ-ассистент).</blockquote>\n\n"
+        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
         ".spam 5 Привет!\n"
         ".duel\n"
         ".anim Привет мир!\n"
-        ".ttt\n"
-        ".gn Как дела?</blockquote>\n\n"
+        ".ttt</blockquote>\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -1208,42 +1057,6 @@ async def handle_business_message(message: types.Message):
 
         if text == ".ttt":
             await start_ttt(message)
-            return
-
-        if text.startswith(".gn "):
-            question = text.replace(".gn", "").strip()
-            if not question:
-                await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
-                return
-            
-            loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-            
-            try:
-                messages = [{"role": "user", "content": question}]
-                answer = giga_chat.get_text_response(messages)
-                
-                await loading_msg.delete()
-                # ✅ Ответ приходит в ТОТ ЖЕ ЧАТ (business_connection_id для бизнес-чатов)
-                if message.business_connection_id:
-                    await bot.send_message(
-                        chat_id,
-                        premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                        parse_mode="HTML",
-                        business_connection_id=bc_id
-                    )
-                else:
-                    await bot.send_message(
-                        chat_id,
-                        premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                        parse_mode="HTML"
-                    )
-            except Exception as e:
-                await loading_msg.delete()
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
-                    parse_mode="HTML"
-                )
             return
 
         return
