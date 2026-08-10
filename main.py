@@ -89,10 +89,11 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT ====================
+# ==================== TTT (новая реализация) ====================
 ttt_games = {}
 
 def ttt_board_to_text(board):
+    """Преобразует доску в текст"""
     result = ""
     for i in range(0, 9, 3):
         for j in range(3):
@@ -107,6 +108,7 @@ def ttt_board_to_text(board):
     return result.strip()
 
 def ttt_check_winner(board):
+    """Проверяет победителя"""
     win = [
         [0,1,2], [3,4,5], [6,7,8],
         [0,3,6], [1,4,7], [2,5,8],
@@ -120,6 +122,7 @@ def ttt_check_winner(board):
     return None
 
 def ttt_keyboard(board, game_id):
+    """Создаёт клавиатуру для игры"""
     kb = []
     for i in range(0, 9, 3):
         row = []
@@ -467,6 +470,8 @@ async def start_duel(message: types.Message):
     
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
 
+# ==================== TTT НОВАЯ РЕАЛИЗАЦИЯ ====================
+
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -485,7 +490,7 @@ async def start_ttt(message: types.Message):
         "board": board,
         "turn": "X",
         "player_x": user_id,
-        "player_o": 0,
+        "player_o": 0,  # 0 = ещё не определён
         "game_id": game_id
     }
     
@@ -501,17 +506,18 @@ async def start_ttt(message: types.Message):
         reply_markup=ttt_keyboard(board, game_id)
     )
 
-# ==================== TTT CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("ttt_"))
 async def ttt_callback(callback: types.CallbackQuery):
     data = callback.data
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     
+    # Если кнопка уже занята
     if data == "ttt_no":
         await callback.answer("⏳ Занято!")
         return
     
+    # Завершение игры
     if data.startswith("ttt_end_"):
         game_id = int(data.replace("ttt_end_", ""))
         if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
@@ -520,6 +526,7 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("🔴 Игра завершена!")
         return
     
+    # Разбор callback_data
     parts = data.split("_")
     if len(parts) != 3:
         await callback.answer("❌ Ошибка!")
@@ -532,12 +539,14 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка!")
         return
     
+    # Проверка наличия игры
     if chat_id not in ttt_games:
         await callback.answer("❌ Игра не найдена!")
         return
     
     game = ttt_games[chat_id]
     
+    # Проверка game_id
     if game["game_id"] != game_id:
         await callback.answer("❌ Игра не найдена!")
         return
@@ -547,33 +556,36 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_x = game["player_x"]
     player_o = game["player_o"]
     
-    # ================================================
-    # ========== СТРОГАЯ ПРОВЕРКА РОЛЕЙ ==============
-    # ================================================
+    # ========================================
+    # ========== ОСНОВНАЯ ЛОГИКА ============
+    # ========================================
     
+    # 1. Проверяем, кто ходит
     if turn == "X":
         # Ходят только крестики (владелец)
         if user_id != player_x:
             await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
             return
     else:  # turn == "O"
-        # Если игрок O ещё не определён, запоминаем его
+        # Если игрок O ещё не определён, запоминаем
         if player_o == 0:
             player_o = user_id
             game["player_o"] = user_id
             logger.info(f"[TTT] Игрок O определён: {user_id}")
-            ttt_games[chat_id] = game
-        
         # Проверяем, что ходит именно игрок O
-        if user_id != game["player_o"]:
+        if user_id != player_o:
             await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
             return
     
+    # 2. Проверяем, свободна ли клетка
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
         return
     
+    # 3. Делаем ход
     board[cell] = turn
+    
+    # 4. Проверяем победу
     winner = ttt_check_winner(board)
     
     if winner:
@@ -605,8 +617,10 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("🏆 Игра завершена!")
         return
     
+    # 5. Меняем ход
     game["turn"] = "O" if turn == "X" else "X"
     
+    # 6. Обновляем сообщение
     try:
         player_x_name = format_user_info(await bot.get_chat(player_x))
     except:
