@@ -32,6 +32,7 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
+# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -88,11 +89,10 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT (полностью переписан) ====================
+# ==================== TTT ====================
 ttt_games = {}
 
-def ttt_board_to_text(board):
-    """Преобразует доску в текст"""
+def ttt_board_to_text(board) -> str:
     result = ""
     for i in range(0, 9, 3):
         for j in range(3):
@@ -106,8 +106,7 @@ def ttt_board_to_text(board):
         result += "\n"
     return result.strip()
 
-def ttt_check_winner(board):
-    """Проверяет победителя"""
+def ttt_check_winner(board) -> str | None:
     win = [
         [0,1,2], [3,4,5], [6,7,8],
         [0,3,6], [1,4,7], [2,5,8],
@@ -121,7 +120,6 @@ def ttt_check_winner(board):
     return None
 
 def ttt_keyboard(board, game_id):
-    """Создаёт клавиатуру для игры"""
     kb = []
     for i in range(0, 9, 3):
         row = []
@@ -460,7 +458,7 @@ async def start_duel(message: types.Message):
     
     await asyncio.sleep(0.5)
     
-    winner = random.choice([user_id, chat_id])
+    winner = random.choice([user_id, "собеседник"])
     
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
@@ -487,7 +485,7 @@ async def start_ttt(message: types.Message):
         "board": board,
         "turn": "X",
         "player_x": user_id,
-        "player_o": None,  # собеседник определится при первом ходе
+        "player_o": 0,
         "game_id": game_id
     }
     
@@ -549,35 +547,26 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_x = game["player_x"]
     player_o = game["player_o"]
     
-    # ========== ЖЁСТКИЕ ОГРАНИЧЕНИЯ ХОДОВ ==========
-    if turn == "X":
-        # Ходят только крестики (владелец)
-        if user_id != player_x:
-            await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
-            return
-    else:  # turn == "O"
-        # Если игрок O ещё не определён, запоминаем первого, кто попытался ходить
-        if player_o is None:
-            # Запоминаем собеседника
-            player_o = user_id
-            game["player_o"] = user_id
-            logger.info(f"[TTT] Игрок O определён: {user_id}")
-        # Проверяем, что ходит именно игрок O
-        if user_id != player_o:
-            await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
-            return
+    if turn == "X" and user_id != player_x:
+        await callback.answer("⏳ Сейчас ход крестиков!", show_alert=True)
+        return
+    if turn == "O" and user_id != player_o and player_o != 0:
+        await callback.answer("⏳ Сейчас ход ноликов!", show_alert=True)
+        return
+    if turn == "O" and player_o == 0:
+        player_o = user_id
+        game["player_o"] = user_id
     
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
         return
     
-    # Делаем ход
     board[cell] = turn
     winner = ttt_check_winner(board)
     
     if winner:
         player_x_name = format_user_info(await bot.get_chat(player_x))
-        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o else "Игрок O"
+        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Игрок O"
         
         if winner == "X":
             result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
@@ -594,23 +583,11 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("🏆 Игра завершена!")
         return
     
-    # Меняем ход
     new_turn = "O" if turn == "X" else "X"
     game["turn"] = new_turn
     
-    # Получаем имена игроков для отображения
-    try:
-        player_x_name = format_user_info(await bot.get_chat(player_x))
-    except:
-        player_x_name = "Игрок X"
-    
-    if player_o:
-        try:
-            player_o_name = format_user_info(await bot.get_chat(player_o))
-        except:
-            player_o_name = "Игрок O"
-    else:
-        player_o_name = "Ожидание соперника..."
+    player_x_name = format_user_info(await bot.get_chat(player_x))
+    player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o != 0 else "Ожидание..."
     
     await callback.message.edit_text(
         premium(
