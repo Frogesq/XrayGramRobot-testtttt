@@ -4,9 +4,6 @@ import os
 import json
 import time
 import random
-import re
-import requests
-import urllib3
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -18,9 +15,6 @@ from aiogram.types import (
     BufferedInputFile, FSInputFile
 )
 from database import Database
-
-# Отключение предупреждений об SSL
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
 
@@ -36,15 +30,8 @@ except ValueError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
-BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== GIGACHAT НАСТРОЙКИ ====================
-GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
-GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
-GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
-
-# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -69,12 +56,7 @@ PREMIUM_EMOJI = {
     "2️⃣": "5381990043642502553",
     "3️⃣": "5381879959335738545",
     "4️⃣": "5382054253403577563",
-    "⚔️": "5408935401442267103",
-    "⭕": "5411225014148014586",
-    "🔄": "5264727218734524899",
 }
-
-EMPTY = "ㅤ"
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
@@ -98,176 +80,8 @@ if os.path.exists(INSTRUCTION_IMAGE_PATH):
 else:
     logger.warning("❌ Картинка инструкции НЕ найдена")
 
-if os.path.exists(BANNER_PATH):
-    logger.info("✅ Баннер найден")
-else:
-    logger.warning("❌ Баннер НЕ найден (файл banner.png отсутствует)")
-
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
-
-# ==================== GIGACHAT (РАБОЧАЯ ВЕРСИЯ) ====================
-class GigaChatAPI:
-    """Класс для работы с GigaChat API"""
-    
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self._access_token = None
-        self._token_expires = 0
-        self._session = requests.Session()
-        self._session.verify = False
-        self._session.timeout = 60
-        
-    def _get_access_token(self) -> str | None:
-        """Получение токена доступа"""
-        if self._access_token and time.time() < self._token_expires:
-            return self._access_token
-            
-        try:
-            headers = {
-                "Authorization": f"Basic {self.api_key}",
-                "Content-Type": "application/x-www-form-urlencoded",
-                "RqUID": "6f0b1291-c7f3-4c6a-a5e7-8a6b5d3e2f1a",
-                "Accept": "application/json"
-            }
-            
-            response = self._session.post(
-                GIGACHAT_AUTH_URL,
-                headers=headers,
-                data={"scope": "GIGACHAT_API_PERS"},
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                token = data.get("access_token")
-                if token:
-                    self._access_token = token
-                    self._token_expires = time.time() + 1500
-                    logger.info("✅ Токен GigaChat получен")
-                    return token
-            else:
-                logger.error(f"Ошибка получения токена: {response.status_code} - {response.text}")
-                
-        except Exception as e:
-            logger.error(f"Ошибка получения токена: {e}")
-        
-        return None
-    
-    def get_text_response(self, messages: list) -> str:
-        """Получение ответа от GigaChat"""
-        token = self._get_access_token()
-        if not token:
-            return "🔧 Сервис временно недоступен. Пожалуйста, попробуйте позже."
-        
-        try:
-            headers = {
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json"
-            }
-            
-            system_message = {
-                "role": "system",
-                "content": "Ты - полезный и вежливый ассистент. Отвечай на русском языке подробно и понятно."
-            }
-            
-            data = {
-                "model": "GigaChat",
-                "messages": [system_message] + messages,
-                "temperature": 0.7,
-                "max_tokens": 2000
-            }
-            
-            response = self._session.post(
-                GIGACHAT_API_URL,
-                headers=headers,
-                json=data,
-                timeout=60
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if "choices" in result and len(result["choices"]) > 0:
-                    text = result["choices"][0]["message"]["content"]
-                    text = re.sub(r'[`*_\[\]()]', '', text)
-                    text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t').strip()
-                    if text:
-                        return self._format_response(text)
-            
-            return "⚠️ Не удалось получить ответ. Попробуйте переформулировать вопрос."
-            
-        except Exception as e:
-            logger.error(f"Ошибка GigaChat API: {e}")
-            return "❌ Ошибка при обработке запроса. Пожалуйста, попробуйте позже."
-    
-    def _format_response(self, text: str) -> str:
-        """Форматирование ответа"""
-        formatted = "🤖 <b>Ответ:</b>\n\n"
-        
-        paragraphs = text.split('\n\n')
-        for paragraph in paragraphs:
-            if paragraph.strip():
-                formatted += paragraph.strip() + "\n\n"
-        
-        formatted += "─\nБот - @XrayGramRobot"
-        return formatted
-
-# Инициализация GigaChat
-giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
-
-# ==================== TTT ====================
-ttt_games = {}
-
-def ttt_board_to_text(board):
-    result = ""
-    for i in range(0, 9, 3):
-        for j in range(3):
-            cell = board[i+j]
-            if cell == "X":
-                result += "❌"
-            elif cell == "O":
-                result += "⭕"
-            else:
-                result += EMPTY
-        result += "\n"
-    return result.strip()
-
-def ttt_check_winner(board):
-    win = [
-        [0,1,2], [3,4,5], [6,7,8],
-        [0,3,6], [1,4,7], [2,5,8],
-        [0,4,8], [2,4,6]
-    ]
-    for combo in win:
-        if board[combo[0]] == board[combo[1]] == board[combo[2]] and board[combo[0]] != " ":
-            return board[combo[0]]
-    if " " not in board:
-        return "draw"
-    return None
-
-def ttt_keyboard(board, game_id):
-    kb = []
-    for i in range(0, 9, 3):
-        row = []
-        for j in range(3):
-            cell = i + j
-            if board[cell] == " ":
-                row.append(InlineKeyboardButton(
-                    text=EMPTY,
-                    callback_data=f"ttt_{game_id}_{cell}"
-                ))
-            else:
-                row.append(InlineKeyboardButton(
-                    text="❌" if board[cell] == "X" else "⭕",
-                    callback_data="ttt_no"
-                ))
-        kb.append(row)
-    kb.append([InlineKeyboardButton(
-        text="🔴 Завершить",
-        callback_data=f"ttt_end_{game_id}",
-        style="danger"
-    )])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
 
 # ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
@@ -533,24 +347,14 @@ async def start_command(message: types.Message):
 
     is_admin = (user_id == ADMIN_ID)
     main_text = premium(
-        "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
-        "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
-        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+        "<b>👋 Добро пожаловать в XrayGram!\n\n"
+        "🤖 Что умеет бот:\n"
+        "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "• Сохраняет самоуничтожающиеся медиа.\n\n"
+        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
-    
-    if os.path.exists(BANNER_PATH):
-        banner = FSInputFile(BANNER_PATH)
-        await message.answer_photo(
-            photo=banner,
-            caption=main_text,
-            parse_mode="HTML",
-            reply_markup=main_menu_keyboard(is_admin)
-        )
-    else:
-        await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
+    await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
@@ -564,53 +368,6 @@ async def cmd_anim(message: types.Message):
         return
     await animate_text(message.chat.id, text, message)
 
-@dp.message(Command("ttt"))
-async def cmd_ttt(message: types.Message):
-    await start_ttt(message)
-
-@dp.message(Command("gn"))
-async def cmd_gn(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    bc_id = message.business_connection_id
-    
-    question = message.text.replace("/gn", "").strip()
-    if not question:
-        await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
-        return
-    
-    loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-    
-    try:
-        messages = [{"role": "user", "content": question}]
-        answer = giga_chat.get_text_response(messages)
-        
-        await loading_msg.delete()
-        
-        # Отправляем ответ ТОЛЬКО в чат, где была команда
-        if bc_id:
-            # Бизнес-чат
-            await bot.send_message(
-                chat_id,
-                premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                parse_mode="HTML",
-                business_connection_id=bc_id
-            )
-        else:
-            # Обычный чат
-            await bot.send_message(
-                chat_id,
-                premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                parse_mode="HTML"
-            )
-    except Exception as e:
-        await loading_msg.delete()
-        await bot.send_message(
-            chat_id,
-            premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
-            parse_mode="HTML"
-        )
-
 # ==================== ФУНКЦИИ ДЛЯ ИГР ====================
 
 async def start_duel(message: types.Message):
@@ -621,7 +378,7 @@ async def start_duel(message: types.Message):
         await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
         return
     
-    msg = await message.answer(premium("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!"), parse_mode="HTML")
+    msg = await message.answer("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!", parse_mode="HTML")
     
     stages = [
         "⚔️ 3...",
@@ -633,184 +390,18 @@ async def start_duel(message: types.Message):
     
     for stage in stages:
         await asyncio.sleep(0.7)
-        await msg.edit_text(premium(f"<b>{stage}</b>"), parse_mode="HTML")
+        await msg.edit_text(f"<b>{stage}</b>", parse_mode="HTML")
     
     await asyncio.sleep(0.5)
     
-    winner = random.choice([user_id, chat_id])
+    winner = random.choice([user_id, "собеседник"])
     
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
     else:
         result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
     
-    await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
-
-# ==================== TTT ====================
-
-async def start_ttt(message: types.Message):
-    user_id = message.from_user.id
-    chat_id = message.chat.id
-    
-    if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
-        return
-    
-    if chat_id in ttt_games:
-        await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
-        return
-    
-    board = [" "] * 9
-    game_id = int(time.time())
-    ttt_games[chat_id] = {
-        "board": board,
-        "turn": "X",
-        "player_x": user_id,
-        "player_o": 0,
-        "game_id": game_id
-    }
-    
-    player_x_name = format_user_info(message.from_user)
-    
-    await message.answer(
-        premium(
-            f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-            f"Ход: <b>❌ ({player_x_name})</b>\n"
-            f"{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}"
-        ),
-        parse_mode="HTML",
-        reply_markup=ttt_keyboard(board, game_id)
-    )
-
-@dp.callback_query(lambda c: c.data.startswith("ttt_"))
-async def ttt_callback(callback: types.CallbackQuery):
-    data = callback.data
-    user_id = callback.from_user.id
-    chat_id = callback.message.chat.id
-    
-    if data == "ttt_no":
-        await callback.answer("⏳ Занято!")
-        return
-    
-    if data.startswith("ttt_end_"):
-        game_id = int(data.replace("ttt_end_", ""))
-        if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
-            del ttt_games[chat_id]
-        await callback.message.delete()
-        await callback.answer("🔴 Игра завершена!")
-        return
-    
-    parts = data.split("_")
-    if len(parts) != 3:
-        await callback.answer("❌ Ошибка!")
-        return
-    
-    try:
-        game_id = int(parts[1])
-        cell = int(parts[2])
-    except:
-        await callback.answer("❌ Ошибка!")
-        return
-    
-    if chat_id not in ttt_games:
-        await callback.answer("❌ Игра не найдена!")
-        return
-    
-    game = ttt_games[chat_id]
-    
-    if game["game_id"] != game_id:
-        await callback.answer("❌ Игра не найдена!")
-        return
-    
-    board = game["board"]
-    turn = game["turn"]
-    player_x = game["player_x"]
-    player_o = game["player_o"]
-    
-    # ==========================================
-    # ========== ПРОВЕРКА РОЛЕЙ ================
-    # ==========================================
-    
-    if turn == "X":
-        if user_id != player_x:
-            await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
-            return
-    else:
-        if player_o == 0:
-            player_o = user_id
-            game["player_o"] = user_id
-            logger.info(f"[TTT] Игрок O определён: {user_id}")
-            ttt_games[chat_id] = game
-        
-        if user_id != game["player_o"]:
-            await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
-            return
-    
-    if board[cell] != " ":
-        await callback.answer("⏳ Занято!")
-        return
-    
-    board[cell] = turn
-    winner = ttt_check_winner(board)
-    
-    if winner:
-        try:
-            player_x_name = format_user_info(await bot.get_chat(player_x))
-        except:
-            player_x_name = "Игрок X"
-        
-        if player_o:
-            try:
-                player_o_name = format_user_info(await bot.get_chat(player_o))
-            except:
-                player_o_name = "Игрок O"
-        else:
-            player_o_name = "Игрок O"
-        
-        if winner == "X":
-            result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
-        elif winner == "O":
-            result_text = f"🏆 <b>Победили НОЛИКИ! ({player_o_name})</b>"
-        else:
-            result_text = "🤝 <b>Ничья!</b>"
-        
-        await callback.message.edit_text(
-            premium(f"{ttt_board_to_text(board)}\n\n{result_text}"),
-            parse_mode="HTML"
-        )
-        del ttt_games[chat_id]
-        await callback.answer("🏆 Игра завершена!")
-        return
-    
-    game["turn"] = "O" if turn == "X" else "X"
-    
-    try:
-        player_x_name = format_user_info(await bot.get_chat(player_x))
-    except:
-        player_x_name = "Игрок X"
-    
-    if player_o:
-        try:
-            player_o_name = format_user_info(await bot.get_chat(player_o))
-        except:
-            player_o_name = "Игрок O"
-    else:
-        player_o_name = "Ожидание соперника..."
-    
-    new_turn = game["turn"]
-    turn_symbol = "❌" if new_turn == "X" else "⭕"
-    turn_player = player_x_name if new_turn == "X" else player_o_name
-    
-    await callback.message.edit_text(
-        premium(
-            f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-            f"Ход: <b>{turn_symbol} ({turn_player})</b>\n"
-            f"{ttt_board_to_text(board)}"
-        ),
-        parse_mode="HTML",
-        reply_markup=ttt_keyboard(board, game_id)
-    )
-    await callback.answer()
+    await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
 
 # ==================== ОСТАЛЬНЫЕ CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
@@ -826,12 +417,12 @@ async def check_subscription(callback: types.CallbackQuery):
         else:
             is_admin = (user_id == ADMIN_ID)
             main_text = premium(
-                "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
-                "<b>🤖 Что умеет бот:</b>\n"
-                "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-                "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-                "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
-                "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+                "<b>👋 Добро пожаловать в XrayGram!\n\n"
+                "🤖 Что умеет бот:\n"
+                "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+                "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
+                "• Сохраняет самоуничтожающиеся медиа.\n\n"
+                "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
             )
             await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
         await callback.answer("✅ Подписка подтверждена!", show_alert=True)
@@ -889,24 +480,20 @@ async def show_instruction(callback: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
-        "<b>📋 Список доступных команд</b>\n\n"
-        "<b>Эти команды работают в личных чатах, где активен бизнес-режим.</b>\n\n"
-        "<blockquote>🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
+        "<b>📋 Список доступных команд\n\n"
+        "Эти команды работают в личных чатах, где активен бизнес-режим.\n\n"
+        "🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
         "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
         "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
-        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
-        "🤖 .gn &lt;вопрос&gt; – задать вопрос Gigachat (ИИ-ассистент).</blockquote>\n\n"
-        "<b>Примеры:</b>\n"
-        "<blockquote>.mute\n"
+        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n\n"
+        "Примеры:\n"
+        ".mute\n"
         ".unmute\n"
         ".spam 5 Привет!\n"
         ".duel\n"
-        ".anim Привет мир!\n"
-        ".ttt\n"
-        ".gn Как дела?</blockquote>\n\n"
-        "❓ Остались вопросы? Пишите @CryptoViktor."
+        ".anim Привет мир!\n\n"
+        "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
@@ -916,12 +503,12 @@ async def back_to_main(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     is_admin = (user_id == ADMIN_ID)
     main_text = premium(
-        "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
-        "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
-        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+        "<b>👋 Добро пожаловать в XrayGram!\n\n"
+        "🤖 Что умеет бот:\n"
+        "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "• Сохраняет самоуничтожающиеся медиа.\n\n"
+        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
     await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
     await callback.answer()
@@ -1137,7 +724,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== КОМАНДЫ ТОЛЬКО ДЛЯ ВЛАДЕЛЬЦА ==========
+    # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
@@ -1154,13 +741,13 @@ async def handle_business_message(message: types.Message):
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
                 chat_id,
-                premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>"),
                 business_connection_id=bc_id,
                 parse_mode="HTML"
             )
             await bot.send_message(
                 user_id,
-                premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
                 parse_mode="HTML"
             )
             logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
@@ -1218,51 +805,6 @@ async def handle_business_message(message: types.Message):
             await animate_text(chat_id, anim_text, message)
             return
 
-        if text == ".ttt":
-            await start_ttt(message)
-            return
-
-        if text.startswith(".gn "):
-            question = text.replace(".gn", "").strip()
-            if not question:
-                await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
-                return
-            
-            loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-            
-            try:
-                messages = [{"role": "user", "content": question}]
-                answer = giga_chat.get_text_response(messages)
-                
-                await loading_msg.delete()
-                
-                # Отправляем ответ ТОЛЬКО владельцу в ЛС, чтобы избежать дублей
-                await bot.send_message(
-                    user_id,  # Отправляем в ЛС владельцу
-                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                    parse_mode="HTML"
-                )
-                # Также отправляем в чат, если нужно
-                await bot.send_message(
-                    chat_id,
-                    premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
-                    parse_mode="HTML",
-                    business_connection_id=bc_id
-                )
-            except Exception as e:
-                await loading_msg.delete()
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
-                    parse_mode="HTML"
-                )
-            return
-
-        return
-
-    # ========== ИГНОРИРУЕМ КОМАНДЫ ОТ ДРУГИХ ПОЛЬЗОВАТЕЛЕЙ ==========
-    if message.text and message.text.startswith('.'):
-        logger.info(f"[CMD] Игнорируем команду от {sender_id} (не владелец)")
         return
 
     # ========== МУТ ==========
