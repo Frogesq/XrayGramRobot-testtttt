@@ -32,7 +32,6 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -89,7 +88,7 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== TTT (новая реализация) ====================
+# ==================== TTT (полностью переписан) ====================
 ttt_games = {}
 
 def ttt_board_to_text(board):
@@ -470,8 +469,6 @@ async def start_duel(message: types.Message):
     
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
 
-# ==================== TTT НОВАЯ РЕАЛИЗАЦИЯ ====================
-
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
@@ -490,7 +487,7 @@ async def start_ttt(message: types.Message):
         "board": board,
         "turn": "X",
         "player_x": user_id,
-        "player_o": 0,  # 0 = ещё не определён
+        "player_o": None,  # собеседник определится при первом ходе
         "game_id": game_id
     }
     
@@ -506,18 +503,17 @@ async def start_ttt(message: types.Message):
         reply_markup=ttt_keyboard(board, game_id)
     )
 
+# ==================== TTT CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("ttt_"))
 async def ttt_callback(callback: types.CallbackQuery):
     data = callback.data
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
     
-    # Если кнопка уже занята
     if data == "ttt_no":
         await callback.answer("⏳ Занято!")
         return
     
-    # Завершение игры
     if data.startswith("ttt_end_"):
         game_id = int(data.replace("ttt_end_", ""))
         if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
@@ -526,7 +522,6 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("🔴 Игра завершена!")
         return
     
-    # Разбор callback_data
     parts = data.split("_")
     if len(parts) != 3:
         await callback.answer("❌ Ошибка!")
@@ -539,14 +534,12 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("❌ Ошибка!")
         return
     
-    # Проверка наличия игры
     if chat_id not in ttt_games:
         await callback.answer("❌ Игра не найдена!")
         return
     
     game = ttt_games[chat_id]
     
-    # Проверка game_id
     if game["game_id"] != game_id:
         await callback.answer("❌ Игра не найдена!")
         return
@@ -556,19 +549,16 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_x = game["player_x"]
     player_o = game["player_o"]
     
-    # ========================================
-    # ========== ОСНОВНАЯ ЛОГИКА ============
-    # ========================================
-    
-    # 1. Проверяем, кто ходит
+    # ========== ЖЁСТКИЕ ОГРАНИЧЕНИЯ ХОДОВ ==========
     if turn == "X":
         # Ходят только крестики (владелец)
         if user_id != player_x:
             await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
             return
     else:  # turn == "O"
-        # Если игрок O ещё не определён, запоминаем
-        if player_o == 0:
+        # Если игрок O ещё не определён, запоминаем первого, кто попытался ходить
+        if player_o is None:
+            # Запоминаем собеседника
             player_o = user_id
             game["player_o"] = user_id
             logger.info(f"[TTT] Игрок O определён: {user_id}")
@@ -577,30 +567,17 @@ async def ttt_callback(callback: types.CallbackQuery):
             await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
             return
     
-    # 2. Проверяем, свободна ли клетка
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
         return
     
-    # 3. Делаем ход
+    # Делаем ход
     board[cell] = turn
-    
-    # 4. Проверяем победу
     winner = ttt_check_winner(board)
     
     if winner:
-        try:
-            player_x_name = format_user_info(await bot.get_chat(player_x))
-        except:
-            player_x_name = "Игрок X"
-        
-        if player_o:
-            try:
-                player_o_name = format_user_info(await bot.get_chat(player_o))
-            except:
-                player_o_name = "Игрок O"
-        else:
-            player_o_name = "Игрок O"
+        player_x_name = format_user_info(await bot.get_chat(player_x))
+        player_o_name = format_user_info(await bot.get_chat(player_o)) if player_o else "Игрок O"
         
         if winner == "X":
             result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
@@ -617,10 +594,11 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.answer("🏆 Игра завершена!")
         return
     
-    # 5. Меняем ход
-    game["turn"] = "O" if turn == "X" else "X"
+    # Меняем ход
+    new_turn = "O" if turn == "X" else "X"
+    game["turn"] = new_turn
     
-    # 6. Обновляем сообщение
+    # Получаем имена игроков для отображения
     try:
         player_x_name = format_user_info(await bot.get_chat(player_x))
     except:
@@ -634,14 +612,10 @@ async def ttt_callback(callback: types.CallbackQuery):
     else:
         player_o_name = "Ожидание соперника..."
     
-    new_turn = game["turn"]
-    turn_symbol = "❌" if new_turn == "X" else "⭕"
-    turn_player = player_x_name if new_turn == "X" else player_o_name
-    
     await callback.message.edit_text(
         premium(
             f"<b>❌⭕ Крестики-Нолики</b>\n\n"
-            f"Ход: <b>{turn_symbol} ({turn_player})</b>\n"
+            f"Ход: <b>{'❌' if new_turn == 'X' else '⭕'} ({player_x_name if new_turn == 'X' else player_o_name})</b>\n"
             f"{ttt_board_to_text(board)}"
         ),
         parse_mode="HTML",
