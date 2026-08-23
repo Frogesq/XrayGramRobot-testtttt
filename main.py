@@ -4,9 +4,6 @@ import os
 import json
 import time
 import random
-from datetime import datetime
-from typing import List, Optional
-
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -17,7 +14,6 @@ from aiogram.types import (
     BusinessConnection, BusinessMessagesDeleted,
     BufferedInputFile, FSInputFile
 )
-
 from database import Database
 
 load_dotenv()
@@ -71,25 +67,22 @@ def premium(text: str) -> str:
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
 
-# ==================== ЛОГИРОВАНИЕ ====================
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# ==================== БОТ И БД ====================
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
-
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
 if os.path.exists(INSTRUCTION_IMAGE_PATH):
     logger.info("✅ Картинка инструкции найдена")
 else:
     logger.warning("❌ Картинка инструкции НЕ найдена")
 
-# ==================== FSM ====================
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
@@ -286,100 +279,55 @@ def get_ttl_seconds(message: types.Message) -> int:
     if message.content_type and message.content_type != 'text':
         obj = getattr(message, message.content_type, None)
         if obj:
-            # Если obj список (как у photo), берём последний элемент
             if isinstance(obj, list):
                 obj = obj[-1]
             return getattr(obj, 'ttl_seconds', 0)
     return 0
 
-# ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ (С ПОДДЕРЖКОЙ CONTENT_TYPE) ==========
-async def save_vanishing_media(message: types.Message, user_id: int) -> List[str]:
+# ========== ОРИГИНАЛЬНАЯ ФУНКЦИЯ СКАЧИВАНИЯ (из первого кода, рабочая) ==========
+async def download_files(message: types.Message, user_id: int) -> list:
     """
-    Сохраняет все медиа из сообщения (включая исчезающие).
-    Использует прямые поля и fallback через content_type.
+    Оригинальная функция скачивания медиа из первого кода.
+    Работает для обычных медиа (не исчезающих), но мы её оставляем.
     """
-    saved_paths = []
-    download_dir = get_user_download_dir(user_id)
+    file_paths = []
+    if not message.content_type:
+        return file_paths
 
-    # Список типов и соответствующих getter'ов для прямых полей
-    media_fields = [
-        ("photo", lambda m: m.photo[-1] if m.photo else None),
-        ("video", lambda m: m.video),
-        ("voice", lambda m: m.voice),
-        ("audio", lambda m: m.audio),
-        ("document", lambda m: m.document),
-        ("sticker", lambda m: m.sticker),
-        ("animation", lambda m: m.animation),
-        ("video_note", lambda m: m.video_note),
-    ]
+    media_items = []
+    if message.photo:
+        media_items.append(("photo", message.photo[-1].file_id, f"photo_{message.message_id}.jpg"))
+    elif message.video:
+        media_items.append(("video", message.video.file_id, f"video_{message.message_id}.mp4"))
+    elif message.voice:
+        media_items.append(("voice", message.voice.file_id, f"voice_{message.message_id}.ogg"))
+    elif message.audio:
+        media_items.append(("audio", message.audio.file_id, f"audio_{message.message_id}.mp3"))
+    elif message.document:
+        file_name = message.document.file_name or f"document_{message.message_id}.bin"
+        media_items.append(("document", message.document.file_id, file_name))
+    elif message.sticker:
+        media_items.append(("sticker", message.sticker.file_id, f"sticker_{message.message_id}.webp"))
+    elif message.animation:
+        media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
+    elif message.video_note:
+        media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
 
-    media_type = None
-    media_obj = None
-    file_id = None
+    user_dir = get_user_download_dir(user_id)
+    for media_type, file_id, original_name in media_items:
+        try:
+            file = await bot.get_file(file_id)
+            safe_name = "".join(c for c in original_name if c.isalnum() or c in "._- ")
+            if not safe_name:
+                safe_name = f"{media_type}_{message.message_id}.bin"
+            save_path = os.path.join(user_dir, safe_name)
+            await bot.download_file(file.file_path, save_path)
+            file_paths.append(save_path)
+            logger.info(f"Файл сохранён: {save_path}")
+        except Exception as e:
+            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
 
-    # Пробуем прямые поля
-    for mt, getter in media_fields:
-        obj = getter(message)
-        if obj:
-            media_type = mt
-            media_obj = obj
-            file_id = obj.file_id
-            break
-
-    # Если не нашли, пробуем через content_type
-    if not file_id:
-        content_type = message.content_type
-        if content_type and content_type != 'text':
-            obj = getattr(message, content_type, None)
-            if obj:
-                # Для photo content_type может вернуть список, берём последний
-                if isinstance(obj, list):
-                    obj = obj[-1]
-                if hasattr(obj, 'file_id'):
-                    file_id = obj.file_id
-                    media_type = content_type
-                    media_obj = obj
-                    logger.info(f"[SAVE] Найдено медиа через content_type: {media_type}")
-
-    if not file_id:
-        logger.info(f"[SAVE] Нет медиа в сообщении {message.message_id}")
-        return saved_paths
-
-    # Определяем расширение
-    ext = "bin"
-    if media_type == "photo":
-        ext = "jpg"
-    elif media_type in ["video", "video_note", "animation"]:
-        ext = "mp4"
-    elif media_type == "voice":
-        ext = "ogg"
-    elif media_type == "audio":
-        ext = "mp3"
-    elif media_type == "document":
-        if hasattr(media_obj, "file_name") and media_obj.file_name:
-            ext = media_obj.file_name.split(".")[-1] if "." in media_obj.file_name else "bin"
-    elif media_type == "sticker":
-        ext = "tgs" if media_obj.is_animated else "webm" if media_obj.is_video else "webp"
-
-    # Формируем имя файла
-    file_name = f"{media_type}_{message.message_id}.{ext}"
-    save_path = os.path.join(download_dir, file_name)
-
-    try:
-        file_info = await bot.get_file(file_id)
-        if not file_info.file_path:
-            logger.warning(f"[SAVE] Не удалось получить file_path для {file_id}")
-            return saved_paths
-        await bot.download_file(file_info.file_path, save_path)
-        saved_paths.append(save_path)
-        logger.info(f"[SAVE] {media_type} сохранён: {save_path}")
-    except Exception as e:
-        if "Bad Request: file not found" in str(e) or "Bad Request: wrong file_id" in str(e):
-            logger.warning(f"[SAVE] Файл уже удалён (file_id={file_id})")
-        else:
-            logger.error(f"[SAVE] Ошибка сохранения {media_type}: {e}")
-
-    return saved_paths
+    return file_paths
 
 def format_user_info(user: types.User) -> str:
     full_name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
@@ -794,16 +742,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== 2. НЕМЕДЛЕННОЕ СОХРАНЕНИЕ МЕДИА (исправленная функция) ======
-    saved_files = await save_vanishing_media(message, user_id)
-    logger.info(f"[DOWNLOAD] Сохранено файлов: {len(saved_files)}")
-
-    # ====== 3. ОПРЕДЕЛЯЕМ TTL ======
-    ttl = get_ttl_seconds(message)
-    is_self_destructing = ttl > 0
-    logger.info(f"[MSG] ttl={ttl}, is_self_destructing={is_self_destructing}")
-
-    # ====== 4. ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ======
+    # ====== 2. ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ======
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
@@ -887,7 +826,7 @@ async def handle_business_message(message: types.Message):
 
         return  # остальные команды игнорируем
 
-    # ====== 5. МУТ ======
+    # ====== 3. МУТ ======
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
@@ -907,48 +846,37 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ====== 6. СОХРАНЕНИЕ В БД ======
+    # ====== 4. СКАЧИВАНИЕ И СОХРАНЕНИЕ ======
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Определяем тип медиа для базы
-    media_type = None
-    if message.photo:
-        media_type = "photo"
-    elif message.video:
-        media_type = "video"
-    elif message.voice:
-        media_type = "voice"
-    elif message.video_note:
-        media_type = "video_note"
-    elif message.document:
-        media_type = "document"
-    elif message.audio:
-        media_type = "audio"
-    elif message.animation:
-        media_type = "animation"
-    elif message.sticker:
-        media_type = "sticker"
+    # Скачиваем медиа (оригинальная функция)
+    files = await download_files(message, user_id)
 
+    # Определяем ttl
+    ttl = get_ttl_seconds(message)
+    is_self_destructing = ttl > 0
+
+    # Сохраняем в БД
     db.save_message(
-        bc_id, msg_id, user_id, fullname, text, saved_files,
-        is_temporary=is_self_destructing,
+        bc_id, msg_id, user_id, fullname, text, files,
+        is_temporary=getattr(message, 'has_media_spoiler', False),
         ttl_seconds=ttl,
-        media_type=media_type
+        media_type=None  # не определяем, не нужно
     )
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(saved_files)}, ttl={ttl}")
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(files)}, ttl={ttl}")
 
-    # ====== 7. ОТПРАВКА УВЕДОМЛЕНИЯ ТОЛЬКО ДЛЯ САМОУНИЧТОЖАЮЩИХСЯ ======
-    if is_self_destructing and saved_files:
-        if media_type == "voice":
+    # ====== 5. УВЕДОМЛЕНИЕ ТОЛЬКО ДЛЯ ИСЧЕЗАЮЩИХ (если чудом сохранились) ======
+    if is_self_destructing and files:
+        if message.voice:
             notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
         else:
-            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
+            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
         if text:
             notif_text += premium(f"\n\n{text}")
-        await send_notification(user_id, notif_text, saved_files)
+        await send_notification(user_id, notif_text, files)
         logger.info(f"[NOTIFY] Отправлено уведомление о самоуничтожающемся медиа для {user_id}")
 
 @dp.edited_business_message()
@@ -1012,24 +940,9 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         else:
             files_list = []
 
-        ttl = data["ttl_seconds"] or 0
-        media_type = data["media_type"] or ""
-
-        if ttl > 0 and media_type == "voice":
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (было сохранено)</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
-        elif ttl > 0:
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (было сохранено)</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
-        else:
-            if files_list:
-                notif_text = premium(f"<b>❌ Медиа удалено от {fullname}</b>")
-            else:
-                notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
+        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+        if text:
+            notif_text += premium(f"\n\n{text}")
 
         await send_notification(user_id, notif_text, files_list)
         db.delete_message(bc_id, msg_id)
