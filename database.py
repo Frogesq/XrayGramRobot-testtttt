@@ -39,6 +39,8 @@ class Database:
                 text TEXT,
                 files TEXT,
                 is_temporary BOOLEAN DEFAULT 0,
+                ttl_seconds INTEGER DEFAULT 0,
+                media_type TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (bc_id, msg_id)
             )
@@ -71,6 +73,7 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at)")
         
         self.conn.commit()
 
@@ -117,13 +120,13 @@ class Database:
         return cursor.fetchall()
 
     # ==================== РАБОТА С СООБЩЕНИЯМИ ====================
-    def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False):
+    def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False, ttl_seconds=0, media_type=None):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
         cursor.execute("""
-            INSERT OR REPLACE INTO messages (bc_id, msg_id, user_id, fullname, text, files, is_temporary)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (bc_id, msg_id, user_id, fullname, text, files_json, is_temporary))
+            INSERT OR REPLACE INTO messages (bc_id, msg_id, user_id, fullname, text, files, is_temporary, ttl_seconds, media_type)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (bc_id, msg_id, user_id, fullname, text, files_json, is_temporary, ttl_seconds, media_type))
         self.conn.commit()
 
     def update_message_text(self, bc_id, msg_id, new_text):
@@ -147,6 +150,22 @@ class Database:
 
     def delete_message(self, bc_id, msg_id):
         cursor = self.conn.cursor()
+        # Получаем пути к файлам перед удалением
+        cursor.execute("SELECT files FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
+        row = cursor.fetchone()
+        if row and row["files"]:
+            try:
+                files_list = json.loads(row["files"])
+                for file_path in files_list:
+                    try:
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            logger.info(f"[DELETE] Удалён файл: {file_path}")
+                    except Exception as e:
+                        logger.error(f"[DELETE] Ошибка удаления файла {file_path}: {e}")
+            except:
+                pass
+        
         cursor.execute("DELETE FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
         self.conn.commit()
 
@@ -159,6 +178,35 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
         return cursor.fetchall()
+
+    def delete_old_messages(self, days=30):
+        """Удаляет сообщения старше указанного количества дней"""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT bc_id, msg_id, files FROM messages 
+            WHERE created_at < datetime('now', '-' || ? || ' days')
+        """, (days,))
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            if row["files"]:
+                try:
+                    files_list = json.loads(row["files"])
+                    for file_path in files_list:
+                        try:
+                            if os.path.exists(file_path):
+                                os.remove(file_path)
+                        except:
+                            pass
+                except:
+                    pass
+        
+        cursor.execute("""
+            DELETE FROM messages 
+            WHERE created_at < datetime('now', '-' || ? || ' days')
+        """, (days,))
+        self.conn.commit()
+        return len(rows)
 
     # ==================== РАБОТА С MUTE ====================
     def add_muted_chat(self, user_id: int, chat_id: int):
