@@ -171,14 +171,41 @@ def get_user_download_dir(user_id: int) -> str:
     return user_dir
 
 def get_ttl_seconds(message: types.Message) -> int:
-    """Извлекает ttl_seconds из любого медиа-объекта"""
+    """
+    Извлекает ttl_seconds из любого медиа-объекта.
+    Использует прямой доступ к полям и fallback через content_type.
+    """
+    # Прямые поля
     for obj in [message.photo, message.video, message.voice, message.video_note,
                 message.document, message.audio, message.animation]:
         if obj:
-            return getattr(obj, 'ttl_seconds', 0)
+            ttl = getattr(obj, 'ttl_seconds', 0)
+            if ttl:
+                return ttl
+    # Если не нашли, пробуем через content_type (для бизнес-сообщений)
+    if message.content_type:
+        # Получаем объект медиа по типу
+        media_obj = None
+        if message.content_type == 'photo':
+            media_obj = message.photo[-1] if message.photo else None
+        elif message.content_type == 'video':
+            media_obj = message.video
+        elif message.content_type == 'voice':
+            media_obj = message.voice
+        elif message.content_type == 'video_note':
+            media_obj = message.video_note
+        elif message.content_type == 'document':
+            media_obj = message.document
+        elif message.content_type == 'audio':
+            media_obj = message.audio
+        elif message.content_type == 'animation':
+            media_obj = message.animation
+        if media_obj:
+            return getattr(media_obj, 'ttl_seconds', 0)
     return 0
 
 def get_media_type(message: types.Message) -> str:
+    """Определяет тип медиа (сначала прямые поля, затем content_type)"""
     if message.photo: return "photo"
     if message.video: return "video"
     if message.voice: return "voice"
@@ -187,23 +214,24 @@ def get_media_type(message: types.Message) -> str:
     if message.audio: return "audio"
     if message.animation: return "animation"
     if message.sticker: return "sticker"
+    # fallback на content_type
+    if message.content_type:
+        return message.content_type
     return None
 
 def has_any_media(message: types.Message) -> bool:
-    return bool(message.photo or message.video or message.voice or
-                message.video_note or message.document or message.audio or
-                message.animation or message.sticker)
+    return bool(get_media_type(message))
 
 async def download_media_files(message: types.Message, user_id: int) -> list:
     """
-    Скачивает все медиа из сообщения, используя прямой доступ к полям.
-    Возвращает список путей к сохранённым файлам.
+    Скачивает все медиа из сообщения.
+    Использует прямые поля и fallback через content_type.
     """
     file_paths = []
     user_dir = get_user_download_dir(user_id)
 
+    # Сначала пробуем прямые поля
     media_items = []
-
     if message.photo:
         photo = message.photo[-1]
         media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
@@ -232,7 +260,39 @@ async def download_media_files(message: types.Message, user_id: int) -> list:
         ext = "tgs" if s.is_animated else "webm" if s.is_video else "webp"
         media_items.append(("sticker", s.file_id, f"sticker_{message.message_id}.{ext}"))
 
+    # Если прямые поля не дали результата, пытаемся через content_type
+    if not media_items and message.content_type:
+        content_type = message.content_type
+        if content_type == 'photo' and message.photo:
+            photo = message.photo[-1]
+            media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
+        elif content_type == 'video' and message.video:
+            v = message.video
+            media_items.append(("video", v.file_id, f"video_{message.message_id}.mp4"))
+        elif content_type == 'voice' and message.voice:
+            v = message.voice
+            media_items.append(("voice", v.file_id, f"voice_{message.message_id}.ogg"))
+        elif content_type == 'video_note' and message.video_note:
+            v = message.video_note
+            media_items.append(("video_note", v.file_id, f"video_note_{message.message_id}.mp4"))
+        elif content_type == 'document' and message.document:
+            d = message.document
+            name = d.file_name or f"document_{message.message_id}.bin"
+            media_items.append(("document", d.file_id, name))
+        elif content_type == 'audio' and message.audio:
+            a = message.audio
+            ext = "m4a" if a.file_name and a.file_name.endswith('.m4a') else "mp3"
+            media_items.append(("audio", a.file_id, f"audio_{message.message_id}.{ext}"))
+        elif content_type == 'animation' and message.animation:
+            a = message.animation
+            media_items.append(("animation", a.file_id, f"animation_{message.message_id}.mp4"))
+        elif content_type == 'sticker' and message.sticker:
+            s = message.sticker
+            ext = "tgs" if s.is_animated else "webm" if s.is_video else "webp"
+            media_items.append(("sticker", s.file_id, f"sticker_{message.message_id}.{ext}"))
+
     if not media_items:
+        logger.warning(f"[DOWNLOAD] Не удалось найти медиа в сообщении {message.message_id}, content_type={message.content_type}")
         return file_paths
 
     for media_type, file_id, original_name in media_items:
@@ -246,7 +306,7 @@ async def download_media_files(message: types.Message, user_id: int) -> list:
             file_paths.append(save_path)
             logger.info(f"[DOWNLOAD] {media_type} сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type}: {e}")
+            logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type} (file_id={file_id}): {e}")
 
     return file_paths
 
@@ -672,12 +732,22 @@ async def handle_business_message(message: types.Message):
     media_type = get_media_type(message)
     has_media = bool(media_type)
 
-    logger.info(f"[MSG] id={msg_id}, ttl={ttl}, type={media_type}, owner={is_owner}")
+    logger.info(f"[MSG] id={msg_id}, ttl={ttl}, type={media_type}, content_type={message.content_type}, owner={is_owner}")
 
     files = []
     if has_media:
         files = await download_media_files(message, user_id)
         logger.info(f"[MSG] Скачано файлов: {len(files)}")
+    else:
+        # Если по какой-то причине has_media False, но мы знаем, что медиа есть, пробуем скачать принудительно
+        # через content_type (это уже сделано в download_media_files, но здесь мы можем попытаться ещё раз)
+        if message.content_type and message.content_type != 'text':
+            files = await download_media_files(message, user_id)
+            if files:
+                # Если файлы скачались, переопределяем тип
+                media_type = message.content_type
+                has_media = True
+                logger.info(f"[MSG] Принудительное скачивание через content_type={media_type}, файлов: {len(files)}")
 
     db.save_message(
         bc_id, msg_id, user_id, fullname, text, files,
