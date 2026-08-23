@@ -286,20 +286,22 @@ def get_ttl_seconds(message: types.Message) -> int:
     if message.content_type and message.content_type != 'text':
         obj = getattr(message, message.content_type, None)
         if obj:
+            # Если obj список (как у photo), берём последний элемент
+            if isinstance(obj, list):
+                obj = obj[-1]
             return getattr(obj, 'ttl_seconds', 0)
     return 0
 
-# ========== ФУНКЦИЯ СОХРАНЕНИЯ МЕДИА (Open Source подход) ==========
+# ========== ИСПРАВЛЕННАЯ ФУНКЦИЯ СОХРАНЕНИЯ (С ПОДДЕРЖКОЙ CONTENT_TYPE) ==========
 async def save_vanishing_media(message: types.Message, user_id: int) -> List[str]:
     """
     Сохраняет все медиа из сообщения (включая исчезающие).
-    Адаптировано из Open Source проекта telegram-message-archiver.
-    Возвращает список путей к сохранённым файлам.
+    Использует прямые поля и fallback через content_type.
     """
     saved_paths = []
     download_dir = get_user_download_dir(user_id)
 
-    # Список всех возможных типов медиа, которые могут быть в сообщении
+    # Список типов и соответствующих getter'ов для прямых полей
     media_fields = [
         ("photo", lambda m: m.photo[-1] if m.photo else None),
         ("video", lambda m: m.video),
@@ -311,49 +313,71 @@ async def save_vanishing_media(message: types.Message, user_id: int) -> List[str
         ("video_note", lambda m: m.video_note),
     ]
 
-    for media_type, getter in media_fields:
-        media_obj = getter(message)
-        if not media_obj:
-            continue
+    media_type = None
+    media_obj = None
+    file_id = None
 
-        # Получаем file_id и расширение
-        file_id = media_obj.file_id
-        ext = "bin"
-        if media_type == "photo":
-            ext = "jpg"
-        elif media_type in ["video", "video_note", "animation"]:
-            ext = "mp4"
-        elif media_type == "voice":
-            ext = "ogg"
-        elif media_type == "audio":
-            ext = "mp3"
-        elif media_type == "document" and hasattr(media_obj, "file_name") and media_obj.file_name:
+    # Пробуем прямые поля
+    for mt, getter in media_fields:
+        obj = getter(message)
+        if obj:
+            media_type = mt
+            media_obj = obj
+            file_id = obj.file_id
+            break
+
+    # Если не нашли, пробуем через content_type
+    if not file_id:
+        content_type = message.content_type
+        if content_type and content_type != 'text':
+            obj = getattr(message, content_type, None)
+            if obj:
+                # Для photo content_type может вернуть список, берём последний
+                if isinstance(obj, list):
+                    obj = obj[-1]
+                if hasattr(obj, 'file_id'):
+                    file_id = obj.file_id
+                    media_type = content_type
+                    media_obj = obj
+                    logger.info(f"[SAVE] Найдено медиа через content_type: {media_type}")
+
+    if not file_id:
+        logger.info(f"[SAVE] Нет медиа в сообщении {message.message_id}")
+        return saved_paths
+
+    # Определяем расширение
+    ext = "bin"
+    if media_type == "photo":
+        ext = "jpg"
+    elif media_type in ["video", "video_note", "animation"]:
+        ext = "mp4"
+    elif media_type == "voice":
+        ext = "ogg"
+    elif media_type == "audio":
+        ext = "mp3"
+    elif media_type == "document":
+        if hasattr(media_obj, "file_name") and media_obj.file_name:
             ext = media_obj.file_name.split(".")[-1] if "." in media_obj.file_name else "bin"
-        elif media_type == "sticker":
-            ext = "tgs" if media_obj.is_animated else "webm" if media_obj.is_video else "webp"
+    elif media_type == "sticker":
+        ext = "tgs" if media_obj.is_animated else "webm" if media_obj.is_video else "webp"
 
-        # Формируем уникальное имя файла
-        file_name = f"{media_type}_{message.message_id}.{ext}"
-        save_path = os.path.join(download_dir, file_name)
+    # Формируем имя файла
+    file_name = f"{media_type}_{message.message_id}.{ext}"
+    save_path = os.path.join(download_dir, file_name)
 
-        try:
-            # 1. Получаем путь к файлу на сервере Telegram
-            file_info = await bot.get_file(file_id)
-            if not file_info.file_path:
-                logger.warning(f"[SAVE] Не удалось получить file_path для {file_id}")
-                continue
-
-            # 2. НЕМЕДЛЕННО скачиваем файл
-            await bot.download_file(file_info.file_path, save_path)
-            saved_paths.append(save_path)
-            logger.info(f"[SAVE] {media_type} сохранён: {save_path}")
-
-        except Exception as e:
-            # Если файл уже удалён — логируем и продолжаем
-            if "Bad Request: file not found" in str(e) or "Bad Request: wrong file_id" in str(e):
-                logger.warning(f"[SAVE] Файл уже удалён (file_id={file_id})")
-            else:
-                logger.error(f"[SAVE] Ошибка сохранения {media_type}: {e}")
+    try:
+        file_info = await bot.get_file(file_id)
+        if not file_info.file_path:
+            logger.warning(f"[SAVE] Не удалось получить file_path для {file_id}")
+            return saved_paths
+        await bot.download_file(file_info.file_path, save_path)
+        saved_paths.append(save_path)
+        logger.info(f"[SAVE] {media_type} сохранён: {save_path}")
+    except Exception as e:
+        if "Bad Request: file not found" in str(e) or "Bad Request: wrong file_id" in str(e):
+            logger.warning(f"[SAVE] Файл уже удалён (file_id={file_id})")
+        else:
+            logger.error(f"[SAVE] Ошибка сохранения {media_type}: {e}")
 
     return saved_paths
 
@@ -770,7 +794,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== 2. НЕМЕДЛЕННОЕ СОХРАНЕНИЕ МЕДИА (Open Source подход) ======
+    # ====== 2. НЕМЕДЛЕННОЕ СОХРАНЕНИЕ МЕДИА (исправленная функция) ======
     saved_files = await save_vanishing_media(message, user_id)
     logger.info(f"[DOWNLOAD] Сохранено файлов: {len(saved_files)}")
 
