@@ -32,6 +32,7 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
+# Обновлённый словарь с премиум-эмодзи (добавлены 🔄 и ⚔️)
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -56,8 +57,8 @@ PREMIUM_EMOJI = {
     "2️⃣": "5381990043642502553",
     "3️⃣": "5381879959335738545",
     "4️⃣": "5382054253403577563",
-    "🔄": "5264727218734524899",
-    "⚔️": "5408935401442267103",
+    "🔄": "5264727218734524899",   # ваш ID для 🔄
+    "⚔️": "5408935401442267103",   # ваш ID для ⚔️
 }
 
 def premium(text: str) -> str:
@@ -85,7 +86,7 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== АНИМАЦИЯ (оригинал) ====================
+# ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
     current_text = ""
@@ -281,32 +282,50 @@ def get_ttl_seconds(message: types.Message) -> int:
             return getattr(obj, 'ttl_seconds', 0)
     return 0
 
-# Оригинальная функция скачивания (работает для бизнес-сообщений)
+# ======== ИСПРАВЛЕННАЯ ФУНКЦИЯ СКАЧИВАНИЯ (без проверки content_type) ========
 async def download_files(message: types.Message, user_id: int) -> list:
+    """
+    Скачивает все медиа из сообщения, проверяя поля напрямую.
+    Не зависит от message.content_type (который может быть None в бизнес-сообщениях).
+    """
     file_paths = []
-    if not message.content_type:
+    user_dir = get_user_download_dir(user_id)
+
+    # Формируем список (тип, file_id, имя)
+    media_items = []
+
+    if message.photo:
+        photo = message.photo[-1]
+        media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
+    if message.video:
+        video = message.video
+        media_items.append(("video", video.file_id, f"video_{message.message_id}.mp4"))
+    if message.voice:
+        voice = message.voice
+        media_items.append(("voice", voice.file_id, f"voice_{message.message_id}.ogg"))
+    if message.audio:
+        audio = message.audio
+        ext = "m4a" if audio.file_name and audio.file_name.endswith('.m4a') else "mp3"
+        media_items.append(("audio", audio.file_id, f"audio_{message.message_id}.{ext}"))
+    if message.document:
+        doc = message.document
+        name = doc.file_name or f"document_{message.message_id}.bin"
+        media_items.append(("document", doc.file_id, name))
+    if message.sticker:
+        sticker = message.sticker
+        ext = "tgs" if sticker.is_animated else "webm" if sticker.is_video else "webp"
+        media_items.append(("sticker", sticker.file_id, f"sticker_{message.message_id}.{ext}"))
+    if message.animation:
+        animation = message.animation
+        media_items.append(("animation", animation.file_id, f"animation_{message.message_id}.mp4"))
+    if message.video_note:
+        vn = message.video_note
+        media_items.append(("video_note", vn.file_id, f"video_note_{message.message_id}.mp4"))
+
+    if not media_items:
+        logger.info(f"[DOWNLOAD] Нет медиа в сообщении {message.message_id}")
         return file_paths
 
-    media_items = []
-    if message.photo:
-        media_items.append(("photo", message.photo[-1].file_id, f"photo_{message.message_id}.jpg"))
-    elif message.video:
-        media_items.append(("video", message.video.file_id, f"video_{message.message_id}.mp4"))
-    elif message.voice:
-        media_items.append(("voice", message.voice.file_id, f"voice_{message.message_id}.ogg"))
-    elif message.audio:
-        media_items.append(("audio", message.audio.file_id, f"audio_{message.message_id}.mp3"))
-    elif message.document:
-        file_name = message.document.file_name or f"document_{message.message_id}.bin"
-        media_items.append(("document", message.document.file_id, file_name))
-    elif message.sticker:
-        media_items.append(("sticker", message.sticker.file_id, f"sticker_{message.message_id}.webp"))
-    elif message.animation:
-        media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
-    elif message.video_note:
-        media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
-
-    user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
         try:
             file = await bot.get_file(file_id)
@@ -316,9 +335,9 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"Файл сохранён: {save_path}")
+            logger.info(f"[DOWNLOAD] {media_type} сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
+            logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type} (file_id={file_id}): {e}")
 
     return file_paths
 
@@ -654,7 +673,7 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await callback.answer()
 
-# ==================== БИЗНЕС-ОБРАБОТЧИКИ (улучшенное сохранение самоуничтожающихся) ====================
+# ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
@@ -735,12 +754,11 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== 2. НЕМЕДЛЕННОЕ СКАЧИВАНИЕ МЕДИА (ЕСЛИ ЕСТЬ) ======
-    # Скачиваем ДО обработки команд и мута, чтобы успеть до исчезновения
+    # ====== 2. НЕМЕДЛЕННОЕ СКАЧИВАНИЕ МЕДИА (до всех проверок) ======
     files_downloaded = await download_files(message, user_id)
     logger.info(f"[DOWNLOAD] Скачано файлов: {len(files_downloaded)}")
 
-    # Определяем ttl (самоуничтожается ли медиа)
+    # Определяем ttl
     ttl = get_ttl_seconds(message)
     is_self_destructing = ttl > 0
     logger.info(f"[MSG] ttl={ttl}, is_self_destructing={is_self_destructing}")
@@ -855,7 +873,7 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Определяем тип медиа (для базы)
+    # Определяем тип медиа для базы
     media_type = None
     if message.photo:
         media_type = "photo"
@@ -876,7 +894,7 @@ async def handle_business_message(message: types.Message):
 
     db.save_message(
         bc_id, msg_id, user_id, fullname, text, files_downloaded,
-        is_temporary=is_self_destructing,  # используем наш флаг
+        is_temporary=is_self_destructing,
         ttl_seconds=ttl,
         media_type=media_type
     )
@@ -892,7 +910,6 @@ async def handle_business_message(message: types.Message):
             notif_text += premium(f"\n\n{text}")
         await send_notification(user_id, notif_text, files_downloaded)
         logger.info(f"[NOTIFY] Отправлено уведомление о самоуничтожающемся медиа для {user_id}")
-    # Если не самоуничтожающееся – уведомление НЕ отправляем (только сохраняем в БД)
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
