@@ -4,6 +4,7 @@ import os
 import json
 import time
 import random
+import shutil
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -15,6 +16,12 @@ from aiogram.types import (
     BufferedInputFile, FSInputFile
 )
 from database import Database
+
+# Импортируем os для использования в database.py
+import os as os_module
+# Делаем os доступным в database.py через глобальную переменную
+import sys
+sys.modules['os'] = os_module
 
 load_dotenv()
 
@@ -195,6 +202,13 @@ def admin_panel_keyboard():
             ],
             [
                 InlineKeyboardButton(
+                    text="🗑️ Очистить старые сообщения (30 дней)",
+                    callback_data="cleanup_old",
+                    style="danger"
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text="⬅️ Назад",
                     callback_data="back_to_main",
                     style="danger"
@@ -258,6 +272,44 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
+def get_ttl_seconds(message: types.Message) -> int:
+    """Извлекает ttl_seconds из сообщения с самоуничтожающимся медиа"""
+    if message.photo:
+        return getattr(message.photo, 'ttl_seconds', 0)
+    elif message.video:
+        return getattr(message.video, 'ttl_seconds', 0)
+    elif message.voice:
+        return getattr(message.voice, 'ttl_seconds', 0)
+    elif message.video_note:
+        return getattr(message.video_note, 'ttl_seconds', 0)
+    elif message.document:
+        return getattr(message.document, 'ttl_seconds', 0)
+    elif message.audio:
+        return getattr(message.audio, 'ttl_seconds', 0)
+    elif message.animation:
+        return getattr(message.animation, 'ttl_seconds', 0)
+    return 0
+
+def get_media_type(message: types.Message) -> str:
+    """Определяет тип медиа в сообщении"""
+    if message.photo:
+        return "photo"
+    elif message.video:
+        return "video"
+    elif message.voice:
+        return "voice"
+    elif message.video_note:
+        return "video_note"
+    elif message.document:
+        return "document"
+    elif message.audio:
+        return "audio"
+    elif message.animation:
+        return "animation"
+    elif message.sticker:
+        return "sticker"
+    return None
+
 async def download_files(message: types.Message, user_id: int) -> list:
     file_paths = []
     if not message.content_type:
@@ -292,9 +344,9 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"Файл сохранён: {save_path}")
+            logger.info(f"[DOWNLOAD] Файл сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
+            logger.error(f"[DOWNLOAD] Ошибка скачивания файла {file_id}: {e}")
 
     return file_paths
 
@@ -304,19 +356,26 @@ def format_user_info(user: types.User) -> str:
 
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
-        if files:
-            await bot.send_document(chat_id, types.FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
+        if files and len(files) > 0:
+            # Отправляем первый файл с подписью
+            await bot.send_document(
+                chat_id, 
+                types.FSInputFile(files[0]), 
+                caption=premium(text), 
+                parse_mode=parse_mode
+            )
+            # Отправляем остальные файлы
             for file_path in files[1:]:
-                await bot.send_document(chat_id, types.FSInputFile(file_path))
-            for file_path in files:
                 try:
-                    os.remove(file_path)
-                except:
-                    pass
+                    await bot.send_document(chat_id, types.FSInputFile(file_path))
+                except Exception as e:
+                    logger.error(f"[NOTIFY] Ошибка отправки файла {file_path}: {e}")
+            # НЕ удаляем файлы сразу, так как они могут понадобиться для истории
+            # Они будут удалены при очистке старых сообщений
         else:
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
-        logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
+        logger.error(f"[NOTIFY] Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -331,7 +390,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             await message.delete()
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
         else:
-            logger.error(f"Ошибка редактирования: {e}")
+            logger.error(f"[EDIT] Ошибка редактирования: {e}")
             try:
                 await message.delete()
             except:
@@ -351,7 +410,7 @@ async def start_command(message: types.Message):
         "🤖 Что умеет бот:\n"
         "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "• Сохраняет самоуничтожающиеся медиа.\n\n"
+        "• Сохраняет самоуничтожающиеся медиа и голосовые сообщения.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
     await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
@@ -421,7 +480,7 @@ async def check_subscription(callback: types.CallbackQuery):
                 "🤖 Что умеет бот:\n"
                 "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
                 "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
-                "• Сохраняет самоуничтожающиеся медиа.\n\n"
+                "• Сохраняет самоуничтожающиеся медиа и голосовые сообщения.\n\n"
                 "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
             )
             await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
@@ -456,7 +515,7 @@ async def show_instruction_logic(user_id: int):
                 reply_markup=instruction_keyboard()
             )
     except Exception as e:
-        logger.error(f"Ошибка отправки инструкции пользователю {user_id}: {e}")
+        logger.error(f"[INST] Ошибка отправки инструкции пользователю {user_id}: {e}")
         await bot.send_message(
             chat_id=user_id,
             text=instruction_text,
@@ -507,7 +566,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "🤖 Что умеет бот:\n"
         "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "• Сохраняет самоуничтожающиеся медиа.\n\n"
+        "• Сохраняет самоуничтожающиеся медиа и голосовые сообщения.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
     await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
@@ -580,7 +639,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
             sent += 1
             await asyncio.sleep(0.05)
         except Exception as e:
-            logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
+            logger.error(f"[BROADCAST] Ошибка отправки пользователю {user_id}: {e}")
             failed += 1
 
     result_text = premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>")
@@ -644,6 +703,20 @@ async def active_connections(callback: types.CallbackQuery):
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await callback.answer()
 
+@dp.callback_query(lambda c: c.data == "cleanup_old")
+async def cleanup_old_messages(callback: types.CallbackQuery):
+    if callback.from_user.id != ADMIN_ID:
+        await callback.answer("⛔ Доступ запрещён.", show_alert=True)
+        return
+    
+    deleted = db.delete_old_messages(30)
+    await callback.message.edit_text(
+        premium(f"<b>🗑️ Очистка завершена!\n\nУдалено старых сообщений: {deleted}\nСвязанные файлы также удалены с диска.</b>"),
+        parse_mode="HTML",
+        reply_markup=back_to_admin_keyboard()
+    )
+    await callback.answer()
+
 # ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
@@ -653,6 +726,8 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
+        # Удаляем связь при отключении
+        db.delete_connection(bc_id)
         return
 
     logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
@@ -668,6 +743,7 @@ async def handle_business_connection(connection: BusinessConnection):
             user_id,
             premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
                     "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
+                    "Я также сохраняю все самоуничтожающиеся медиа и голосовые сообщения!\n\n"
                     "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
             parse_mode="HTML"
         )
@@ -694,7 +770,7 @@ async def handle_business_connection(connection: BusinessConnection):
 async def handle_business_message(message: types.Message):
     bc_id = message.business_connection_id
     if not bc_id:
-        logger.warning("[MUTE] business_connection_id отсутствует")
+        logger.warning("[MESSAGE] business_connection_id отсутствует")
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
@@ -708,10 +784,10 @@ async def handle_business_message(message: types.Message):
 
     if not user_id and message.from_user:
         user_id = message.from_user.id
-        logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
+        logger.warning(f"[MESSAGE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
 
     if not user_id:
-        logger.warning(f"[MUTE] Не удалось определить user_id для bc_id={bc_id}")
+        logger.warning(f"[MESSAGE] Не удалось определить user_id для bc_id={bc_id}")
         return
 
     if not db.is_user_registered(user_id):
@@ -775,8 +851,9 @@ async def handle_business_message(message: types.Message):
                 try:
                     count = int(parts[1])
                     spam_text = parts[2]
-                    if count <= 0:
-                        raise ValueError
+                    if count <= 0 or count > 50:  # Ограничение на 50 сообщений
+                        await bot.send_message(user_id, premium("<b>❌ Количество должно быть от 1 до 50.</b>"), parse_mode="HTML")
+                        return
                 except (ValueError, IndexError):
                     await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                     return
@@ -833,12 +910,39 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
+    # ========== ОПРЕДЕЛЯЕМ САМОУНИЧТОЖАЮЩИЕСЯ МЕДИА ==========
+    ttl = get_ttl_seconds(message)
+    is_self_destructing = ttl > 0
+    media_type = get_media_type(message)
+    
+    # Скачиваем файлы ДО того, как они самоуничтожатся
     files = await download_files(message, user_id)
-    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
+    
+    # Сохраняем сообщение в БД
+    db.save_message(
+        bc_id, 
+        msg_id, 
+        user_id, 
+        fullname, 
+        text, 
+        files, 
+        is_temporary=message.has_media_spoiler, 
+        ttl_seconds=ttl,
+        media_type=media_type
+    )
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, ttl={ttl}, media_type={media_type}")
 
-    if message.has_media_spoiler and files:
-        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
+    # ========== ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ДЛЯ САМОУНИЧТОЖАЮЩИХСЯ МЕДИА ==========
+    if is_self_destructing and files:
+        if media_type == "voice":
+            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
+        else:
+            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
+        await send_notification(user_id, notif_text, files)
+    
+    # Если это просто сообщение со спойлером (но не самоуничтожающееся)
+    elif message.has_media_spoiler and files and not is_self_destructing:
+        notif_text = premium(f"<b>📸 Сообщение со спойлером от {fullname}\n\n{text}</b>") if text else premium(f"<b>📸 Сообщение со спойлером от {fullname}</b>")
         await send_notification(user_id, notif_text, files)
 
 @dp.edited_business_message()
@@ -902,7 +1006,17 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         else:
             files_list = []
 
-        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+        # Определяем, было ли это самоуничтожающееся сообщение
+        ttl = data["ttl_seconds"] or 0
+        media_type = data["media_type"] or ""
+        
+        if ttl > 0 and media_type == "voice":
+            notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (было сохранено)\n\n{text}</b>") if text else premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (было сохранено)</b>")
+        elif ttl > 0:
+            notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (было сохранено)\n\n{text}</b>") if text else premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (было сохранено)</b>")
+        else:
+            notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+        
         await send_notification(user_id, notif_text, files_list)
 
         db.delete_message(bc_id, msg_id)
