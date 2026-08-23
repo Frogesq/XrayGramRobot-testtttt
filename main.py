@@ -5,7 +5,7 @@ import json
 import time
 import random
 from datetime import datetime
-from typing import Optional, Tuple, List
+from typing import List, Optional
 
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -17,7 +17,6 @@ from aiogram.types import (
     BusinessConnection, BusinessMessagesDeleted,
     BufferedInputFile, FSInputFile
 )
-import aiofiles
 
 from database import Database
 
@@ -84,7 +83,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
 
-# Папки для медиа
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 if os.path.exists(INSTRUCTION_IMAGE_PATH):
     logger.info("✅ Картинка инструкции найдена")
@@ -291,75 +289,71 @@ def get_ttl_seconds(message: types.Message) -> int:
             return getattr(obj, 'ttl_seconds', 0)
     return 0
 
-# ========== НОВАЯ ФУНКЦИЯ СОХРАНЕНИЯ МЕДИА (С ИСПОЛЬЗОВАНИЕМ AIOFILES) ==========
+# ========== ФУНКЦИЯ СОХРАНЕНИЯ МЕДИА (Open Source подход) ==========
 async def save_vanishing_media(message: types.Message, user_id: int) -> List[str]:
     """
-    Сохраняет все медиа из сообщения в папку пользователя.
-    Использует aiofiles для асинхронной записи.
+    Сохраняет все медиа из сообщения (включая исчезающие).
+    Адаптировано из Open Source проекта telegram-message-archiver.
     Возвращает список путей к сохранённым файлам.
     """
     saved_paths = []
-    user_dir = get_user_download_dir(user_id)
+    download_dir = get_user_download_dir(user_id)
 
-    # Определяем тип медиа и получаем объект
-    media_items = []
-    if message.photo:
-        photo = message.photo[-1]
-        media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
-    if message.video:
-        video = message.video
-        media_items.append(("video", video.file_id, f"video_{message.message_id}.mp4"))
-    if message.voice:
-        voice = message.voice
-        media_items.append(("voice", voice.file_id, f"voice_{message.message_id}.ogg"))
-    if message.audio:
-        audio = message.audio
-        ext = "m4a" if audio.file_name and audio.file_name.endswith('.m4a') else "mp3"
-        media_items.append(("audio", audio.file_id, f"audio_{message.message_id}.{ext}"))
-    if message.document:
-        doc = message.document
-        name = doc.file_name or f"document_{message.message_id}.bin"
-        media_items.append(("document", doc.file_id, name))
-    if message.sticker:
-        sticker = message.sticker
-        ext = "tgs" if sticker.is_animated else "webm" if sticker.is_video else "webp"
-        media_items.append(("sticker", sticker.file_id, f"sticker_{message.message_id}.{ext}"))
-    if message.animation:
-        animation = message.animation
-        media_items.append(("animation", animation.file_id, f"animation_{message.message_id}.mp4"))
-    if message.video_note:
-        vn = message.video_note
-        media_items.append(("video_note", vn.file_id, f"video_note_{message.message_id}.mp4"))
+    # Список всех возможных типов медиа, которые могут быть в сообщении
+    media_fields = [
+        ("photo", lambda m: m.photo[-1] if m.photo else None),
+        ("video", lambda m: m.video),
+        ("voice", lambda m: m.voice),
+        ("audio", lambda m: m.audio),
+        ("document", lambda m: m.document),
+        ("sticker", lambda m: m.sticker),
+        ("animation", lambda m: m.animation),
+        ("video_note", lambda m: m.video_note),
+    ]
 
-    if not media_items:
-        return saved_paths
+    for media_type, getter in media_fields:
+        media_obj = getter(message)
+        if not media_obj:
+            continue
 
-    for media_type, file_id, original_name in media_items:
+        # Получаем file_id и расширение
+        file_id = media_obj.file_id
+        ext = "bin"
+        if media_type == "photo":
+            ext = "jpg"
+        elif media_type in ["video", "video_note", "animation"]:
+            ext = "mp4"
+        elif media_type == "voice":
+            ext = "ogg"
+        elif media_type == "audio":
+            ext = "mp3"
+        elif media_type == "document" and hasattr(media_obj, "file_name") and media_obj.file_name:
+            ext = media_obj.file_name.split(".")[-1] if "." in media_obj.file_name else "bin"
+        elif media_type == "sticker":
+            ext = "tgs" if media_obj.is_animated else "webm" if media_obj.is_video else "webp"
+
+        # Формируем уникальное имя файла
+        file_name = f"{media_type}_{message.message_id}.{ext}"
+        save_path = os.path.join(download_dir, file_name)
+
         try:
-            # Получаем путь на сервере
-            file_obj = await bot.get_file(file_id)
-            if not file_obj.file_path:
-                logger.error(f"[SAVE] Не удалось получить file_path для {file_id}")
+            # 1. Получаем путь к файлу на сервере Telegram
+            file_info = await bot.get_file(file_id)
+            if not file_info.file_path:
+                logger.warning(f"[SAVE] Не удалось получить file_path для {file_id}")
                 continue
 
-            # Формируем безопасное имя
-            safe_name = "".join(c for c in original_name if c.isalnum() or c in "._-")
-            if not safe_name:
-                safe_name = f"{media_type}_{message.message_id}.bin"
-            save_path = os.path.join(user_dir, safe_name)
-
-            # Скачиваем через aiofiles
-            async with aiofiles.open(save_path, "wb") as out:
-                await bot.download_file(file_obj.file_path, out)
-
+            # 2. НЕМЕДЛЕННО скачиваем файл
+            await bot.download_file(file_info.file_path, save_path)
             saved_paths.append(save_path)
             logger.info(f"[SAVE] {media_type} сохранён: {save_path}")
 
         except Exception as e:
+            # Если файл уже удалён — логируем и продолжаем
             if "Bad Request: file not found" in str(e) or "Bad Request: wrong file_id" in str(e):
                 logger.warning(f"[SAVE] Файл уже удалён (file_id={file_id})")
             else:
-                logger.error(f"[SAVE] Ошибка сохранения {media_type} (file_id={file_id}): {e}")
+                logger.error(f"[SAVE] Ошибка сохранения {media_type}: {e}")
 
     return saved_paths
 
@@ -776,7 +770,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== 2. НЕМЕДЛЕННОЕ СОХРАНЕНИЕ МЕДИА (через aiofiles) ======
+    # ====== 2. НЕМЕДЛЕННОЕ СОХРАНЕНИЕ МЕДИА (Open Source подход) ======
     saved_files = await save_vanishing_media(message, user_id)
     logger.info(f"[DOWNLOAD] Сохранено файлов: {len(saved_files)}")
 
