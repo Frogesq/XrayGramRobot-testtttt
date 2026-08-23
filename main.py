@@ -170,145 +170,123 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
-def get_ttl_seconds(message: types.Message) -> int:
+def get_media_info(message: types.Message):
     """
-    Извлекает ttl_seconds из любого медиа-объекта.
-    Использует прямой доступ к полям и fallback через content_type.
+    Возвращает (media_type, file_id, file_name, ttl_seconds) для любого медиа.
+    Работает на основе content_type (приоритет) и прямых полей.
     """
-    # Прямые поля
-    for obj in [message.photo, message.video, message.voice, message.video_note,
-                message.document, message.audio, message.animation]:
-        if obj:
-            ttl = getattr(obj, 'ttl_seconds', 0)
-            if ttl:
-                return ttl
-    # Если не нашли, пробуем через content_type (для бизнес-сообщений)
-    if message.content_type:
-        # Получаем объект медиа по типу
-        media_obj = None
-        if message.content_type == 'photo':
-            media_obj = message.photo[-1] if message.photo else None
-        elif message.content_type == 'video':
-            media_obj = message.video
-        elif message.content_type == 'voice':
-            media_obj = message.voice
-        elif message.content_type == 'video_note':
-            media_obj = message.video_note
-        elif message.content_type == 'document':
-            media_obj = message.document
-        elif message.content_type == 'audio':
-            media_obj = message.audio
-        elif message.content_type == 'animation':
-            media_obj = message.animation
-        if media_obj:
-            return getattr(media_obj, 'ttl_seconds', 0)
-    return 0
+    content_type = message.content_type
+    ttl = 0
+    media_type = None
+    file_id = None
+    file_name = None
 
-def get_media_type(message: types.Message) -> str:
-    """Определяет тип медиа (сначала прямые поля, затем content_type)"""
-    if message.photo: return "photo"
-    if message.video: return "video"
-    if message.voice: return "voice"
-    if message.video_note: return "video_note"
-    if message.document: return "document"
-    if message.audio: return "audio"
-    if message.animation: return "animation"
-    if message.sticker: return "sticker"
-    # fallback на content_type
-    if message.content_type:
-        return message.content_type
-    return None
-
-def has_any_media(message: types.Message) -> bool:
-    return bool(get_media_type(message))
-
-async def download_media_files(message: types.Message, user_id: int) -> list:
-    """
-    Скачивает все медиа из сообщения.
-    Использует прямые поля и fallback через content_type.
-    """
-    file_paths = []
-    user_dir = get_user_download_dir(user_id)
-
-    # Сначала пробуем прямые поля
-    media_items = []
+    # Сначала проверяем прямые поля (если они заполнены)
     if message.photo:
+        media_type = "photo"
         photo = message.photo[-1]
-        media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
-    if message.video:
+        file_id = photo.file_id
+        ttl = getattr(photo, 'ttl_seconds', 0)
+        file_name = f"photo_{message.message_id}.jpg"
+    elif message.video:
+        media_type = "video"
         v = message.video
-        media_items.append(("video", v.file_id, f"video_{message.message_id}.mp4"))
-    if message.voice:
+        file_id = v.file_id
+        ttl = getattr(v, 'ttl_seconds', 0)
+        file_name = f"video_{message.message_id}.mp4"
+    elif message.voice:
+        media_type = "voice"
         v = message.voice
-        media_items.append(("voice", v.file_id, f"voice_{message.message_id}.ogg"))
-    if message.video_note:
+        file_id = v.file_id
+        ttl = getattr(v, 'ttl_seconds', 0)
+        file_name = f"voice_{message.message_id}.ogg"
+    elif message.video_note:
+        media_type = "video_note"
         v = message.video_note
-        media_items.append(("video_note", v.file_id, f"video_note_{message.message_id}.mp4"))
-    if message.document:
+        file_id = v.file_id
+        ttl = getattr(v, 'ttl_seconds', 0)
+        file_name = f"video_note_{message.message_id}.mp4"
+    elif message.document:
+        media_type = "document"
         d = message.document
-        name = d.file_name or f"document_{message.message_id}.bin"
-        media_items.append(("document", d.file_id, name))
-    if message.audio:
+        file_id = d.file_id
+        ttl = getattr(d, 'ttl_seconds', 0)
+        file_name = d.file_name or f"document_{message.message_id}.bin"
+    elif message.audio:
+        media_type = "audio"
         a = message.audio
+        file_id = a.file_id
+        ttl = getattr(a, 'ttl_seconds', 0)
         ext = "m4a" if a.file_name and a.file_name.endswith('.m4a') else "mp3"
-        media_items.append(("audio", a.file_id, f"audio_{message.message_id}.{ext}"))
-    if message.animation:
+        file_name = f"audio_{message.message_id}.{ext}"
+    elif message.animation:
+        media_type = "animation"
         a = message.animation
-        media_items.append(("animation", a.file_id, f"animation_{message.message_id}.mp4"))
-    if message.sticker:
+        file_id = a.file_id
+        ttl = getattr(a, 'ttl_seconds', 0)
+        file_name = f"animation_{message.message_id}.mp4"
+    elif message.sticker:
+        media_type = "sticker"
         s = message.sticker
+        file_id = s.file_id
+        ttl = getattr(s, 'ttl_seconds', 0)
         ext = "tgs" if s.is_animated else "webm" if s.is_video else "webp"
-        media_items.append(("sticker", s.file_id, f"sticker_{message.message_id}.{ext}"))
+        file_name = f"sticker_{message.message_id}.{ext}"
+    # Если прямые поля не дали результата, используем content_type
+    elif content_type and content_type != 'text':
+        # Пытаемся получить объект через getattr
+        obj = None
+        if content_type == 'photo':
+            obj = message.photo[-1] if message.photo else None
+        else:
+            obj = getattr(message, content_type, None)
+        if obj:
+            file_id = getattr(obj, 'file_id', None)
+            ttl = getattr(obj, 'ttl_seconds', 0)
+            media_type = content_type
+            # Генерируем имя
+            if media_type == 'voice':
+                file_name = f"voice_{message.message_id}.ogg"
+            elif media_type == 'video_note':
+                file_name = f"video_note_{message.message_id}.mp4"
+            elif media_type == 'audio':
+                ext = "m4a" if getattr(obj, 'file_name', '').endswith('.m4a') else "mp3"
+                file_name = f"audio_{message.message_id}.{ext}"
+            elif media_type == 'document':
+                file_name = getattr(obj, 'file_name', f"document_{message.message_id}.bin")
+            else:
+                file_name = f"{media_type}_{message.message_id}.bin"
 
-    # Если прямые поля не дали результата, пытаемся через content_type
-    if not media_items and message.content_type:
-        content_type = message.content_type
-        if content_type == 'photo' and message.photo:
-            photo = message.photo[-1]
-            media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
-        elif content_type == 'video' and message.video:
-            v = message.video
-            media_items.append(("video", v.file_id, f"video_{message.message_id}.mp4"))
-        elif content_type == 'voice' and message.voice:
-            v = message.voice
-            media_items.append(("voice", v.file_id, f"voice_{message.message_id}.ogg"))
-        elif content_type == 'video_note' and message.video_note:
-            v = message.video_note
-            media_items.append(("video_note", v.file_id, f"video_note_{message.message_id}.mp4"))
-        elif content_type == 'document' and message.document:
-            d = message.document
-            name = d.file_name or f"document_{message.message_id}.bin"
-            media_items.append(("document", d.file_id, name))
-        elif content_type == 'audio' and message.audio:
-            a = message.audio
-            ext = "m4a" if a.file_name and a.file_name.endswith('.m4a') else "mp3"
-            media_items.append(("audio", a.file_id, f"audio_{message.message_id}.{ext}"))
-        elif content_type == 'animation' and message.animation:
-            a = message.animation
-            media_items.append(("animation", a.file_id, f"animation_{message.message_id}.mp4"))
-        elif content_type == 'sticker' and message.sticker:
-            s = message.sticker
-            ext = "tgs" if s.is_animated else "webm" if s.is_video else "webp"
-            media_items.append(("sticker", s.file_id, f"sticker_{message.message_id}.{ext}"))
+    if file_id:
+        logger.info(f"[MEDIA] type={media_type}, ttl={ttl}, file_id={file_id[:10]}...")
+        return media_type, file_id, file_name, ttl
+    else:
+        logger.warning(f"[MEDIA] Не удалось определить медиа. content_type={content_type}")
+        return None, None, None, 0
 
-    if not media_items:
-        logger.warning(f"[DOWNLOAD] Не удалось найти медиа в сообщении {message.message_id}, content_type={message.content_type}")
-        return file_paths
+async def download_media_file(message: types.Message, user_id: int) -> tuple:
+    """
+    Скачивает медиа-файл (если есть) и возвращает путь к сохранённому файлу и информацию о нём.
+    """
+    media_type, file_id, file_name, ttl = get_media_info(message)
+    if not file_id:
+        return None, None, 0
 
-    for media_type, file_id, original_name in media_items:
-        try:
-            file = await bot.get_file(file_id)
-            safe_name = "".join(c for c in original_name if c.isalnum() or c in "._-")
-            if not safe_name:
-                safe_name = f"{media_type}_{message.message_id}.bin"
-            save_path = os.path.join(user_dir, safe_name)
-            await bot.download_file(file.file_path, save_path)
-            file_paths.append(save_path)
-            logger.info(f"[DOWNLOAD] {media_type} сохранён: {save_path}")
-        except Exception as e:
-            logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type} (file_id={file_id}): {e}")
+    user_dir = get_user_download_dir(user_id)
+    # Очищаем имя файла
+    safe_name = "".join(c for c in file_name if c.isalnum() or c in "._-")
+    if not safe_name:
+        safe_name = f"{media_type or 'file'}_{message.message_id}.bin"
+    save_path = os.path.join(user_dir, safe_name)
 
-    return file_paths
+    try:
+        file = await bot.get_file(file_id)
+        await bot.download_file(file.file_path, save_path)
+        logger.info(f"[DOWNLOAD] {media_type} сохранён: {save_path}")
+        return save_path, media_type, ttl
+    except Exception as e:
+        logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type}: {e}")
+        return None, media_type, ttl
 
 def format_user_info(user: types.User) -> str:
     full = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
@@ -647,6 +625,7 @@ async def handle_business_message(message: types.Message):
         logger.warning("[MSG] Нет bc_id")
         return
 
+    # ====== 1. ОПРЕДЕЛЯЕМ ВЛАДЕЛЬЦА ======
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
         db.set_connection(bc_id, ADMIN_ID)
@@ -668,7 +647,48 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # Обработка команд владельца
+    # ====== 2. НЕМЕДЛЕННОЕ СКАЧИВАНИЕ МЕДИА (если есть) ======
+    # Это делается ДО всех проверок, чтобы успеть до исчезновения
+    media_file_path = None
+    media_type = None
+    ttl = 0
+    has_media = False
+
+    # Определяем, есть ли медиа в сообщении
+    if message.content_type and message.content_type != 'text':
+        has_media = True
+        # Пытаемся скачать сразу
+        media_file_path, media_type, ttl = await download_media_file(message, user_id)
+        if media_file_path:
+            logger.info(f"[MSG] Медиа скачано сразу: {media_file_path}, ttl={ttl}")
+        else:
+            logger.warning(f"[MSG] Не удалось скачать медиа сразу, content_type={message.content_type}")
+
+    # Если по каким-то причинам не скачалось, но есть прямые поля, пробуем ещё раз через download_media_files (старая функция)
+    if not media_file_path and (message.photo or message.video or message.voice or message.video_note or
+                                message.document or message.audio or message.animation or message.sticker):
+        # Используем старую функцию, которая проверяет прямые поля
+        from main_old import download_media_files  # временно, но мы перепишем
+        # На самом деле мы просто вызовем ту же логику, но проще вызвать нашу же функцию повторно с другим подходом
+        # Но у нас уже есть get_media_info, которая вернёт информацию, попробуем скачать повторно
+        media_type2, file_id, file_name, ttl2 = get_media_info(message)
+        if file_id:
+            try:
+                file = await bot.get_file(file_id)
+                user_dir = get_user_download_dir(user_id)
+                safe_name = "".join(c for c in file_name if c.isalnum() or c in "._-")
+                if not safe_name:
+                    safe_name = f"{media_type2 or 'file'}_{message.message_id}.bin"
+                save_path = os.path.join(user_dir, safe_name)
+                await bot.download_file(file.file_path, save_path)
+                media_file_path = save_path
+                media_type = media_type2
+                ttl = ttl2
+                logger.info(f"[MSG] Медиа скачано через прямые поля: {save_path}")
+            except Exception as e:
+                logger.error(f"[MSG] Ошибка скачивания через прямые поля: {e}")
+
+    # ====== 3. ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА (после скачивания) ======
     if is_owner and message.text and message.text.startswith('.'):
         cmd = message.text.strip()
         try:
@@ -711,9 +731,10 @@ async def handle_business_message(message: types.Message):
             else:
                 await bot.send_message(user_id, premium("<b>❌ .anim &lt;текст&gt;</b>"), parse_mode="HTML")
             return
+        # Если это команда, но не обработана, выходим (не сохраняем)
         return
 
-    # Мут
+    # ====== 4. МУТ (после команд) ======
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(bc_id, [message.message_id])
@@ -722,57 +743,43 @@ async def handle_business_message(message: types.Message):
             pass
         return
 
-    # Сохранение
+    # ====== 5. СОХРАНЕНИЕ В БД ======
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    ttl = get_ttl_seconds(message)
-    media_type = get_media_type(message)
-    has_media = bool(media_type)
+    # Если медиа не было скачано, но файл есть (маловероятно), то собираем список файлов
+    files_list = [media_file_path] if media_file_path else []
+    # Если медиа не было, но есть прямые поля, пробуем скачать ещё раз (но мы уже сделали это выше)
 
-    logger.info(f"[MSG] id={msg_id}, ttl={ttl}, type={media_type}, content_type={message.content_type}, owner={is_owner}")
-
-    files = []
-    if has_media:
-        files = await download_media_files(message, user_id)
-        logger.info(f"[MSG] Скачано файлов: {len(files)}")
-    else:
-        # Если по какой-то причине has_media False, но мы знаем, что медиа есть, пробуем скачать принудительно
-        # через content_type (это уже сделано в download_media_files, но здесь мы можем попытаться ещё раз)
-        if message.content_type and message.content_type != 'text':
-            files = await download_media_files(message, user_id)
-            if files:
-                # Если файлы скачались, переопределяем тип
-                media_type = message.content_type
-                has_media = True
-                logger.info(f"[MSG] Принудительное скачивание через content_type={media_type}, файлов: {len(files)}")
-
+    # Сохраняем в БД
     db.save_message(
-        bc_id, msg_id, user_id, fullname, text, files,
+        bc_id, msg_id, user_id, fullname, text, files_list,
         is_temporary=getattr(message, 'has_media_spoiler', False),
         ttl_seconds=ttl,
         media_type=media_type
     )
+    logger.info(f"[SAVE] Сообщение {msg_id} сохранено, файлов: {len(files_list)}, ttl={ttl}")
 
-    # Отправка уведомлений
-    if ttl > 0 and files:
+    # ====== 6. ОТПРАВКА УВЕДОМЛЕНИЙ ======
+    if ttl > 0 and files_list:
         if media_type == "voice":
             notif = premium(f"<b>🎤 Самоуничтожающееся голосовое от {fullname}</b>")
         else:
             notif = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
         if text:
             notif += premium(f"\n\n{text}")
-        await send_notification(user_id, notif, files)
-    elif has_media and files:
+        await send_notification(user_id, notif, files_list)
+    elif files_list and ttl == 0:
         if media_type == "voice":
             notif = premium(f"<b>🎤 Голосовое от {fullname}</b>")
         else:
             notif = premium(f"<b>📎 Медиа ({media_type}) от {fullname}</b>")
         if text:
             notif += premium(f"\n\n{text}")
-        await send_notification(user_id, notif, files)
+        await send_notification(user_id, notif, files_list)
+    # Если только текст – не отправляем (сохраняем только для истории)
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
