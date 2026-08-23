@@ -4,7 +4,6 @@ import os
 import json
 import time
 import random
-import shutil
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -16,12 +15,6 @@ from aiogram.types import (
     BufferedInputFile, FSInputFile
 )
 from database import Database
-
-# Импортируем os для использования в database.py
-import os as os_module
-# Делаем os доступным в database.py через глобальную переменную
-import sys
-sys.modules['os'] = os_module
 
 load_dotenv()
 
@@ -310,29 +303,41 @@ def get_media_type(message: types.Message) -> str:
         return "sticker"
     return None
 
-async def download_files(message: types.Message, user_id: int) -> list:
-    file_paths = []
-    if not message.content_type:
-        return file_paths
+def has_media(message: types.Message) -> bool:
+    """Проверяет наличие любого медиа в сообщении"""
+    return bool(
+        message.photo or message.video or message.voice or 
+        message.video_note or message.document or message.audio or 
+        message.animation or message.sticker
+    )
 
+async def download_files(message: types.Message, user_id: int) -> list:
+    """Скачивает все медиа из сообщения"""
+    file_paths = []
+    
+    # Проверяем наличие медиа напрямую, без content_type
     media_items = []
+    
     if message.photo:
         media_items.append(("photo", message.photo[-1].file_id, f"photo_{message.message_id}.jpg"))
-    elif message.video:
+    if message.video:
         media_items.append(("video", message.video.file_id, f"video_{message.message_id}.mp4"))
-    elif message.voice:
+    if message.voice:
         media_items.append(("voice", message.voice.file_id, f"voice_{message.message_id}.ogg"))
-    elif message.audio:
+    if message.audio:
         media_items.append(("audio", message.audio.file_id, f"audio_{message.message_id}.mp3"))
-    elif message.document:
+    if message.document:
         file_name = message.document.file_name or f"document_{message.message_id}.bin"
         media_items.append(("document", message.document.file_id, file_name))
-    elif message.sticker:
+    if message.sticker:
         media_items.append(("sticker", message.sticker.file_id, f"sticker_{message.message_id}.webp"))
-    elif message.animation:
+    if message.animation:
         media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
-    elif message.video_note:
+    if message.video_note:
         media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
+
+    if not media_items:
+        return file_paths
 
     user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
@@ -370,8 +375,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
                     await bot.send_document(chat_id, types.FSInputFile(file_path))
                 except Exception as e:
                     logger.error(f"[NOTIFY] Ошибка отправки файла {file_path}: {e}")
-            # НЕ удаляем файлы сразу, так как они могут понадобиться для истории
-            # Они будут удалены при очистке старых сообщений
         else:
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
@@ -726,7 +729,6 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
-        # Удаляем связь при отключении
         db.delete_connection(bc_id)
         return
 
@@ -851,7 +853,7 @@ async def handle_business_message(message: types.Message):
                 try:
                     count = int(parts[1])
                     spam_text = parts[2]
-                    if count <= 0 or count > 50:  # Ограничение на 50 сообщений
+                    if count <= 0 or count > 50:
                         await bot.send_message(user_id, premium("<b>❌ Количество должно быть от 1 до 50.</b>"), parse_mode="HTML")
                         return
                 except (ValueError, IndexError):
@@ -908,15 +910,23 @@ async def handle_business_message(message: types.Message):
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
+    
+    # Получаем текст из caption или text
     text = message.text or message.caption or ""
 
-    # ========== ОПРЕДЕЛЯЕМ САМОУНИЧТОЖАЮЩИЕСЯ МЕДИА ==========
+    # ========== ОПРЕДЕЛЯЕМ НАЛИЧИЕ МЕДИА И TTL ==========
     ttl = get_ttl_seconds(message)
     is_self_destructing = ttl > 0
     media_type = get_media_type(message)
+    has_media_file = has_media(message)
     
-    # Скачиваем файлы ДО того, как они самоуничтожатся
-    files = await download_files(message, user_id)
+    logger.info(f"[MESSAGE] msg_id={msg_id}, ttl={ttl}, media_type={media_type}, has_media={has_media_file}")
+    
+    # Скачиваем файлы, если они есть
+    files = []
+    if has_media_file:
+        files = await download_files(message, user_id)
+        logger.info(f"[MESSAGE] Скачано файлов: {len(files)}")
     
     # Сохраняем сообщение в БД
     db.save_message(
@@ -926,24 +936,47 @@ async def handle_business_message(message: types.Message):
         fullname, 
         text, 
         files, 
-        is_temporary=message.has_media_spoiler, 
+        is_temporary=message.has_media_spoiler if hasattr(message, 'has_media_spoiler') else False, 
         ttl_seconds=ttl,
         media_type=media_type
     )
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, ttl={ttl}, media_type={media_type}")
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(files)}")
 
-    # ========== ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ДЛЯ САМОУНИЧТОЖАЮЩИХСЯ МЕДИА ==========
+    # ========== ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ==========
+    # 1. Для самоуничтожающихся медиа (ttl > 0)
     if is_self_destructing and files:
         if media_type == "voice":
-            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
+            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
         else:
-            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
+            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
         await send_notification(user_id, notif_text, files)
     
-    # Если это просто сообщение со спойлером (но не самоуничтожающееся)
-    elif message.has_media_spoiler and files and not is_self_destructing:
-        notif_text = premium(f"<b>📸 Сообщение со спойлером от {fullname}\n\n{text}</b>") if text else premium(f"<b>📸 Сообщение со спойлером от {fullname}</b>")
+    # 2. Для обычных медиа (без ttl) - отправляем уведомление о сохранении
+    elif has_media_file and files and not is_self_destructing:
+        if media_type == "voice":
+            notif_text = premium(f"<b>🎤 Голосовое сообщение от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
+        elif media_type:
+            notif_text = premium(f"<b>📎 Медиа ({media_type}) от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
+        else:
+            notif_text = premium(f"<b>📎 Медиа от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
         await send_notification(user_id, notif_text, files)
+    
+    # 3. Для обычных текстовых сообщений - НЕ отправляем уведомление (сохраняем только для истории)
+    # (можно раскомментировать если нужно)
+    # else:
+    #     if text:
+    #         notif_text = premium(f"<b>💬 Сообщение от {fullname}</b>\n\n{text}")
+    #         await send_notification(user_id, notif_text, None)
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
@@ -1006,18 +1039,31 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         else:
             files_list = []
 
-        # Определяем, было ли это самоуничтожающееся сообщение
         ttl = data["ttl_seconds"] or 0
         media_type = data["media_type"] or ""
         
         if ttl > 0 and media_type == "voice":
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (было сохранено)\n\n{text}</b>") if text else premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (было сохранено)</b>")
+            notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (сохранено)</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
         elif ttl > 0:
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (было сохранено)\n\n{text}</b>") if text else premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (было сохранено)</b>")
+            notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (сохранено)</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
         else:
-            notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+            if files_list:
+                notif_text = premium(f"<b>❌ Медиа удалено от {fullname}</b>")
+                if text:
+                    notif_text += premium(f"\n\n{text}")
+            else:
+                notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+                if text:
+                    notif_text += premium(f"\n\n{text}")
         
-        await send_notification(user_id, notif_text, files_list)
+        if files_list:
+            await send_notification(user_id, notif_text, files_list)
+        else:
+            await send_notification(user_id, notif_text, None)
 
         db.delete_message(bc_id, msg_id)
 
