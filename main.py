@@ -303,43 +303,69 @@ def get_media_type(message: types.Message) -> str:
         return "sticker"
     return None
 
-def has_media(message: types.Message) -> bool:
-    """Проверяет наличие любого медиа в сообщении"""
-    return bool(
-        message.photo or message.video or message.voice or 
-        message.video_note or message.document or message.audio or 
-        message.animation or message.sticker
-    )
-
-async def download_files(message: types.Message, user_id: int) -> list:
-    """Скачивает все медиа из сообщения"""
+async def download_media_files(message: types.Message, user_id: int) -> list:
+    """
+    Скачивает все медиа из сообщения.
+    Работает напрямую с полями message, а не через content_type.
+    """
     file_paths = []
+    user_dir = get_user_download_dir(user_id)
     
-    # Проверяем наличие медиа напрямую, без content_type
+    # Проверяем каждый тип медиа напрямую
     media_items = []
     
+    # Фото
     if message.photo:
-        media_items.append(("photo", message.photo[-1].file_id, f"photo_{message.message_id}.jpg"))
+        photo = message.photo[-1]  # Берём самое большое фото
+        media_items.append(("photo", photo.file_id, f"photo_{message.message_id}.jpg"))
+    
+    # Видео
     if message.video:
-        media_items.append(("video", message.video.file_id, f"video_{message.message_id}.mp4"))
+        video = message.video
+        media_items.append(("video", video.file_id, f"video_{message.message_id}.mp4"))
+    
+    # Голосовое сообщение
     if message.voice:
-        media_items.append(("voice", message.voice.file_id, f"voice_{message.message_id}.ogg"))
+        voice = message.voice
+        media_items.append(("voice", voice.file_id, f"voice_{message.message_id}.ogg"))
+    
+    # Аудио
     if message.audio:
-        media_items.append(("audio", message.audio.file_id, f"audio_{message.message_id}.mp3"))
+        audio = message.audio
+        ext = "mp3"
+        if audio.file_name and audio.file_name.endswith('.m4a'):
+            ext = "m4a"
+        media_items.append(("audio", audio.file_id, f"audio_{message.message_id}.{ext}"))
+    
+    # Документ
     if message.document:
-        file_name = message.document.file_name or f"document_{message.message_id}.bin"
-        media_items.append(("document", message.document.file_id, file_name))
+        doc = message.document
+        file_name = doc.file_name or f"document_{message.message_id}.bin"
+        media_items.append(("document", doc.file_id, file_name))
+    
+    # Стикер
     if message.sticker:
-        media_items.append(("sticker", message.sticker.file_id, f"sticker_{message.message_id}.webp"))
+        sticker = message.sticker
+        ext = "webp"
+        if sticker.is_animated:
+            ext = "tgs"
+        elif sticker.is_video:
+            ext = "webm"
+        media_items.append(("sticker", sticker.file_id, f"sticker_{message.message_id}.{ext}"))
+    
+    # Анимация (GIF)
     if message.animation:
-        media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
+        anim = message.animation
+        media_items.append(("animation", anim.file_id, f"animation_{message.message_id}.mp4"))
+    
+    # Видеосообщение (кружок)
     if message.video_note:
-        media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
-
+        vn = message.video_note
+        media_items.append(("video_note", vn.file_id, f"video_note_{message.message_id}.mp4"))
+    
     if not media_items:
         return file_paths
-
-    user_dir = get_user_download_dir(user_id)
+    
     for media_type, file_id, original_name in media_items:
         try:
             file = await bot.get_file(file_id)
@@ -349,9 +375,9 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"[DOWNLOAD] Файл сохранён: {save_path}")
+            logger.info(f"[DOWNLOAD] {media_type} сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"[DOWNLOAD] Ошибка скачивания файла {file_id}: {e}")
+            logger.error(f"[DOWNLOAD] Ошибка скачивания {media_type} {file_id}: {e}")
 
     return file_paths
 
@@ -362,14 +388,12 @@ def format_user_info(user: types.User) -> str:
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
         if files and len(files) > 0:
-            # Отправляем первый файл с подписью
             await bot.send_document(
                 chat_id, 
                 types.FSInputFile(files[0]), 
                 caption=premium(text), 
                 parse_mode=parse_mode
             )
-            # Отправляем остальные файлы
             for file_path in files[1:]:
                 try:
                     await bot.send_document(chat_id, types.FSInputFile(file_path))
@@ -378,7 +402,7 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
         else:
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
-        logger.error(f"[NOTIFY] Ошибка отправки уведомления пользователю {chat_id}: {e}")
+        logger.error(f"[NOTIFY] Ошибка отправки уведомления: {e}")
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -393,7 +417,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             await message.delete()
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
         else:
-            logger.error(f"[EDIT] Ошибка редактирования: {e}")
+            logger.error(f"[EDIT] Ошибка: {e}")
             try:
                 await message.delete()
             except:
@@ -465,7 +489,7 @@ async def start_duel(message: types.Message):
     
     await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
 
-# ==================== ОСТАЛЬНЫЕ CALLBACK ====================
+# ==================== CALLBACK ЗАПРОСЫ ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -518,7 +542,7 @@ async def show_instruction_logic(user_id: int):
                 reply_markup=instruction_keyboard()
             )
     except Exception as e:
-        logger.error(f"[INST] Ошибка отправки инструкции пользователю {user_id}: {e}")
+        logger.error(f"[INST] Ошибка: {e}")
         await bot.send_message(
             chat_id=user_id,
             text=instruction_text,
@@ -642,7 +666,7 @@ async def process_broadcast(message: types.Message, state: FSMContext):
             sent += 1
             await asyncio.sleep(0.05)
         except Exception as e:
-            logger.error(f"[BROADCAST] Ошибка отправки пользователю {user_id}: {e}")
+            logger.error(f"[BROADCAST] Ошибка отправки {user_id}: {e}")
             failed += 1
 
     result_text = premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>")
@@ -728,12 +752,11 @@ async def handle_business_connection(connection: BusinessConnection):
     is_enabled = connection.is_enabled
 
     if not is_enabled:
-        logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
+        logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
         db.delete_connection(bc_id)
         return
 
-    logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
-
+    logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
     db.set_connection(bc_id, user_id)
 
     if not db.is_user_registered(user_id):
@@ -750,7 +773,7 @@ async def handle_business_connection(connection: BusinessConnection):
             parse_mode="HTML"
         )
     except Exception as e:
-        logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
+        logger.error(f"[CONN] Не удалось отправить уведомление: {e}")
 
     try:
         user = connection.user
@@ -772,7 +795,7 @@ async def handle_business_connection(connection: BusinessConnection):
 async def handle_business_message(message: types.Message):
     bc_id = message.business_connection_id
     if not bc_id:
-        logger.warning("[MESSAGE] business_connection_id отсутствует")
+        logger.warning("[MESSAGE] bc_id отсутствует")
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
@@ -782,14 +805,14 @@ async def handle_business_message(message: types.Message):
         if not db.is_user_registered(ADMIN_ID):
             db.register_user(ADMIN_ID, message.from_user.username or "", message.from_user.first_name or "", message.from_user.last_name or "")
         user_id = ADMIN_ID
-        logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}, user_id={ADMIN_ID}")
+        logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}")
 
     if not user_id and message.from_user:
         user_id = message.from_user.id
-        logger.warning(f"[MESSAGE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
+        logger.warning(f"[MESSAGE] fallback user_id={user_id}")
 
     if not user_id:
-        logger.warning(f"[MESSAGE] Не удалось определить user_id для bc_id={bc_id}")
+        logger.warning(f"[MESSAGE] Не удалось определить user_id")
         return
 
     if not db.is_user_registered(user_id):
@@ -802,7 +825,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
+    # ========== КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
@@ -811,40 +834,38 @@ async def handle_business_message(message: types.Message):
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
             )
-            logger.info(f"[CMD] Сообщение с командой '{text}' удалено")
+            logger.info(f"[CMD] Удалена команда: '{text}'")
         except Exception as e:
-            logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
+            logger.error(f"[CMD] Не удалось удалить: {e}")
 
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
                 chat_id,
-                premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>"),
+                premium("<b>🔇 Вы заглушены. Ваши сообщения будут удаляться.</b>"),
                 business_connection_id=bc_id,
                 parse_mode="HTML"
             )
             await bot.send_message(
                 user_id,
-                premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
+                premium(f"<b>🔇 Чат {chat_id} замучен.</b>"),
                 parse_mode="HTML"
             )
-            logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
             return
 
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(
                 chat_id,
-                premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
+                premium("<b>🔊 Вы размучены.</b>"),
                 business_connection_id=bc_id,
                 parse_mode="HTML"
             )
             await bot.send_message(
                 user_id,
-                premium(f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>"),
+                premium(f"<b>🔊 Чат {chat_id} размучен.</b>"),
                 parse_mode="HTML"
             )
-            logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
             return
 
         if text.startswith(".spam "):
@@ -854,22 +875,18 @@ async def handle_business_message(message: types.Message):
                     count = int(parts[1])
                     spam_text = parts[2]
                     if count <= 0 or count > 50:
-                        await bot.send_message(user_id, premium("<b>❌ Количество должно быть от 1 до 50.</b>"), parse_mode="HTML")
+                        await bot.send_message(user_id, premium("<b>❌ Количество от 1 до 50.</b>"), parse_mode="HTML")
                         return
                 except (ValueError, IndexError):
-                    await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
+                    await bot.send_message(user_id, premium("<b>❌ Формат: .spam <число> <текст></b>"), parse_mode="HTML")
                     return
                 for i in range(count):
-                    await bot.send_message(
-                        chat_id=chat_id,
-                        text=spam_text,
-                        business_connection_id=bc_id
-                    )
+                    await bot.send_message(chat_id, text=spam_text, business_connection_id=bc_id)
                     await asyncio.sleep(0.3)
-                await bot.send_message(user_id, premium(f"<b>✅ Отправлено {count} сообщений в чат {chat_id}</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium(f"<b>✅ Отправлено {count} сообщений</b>"), parse_mode="HTML")
                 return
             else:
-                await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium("<b>❌ Формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
         if text == ".duel":
@@ -879,7 +896,7 @@ async def handle_business_message(message: types.Message):
         if text.startswith(".anim "):
             anim_text = text.replace(".anim", "").strip()
             if not anim_text:
-                await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium("<b>❌ Напишите текст!\nПример: .anim Привет</b>"), parse_mode="HTML")
                 return
             await animate_text(chat_id, anim_text, message)
             return
@@ -893,42 +910,32 @@ async def handle_business_message(message: types.Message):
                 business_connection_id=bc_id,
                 message_ids=[message.message_id]
             )
-            logger.info(f"[MUTE] ✅ Сообщение {message.message_id} УДАЛЕНО")
+            logger.info(f"[MUTE] Сообщение {message.message_id} УДАЛЕНО")
         except Exception as e:
-            if "message to delete not found" in str(e):
-                logger.info(f"[MUTE] ⏩ Сообщение {message.message_id} уже удалено, пропускаем")
-            else:
-                logger.error(f"[MUTE] ❌ Ошибка удаления {message.message_id}: {e}")
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>⚠️ Ошибка удаления сообщения:\n{e}</b>"),
-                    parse_mode="HTML"
-                )
+            if "message to delete not found" not in str(e):
+                logger.error(f"[MUTE] Ошибка: {e}")
         return
 
     # ========== СОХРАНЕНИЕ ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
-    
-    # Получаем текст из caption или text
     text = message.text or message.caption or ""
 
-    # ========== ОПРЕДЕЛЯЕМ НАЛИЧИЕ МЕДИА И TTL ==========
+    # ОПРЕДЕЛЯЕМ TTL И ТИП МЕДИА
     ttl = get_ttl_seconds(message)
-    is_self_destructing = ttl > 0
     media_type = get_media_type(message)
-    has_media_file = has_media(message)
-    
-    logger.info(f"[MESSAGE] msg_id={msg_id}, ttl={ttl}, media_type={media_type}, has_media={has_media_file}")
-    
-    # Скачиваем файлы, если они есть
+    is_self_destructing = ttl > 0
+
+    logger.info(f"[MESSAGE] msg_id={msg_id}, ttl={ttl}, media_type={media_type}")
+
+    # СКАЧИВАЕМ МЕДИА (если есть)
     files = []
-    if has_media_file:
-        files = await download_files(message, user_id)
+    if media_type:
+        files = await download_media_files(message, user_id)
         logger.info(f"[MESSAGE] Скачано файлов: {len(files)}")
-    
-    # Сохраняем сообщение в БД
+
+    # СОХРАНЯЕМ В БД
     db.save_message(
         bc_id, 
         msg_id, 
@@ -936,47 +943,32 @@ async def handle_business_message(message: types.Message):
         fullname, 
         text, 
         files, 
-        is_temporary=message.has_media_spoiler if hasattr(message, 'has_media_spoiler') else False, 
+        is_temporary=getattr(message, 'has_media_spoiler', False),
         ttl_seconds=ttl,
         media_type=media_type
     )
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(files)}")
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id}")
 
-    # ========== ОТПРАВЛЯЕМ УВЕДОМЛЕНИЕ ==========
-    # 1. Для самоуничтожающихся медиа (ttl > 0)
+    # ========== ОТПРАВКА УВЕДОМЛЕНИЙ ==========
+    # Для самоуничтожающихся медиа (ttl > 0)
     if is_self_destructing and files:
         if media_type == "voice":
-            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
+            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое от {fullname}</b>")
         else:
             notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа ({media_type}) от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
+        if text:
+            notif_text += premium(f"\n\n{text}")
         await send_notification(user_id, notif_text, files)
     
-    # 2. Для обычных медиа (без ttl) - отправляем уведомление о сохранении
-    elif has_media_file and files and not is_self_destructing:
+    # Для обычных медиа (без ttl)
+    elif media_type and files:
         if media_type == "voice":
-            notif_text = premium(f"<b>🎤 Голосовое сообщение от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
-        elif media_type:
-            notif_text = premium(f"<b>📎 Медиа ({media_type}) от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
+            notif_text = premium(f"<b>🎤 Голосовое от {fullname}</b>")
         else:
-            notif_text = premium(f"<b>📎 Медиа от {fullname}</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
+            notif_text = premium(f"<b>📎 Медиа ({media_type}) от {fullname}</b>")
+        if text:
+            notif_text += premium(f"\n\n{text}")
         await send_notification(user_id, notif_text, files)
-    
-    # 3. Для обычных текстовых сообщений - НЕ отправляем уведомление (сохраняем только для истории)
-    # (можно раскомментировать если нужно)
-    # else:
-    #     if text:
-    #         notif_text = premium(f"<b>💬 Сообщение от {fullname}</b>\n\n{text}")
-    #         await send_notification(user_id, notif_text, None)
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
@@ -1017,7 +1009,7 @@ async def handle_edited_business_message(message: types.Message):
     else:
         files_list = []
 
-    notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
+    notif_text = premium(f"<b>✏️ Изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
     await send_notification(user_id, notif_text, files_list)
 
 @dp.deleted_business_messages()
@@ -1041,28 +1033,22 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
         ttl = data["ttl_seconds"] or 0
         media_type = data["media_type"] or ""
-        
-        if ttl > 0 and media_type == "voice":
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое сообщение от {fullname} (сохранено)</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
-        elif ttl > 0:
-            notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (сохранено)</b>")
-            if text:
-                notif_text += premium(f"\n\n{text}")
-        else:
-            if files_list:
-                notif_text = premium(f"<b>❌ Медиа удалено от {fullname}</b>")
-                if text:
-                    notif_text += premium(f"\n\n{text}")
-            else:
-                notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
-                if text:
-                    notif_text += premium(f"\n\n{text}")
-        
+
         if files_list:
+            if ttl > 0:
+                if media_type == "voice":
+                    notif_text = premium(f"<b>🗑️ Самоуничтожающееся голосовое от {fullname} (сохранено)</b>")
+                else:
+                    notif_text = premium(f"<b>🗑️ Самоуничтожающееся медиа ({media_type}) от {fullname} (сохранено)</b>")
+            else:
+                notif_text = premium(f"<b>❌ Медиа удалено от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
             await send_notification(user_id, notif_text, files_list)
         else:
+            notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+            if text:
+                notif_text += premium(f"\n\n{text}")
             await send_notification(user_id, notif_text, None)
 
         db.delete_message(bc_id, msg_id)
@@ -1070,13 +1056,13 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 async def main():
     try:
         me = await bot.get_me()
-        logger.info(f"✅ Бот успешно запущен: @{me.username}")
+        logger.info(f"✅ Бот запущен: @{me.username}")
     except Exception as e:
-        logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
+        logger.error(f"❌ Ошибка: {e}")
         raise
 
     await bot.set_my_commands([
-        types.BotCommand(command="start", description=premium("Главное меню"))
+        types.BotCommand(command="start", description="Главное меню")
     ])
     await dp.start_polling(bot)
 
@@ -1086,7 +1072,7 @@ if __name__ == "__main__":
             asyncio.run(main())
             break
         except KeyboardInterrupt:
-            logger.info("Бот остановлен пользователем")
+            logger.info("Бот остановлен")
             break
         except Exception as e:
             logger.error(f"❌ Критическая ошибка: {e}")
