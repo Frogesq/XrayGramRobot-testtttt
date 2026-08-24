@@ -4,6 +4,7 @@ import os
 import json
 import time
 import random
+import aiohttp
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -30,7 +31,13 @@ except ValueError:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
+BANNER_PATH = os.path.join(BASE_DIR, "banner.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
+
+# ===== Ranvik API =====
+RANVIK_API_KEY = "RANVIK_API_KEY"   # ваш ключ
+RANVIK_URL = "https://api.ranvik.ru/v1/chat/completions"
+RANVIK_MODEL = "claude-opus-4"   # можно заменить на любую доступную модель
 
 # ==================== ПРЕМИУМ-ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
@@ -83,6 +90,11 @@ if os.path.exists(INSTRUCTION_IMAGE_PATH):
 else:
     logger.warning("❌ Картинка инструкции НЕ найдена")
 
+if os.path.exists(BANNER_PATH):
+    logger.info("✅ Баннер найден")
+else:
+    logger.warning("❌ Баннер НЕ найден, будет использован текстовый вариант")
+
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
@@ -107,7 +119,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
         except:
             pass
 
-# ==================== КЛАВИАТУРЫ (оригинал) ====================
+# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -260,7 +272,6 @@ def get_user_download_dir(user_id: int) -> str:
     return user_dir
 
 def get_ttl_seconds(message: types.Message) -> int:
-    """Извлекает ttl_seconds из любого медиа-объекта (прямые поля + fallback через content_type)"""
     if message.photo:
         return getattr(message.photo, 'ttl_seconds', 0)
     elif message.video:
@@ -275,7 +286,6 @@ def get_ttl_seconds(message: types.Message) -> int:
         return getattr(message.audio, 'ttl_seconds', 0)
     elif message.animation:
         return getattr(message.animation, 'ttl_seconds', 0)
-    # fallback через content_type
     if message.content_type and message.content_type != 'text':
         obj = getattr(message, message.content_type, None)
         if obj:
@@ -284,12 +294,7 @@ def get_ttl_seconds(message: types.Message) -> int:
             return getattr(obj, 'ttl_seconds', 0)
     return 0
 
-# ========== ОРИГИНАЛЬНАЯ ФУНКЦИЯ СКАЧИВАНИЯ (из первого кода, рабочая) ==========
 async def download_files(message: types.Message, user_id: int) -> list:
-    """
-    Оригинальная функция скачивания медиа из первого кода.
-    Работает для обычных медиа (не исчезающих), но мы её оставляем.
-    """
     file_paths = []
     if not message.content_type:
         return file_paths
@@ -364,15 +369,15 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ КОМАНД (оригинал) ====================
-@dp.message(Command("start"))
-async def start_command(message: types.Message):
-    user = message.from_user
-    user_id = user.id
-    db.register_user(user_id, user.username or "", user.first_name or "", user.last_name or "")
+# ==================== ГЛАВНОЕ МЕНЮ С БАННЕРОМ ====================
+async def send_main_menu(chat_id: int, is_admin: bool, delete_old: types.Message = None):
+    if delete_old:
+        try:
+            await delete_old.delete()
+        except:
+            pass
 
-    is_admin = (user_id == ADMIN_ID)
-    main_text = premium(
+    text = premium(
         "<b>👋 Добро пожаловать в XrayGram!\n\n"
         "🤖 Что умеет бот:\n"
         "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
@@ -380,7 +385,66 @@ async def start_command(message: types.Message):
         "• Сохраняет самоуничтожающиеся медиа.\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
     )
-    await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
+
+    if os.path.exists(BANNER_PATH):
+        photo = FSInputFile(BANNER_PATH)
+        await bot.send_photo(
+            chat_id=chat_id,
+            photo=photo,
+            caption=text,
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(is_admin)
+        )
+    else:
+        await bot.send_message(
+            chat_id=chat_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(is_admin)
+        )
+
+# ==================== ЗАПРОС К RANVIK ====================
+async def ask_ranvik(question: str) -> str:
+    """Отправляет запрос к Ranvik API и возвращает ответ."""
+    headers = {
+        "Authorization": f"Bearer {RANVIK_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "model": RANVIK_MODEL,
+        "messages": [{"role": "user", "content": question}],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(RANVIK_URL, json=payload, headers=headers, timeout=30) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if "choices" in data and len(data["choices"]) > 0:
+                        return data["choices"][0]["message"]["content"].strip()
+                    else:
+                        logger.error(f"Неожиданный ответ Ranvik: {data}")
+                        return "⚠️ Ошибка: неверный формат ответа от API."
+                else:
+                    error_text = await resp.text()
+                    logger.error(f"Ошибка Ranvik {resp.status}: {error_text}")
+                    return f"⚠️ Ошибка API (код {resp.status}). Попробуйте позже."
+    except asyncio.TimeoutError:
+        logger.error("Таймаут при запросе к Ranvik")
+        return "⚠️ Время ожидания ответа истекло."
+    except Exception as e:
+        logger.error(f"Исключение при запросе к Ranvik: {e}")
+        return f"⚠️ Ошибка: {str(e)}"
+
+# ==================== ОБРАБОТЧИКИ КОМАНД ====================
+@dp.message(Command("start"))
+async def start_command(message: types.Message):
+    user = message.from_user
+    user_id = user.id
+    db.register_user(user_id, user.username or "", user.first_name or "", user.last_name or "")
+    is_admin = (user_id == ADMIN_ID)
+    await send_main_menu(message.chat.id, is_admin)
 
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
@@ -420,7 +484,7 @@ async def start_duel(message: types.Message):
         result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
     await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
 
-# ==================== CALLBACK-ЗАПРОСЫ (оригинал) ====================
+# ==================== CALLBACK-ЗАПРОСЫ ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -433,15 +497,7 @@ async def check_subscription(callback: types.CallbackQuery):
             await show_instruction_logic(user_id)
         else:
             is_admin = (user_id == ADMIN_ID)
-            main_text = premium(
-                "<b>👋 Добро пожаловать в XrayGram!\n\n"
-                "🤖 Что умеет бот:\n"
-                "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-                "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
-                "• Сохраняет самоуничтожающиеся медиа.\n\n"
-                "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
-            )
-            await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
+            await send_main_menu(user_id, is_admin)
         await callback.answer("✅ Подписка подтверждена!", show_alert=True)
     else:
         await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и нажмите снова.", show_alert=True)
@@ -489,7 +545,6 @@ async def show_instruction(callback: types.CallbackQuery):
         await callback.message.edit_text(text, reply_markup=subscription_keyboard("show_instruction"), parse_mode="HTML")
         await callback.answer()
         return
-
     await callback.message.delete()
     await show_instruction_logic(user_id)
     await callback.answer()
@@ -503,13 +558,15 @@ async def show_commands(callback: types.CallbackQuery):
         "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
         "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
-        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n\n"
+        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
+        "🤖 .gn &lt;вопрос&gt; – задать вопрос нейросети (ответ придёт в этот же чат).\n\n"
         "Примеры:\n"
         ".mute\n"
         ".unmute\n"
         ".spam 5 Привет!\n"
         ".duel\n"
-        ".anim Привет мир!\n\n"
+        ".anim Привет мир!\n"
+        ".gn Как погода в Москве?\n\n"
         "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -519,15 +576,7 @@ async def show_commands(callback: types.CallbackQuery):
 async def back_to_main(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     is_admin = (user_id == ADMIN_ID)
-    main_text = premium(
-        "<b>👋 Добро пожаловать в XrayGram!\n\n"
-        "🤖 Что умеет бот:\n"
-        "• Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "• Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "• Сохраняет самоуничтожающиеся медиа.\n\n"
-        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях.</b>"
-    )
-    await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
+    await send_main_menu(callback.message.chat.id, is_admin, delete_old=callback.message)
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
@@ -755,6 +804,43 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить сообщение с командой: {e}")
 
+        # ---- .gn ----
+        if text.startswith(".gn "):
+            question = text[4:].strip()
+            if not question:
+                await bot.send_message(
+                    chat_id,
+                    premium("<b>❌ Вы не задали вопрос. Используйте: .gn Ваш вопрос</b>"),
+                    business_connection_id=bc_id,
+                    parse_mode="HTML"
+                )
+                return
+
+            thinking_msg = await bot.send_message(
+                chat_id,
+                premium("<b>🤔 Генерирую ответ...</b>"),
+                business_connection_id=bc_id,
+                parse_mode="HTML"
+            )
+
+            answer = await ask_ranvik(question)
+
+            try:
+                await thinking_msg.edit_text(
+                    premium(f"<b>🤖 Ответ на ваш вопрос:</b>\n\n{answer}"),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Не удалось отредактировать сообщение с ответом: {e}")
+                await bot.send_message(
+                    chat_id,
+                    premium(f"<b>🤖 Ответ на ваш вопрос:</b>\n\n{answer}"),
+                    business_connection_id=bc_id,
+                    parse_mode="HTML"
+                )
+            return
+
+        # ---- .mute ----
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -771,6 +857,7 @@ async def handle_business_message(message: types.Message):
             logger.info(f"[CMD] ✅ .mute выполнен для чата {chat_id}")
             return
 
+        # ---- .unmute ----
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(
@@ -787,6 +874,7 @@ async def handle_business_message(message: types.Message):
             logger.info(f"[CMD] ✅ .unmute выполнен для чата {chat_id}")
             return
 
+        # ---- .spam ----
         if text.startswith(".spam "):
             parts = text.split(maxsplit=2)
             if len(parts) >= 3:
@@ -812,10 +900,12 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
+        # ---- .duel ----
         if text == ".duel":
             await start_duel(message)
             return
 
+        # ---- .anim ----
         if text.startswith(".anim "):
             anim_text = text.replace(".anim", "").strip()
             if not anim_text:
@@ -852,23 +942,20 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Скачиваем медиа (оригинальная функция)
     files = await download_files(message, user_id)
 
-    # Определяем ttl
     ttl = get_ttl_seconds(message)
     is_self_destructing = ttl > 0
 
-    # Сохраняем в БД
     db.save_message(
         bc_id, msg_id, user_id, fullname, text, files,
         is_temporary=getattr(message, 'has_media_spoiler', False),
         ttl_seconds=ttl,
-        media_type=None  # не определяем, не нужно
+        media_type=None
     )
     logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(files)}, ttl={ttl}")
 
-    # ====== 5. УВЕДОМЛЕНИЕ ТОЛЬКО ДЛЯ ИСЧЕЗАЮЩИХ (если чудом сохранились) ======
+    # ====== 5. УВЕДОМЛЕНИЕ ДЛЯ ИСЧЕЗАЮЩИХ ======
     if is_self_destructing and files:
         if message.voice:
             notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
