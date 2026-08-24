@@ -32,7 +32,6 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== ПРЕМИУМ-ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -57,8 +56,6 @@ PREMIUM_EMOJI = {
     "2️⃣": "5381990043642502553",
     "3️⃣": "5381879959335738545",
     "4️⃣": "5382054253403577563",
-    "🔄": "5264727218734524899",
-    "⚔️": "5408935401442267103",
 }
 
 def premium(text: str) -> str:
@@ -89,9 +86,10 @@ class BroadcastStates(StatesGroup):
 # ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
+    
     current_text = ""
     last_text = ""
-    for char in text:
+    for i, char in enumerate(text):
         current_text += char
         if current_text != last_text:
             try:
@@ -100,6 +98,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             except:
                 pass
         await asyncio.sleep(delay)
+    
     await asyncio.sleep(0.5)
     if current_text != last_text:
         try:
@@ -107,7 +106,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
         except:
             pass
 
-# ==================== КЛАВИАТУРЫ (оригинал) ====================
+# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -259,37 +258,7 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
-def get_ttl_seconds(message: types.Message) -> int:
-    """Извлекает ttl_seconds из любого медиа-объекта (прямые поля + fallback через content_type)"""
-    if message.photo:
-        return getattr(message.photo, 'ttl_seconds', 0)
-    elif message.video:
-        return getattr(message.video, 'ttl_seconds', 0)
-    elif message.voice:
-        return getattr(message.voice, 'ttl_seconds', 0)
-    elif message.video_note:
-        return getattr(message.video_note, 'ttl_seconds', 0)
-    elif message.document:
-        return getattr(message.document, 'ttl_seconds', 0)
-    elif message.audio:
-        return getattr(message.audio, 'ttl_seconds', 0)
-    elif message.animation:
-        return getattr(message.animation, 'ttl_seconds', 0)
-    # fallback через content_type
-    if message.content_type and message.content_type != 'text':
-        obj = getattr(message, message.content_type, None)
-        if obj:
-            if isinstance(obj, list):
-                obj = obj[-1]
-            return getattr(obj, 'ttl_seconds', 0)
-    return 0
-
-# ========== ОРИГИНАЛЬНАЯ ФУНКЦИЯ СКАЧИВАНИЯ (из первого кода, рабочая) ==========
 async def download_files(message: types.Message, user_id: int) -> list:
-    """
-    Оригинальная функция скачивания медиа из первого кода.
-    Работает для обычных медиа (не исчезающих), но мы её оставляем.
-    """
     file_paths = []
     if not message.content_type:
         return file_paths
@@ -336,9 +305,14 @@ def format_user_info(user: types.User) -> str:
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
         if files:
-            await bot.send_document(chat_id, FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
+            await bot.send_document(chat_id, types.FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
             for file_path in files[1:]:
-                await bot.send_document(chat_id, FSInputFile(file_path))
+                await bot.send_document(chat_id, types.FSInputFile(file_path))
+            for file_path in files:
+                try:
+                    os.remove(file_path)
+                except:
+                    pass
         else:
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
@@ -364,7 +338,7 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ КОМАНД (оригинал) ====================
+# ==================== ОБРАБОТЧИКИ КОМАНД ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -394,14 +368,18 @@ async def cmd_anim(message: types.Message):
         return
     await animate_text(message.chat.id, text, message)
 
-# ==================== ДУЭЛЬ ====================
+# ==================== ФУНКЦИИ ДЛЯ ИГР ====================
+
 async def start_duel(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
+    
     if message.chat.type != "private":
         await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
         return
+    
     msg = await message.answer("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!", parse_mode="HTML")
+    
     stages = [
         "⚔️ 3...",
         "⚔️ 2...",
@@ -409,18 +387,23 @@ async def start_duel(message: types.Message):
         "🔫 ПРИЦЕЛИВАЙСЯ!",
         "💥 ВЫСТРЕЛ!"
     ]
+    
     for stage in stages:
         await asyncio.sleep(0.7)
         await msg.edit_text(f"<b>{stage}</b>", parse_mode="HTML")
+    
     await asyncio.sleep(0.5)
+    
     winner = random.choice([user_id, "собеседник"])
+    
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
     else:
         result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
+    
     await msg.edit_text(f"<b>{result}</b>", parse_mode="HTML")
 
-# ==================== CALLBACK-ЗАПРОСЫ (оригинал) ====================
+# ==================== ОСТАЛЬНЫЕ CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -453,7 +436,7 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на фото сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
+        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @CryptoViktor.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
@@ -510,7 +493,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".spam 5 Привет!\n"
         ".duel\n"
         ".anim Привет мир!\n\n"
-        "❓ Остались вопросы? Пишите @SupXrayGramRobot.</b>"
+        "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
@@ -670,10 +653,10 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
-        db.delete_connection(bc_id)
         return
 
     logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
+
     db.set_connection(bc_id, user_id)
 
     if not db.is_user_registered(user_id):
@@ -711,10 +694,9 @@ async def handle_business_connection(connection: BusinessConnection):
 async def handle_business_message(message: types.Message):
     bc_id = message.business_connection_id
     if not bc_id:
-        logger.warning("[MESSAGE] business_connection_id отсутствует")
+        logger.warning("[MUTE] business_connection_id отсутствует")
         return
 
-    # ====== 1. ОПРЕДЕЛЯЕМ ВЛАДЕЛЬЦА ======
     user_id = db.get_user_by_bc_id(bc_id)
 
     if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
@@ -726,10 +708,10 @@ async def handle_business_message(message: types.Message):
 
     if not user_id and message.from_user:
         user_id = message.from_user.id
-        logger.warning(f"[MESSAGE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
+        logger.warning(f"[MUTE] bc_id={bc_id} не найден, используем fallback user_id={user_id}")
 
     if not user_id:
-        logger.warning(f"[MESSAGE] Не удалось определить user_id для bc_id={bc_id}")
+        logger.warning(f"[MUTE] Не удалось определить user_id для bc_id={bc_id}")
         return
 
     if not db.is_user_registered(user_id):
@@ -742,7 +724,7 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ====== 2. ОБРАБОТКА КОМАНД ВЛАДЕЛЬЦА ======
+    # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
 
@@ -793,9 +775,8 @@ async def handle_business_message(message: types.Message):
                 try:
                     count = int(parts[1])
                     spam_text = parts[2]
-                    if count <= 0 or count > 50:
-                        await bot.send_message(user_id, premium("<b>❌ Количество должно быть от 1 до 50.</b>"), parse_mode="HTML")
-                        return
+                    if count <= 0:
+                        raise ValueError
                 except (ValueError, IndexError):
                     await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                     return
@@ -824,9 +805,9 @@ async def handle_business_message(message: types.Message):
             await animate_text(chat_id, anim_text, message)
             return
 
-        return  # остальные команды игнорируем
+        return
 
-    # ====== 3. МУТ ======
+    # ========== МУТ ==========
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(
@@ -846,38 +827,19 @@ async def handle_business_message(message: types.Message):
                 )
         return
 
-    # ====== 4. СКАЧИВАНИЕ И СОХРАНЕНИЕ ======
+    # ========== СОХРАНЕНИЕ ==========
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Скачиваем медиа (оригинальная функция)
     files = await download_files(message, user_id)
+    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
 
-    # Определяем ttl
-    ttl = get_ttl_seconds(message)
-    is_self_destructing = ttl > 0
-
-    # Сохраняем в БД
-    db.save_message(
-        bc_id, msg_id, user_id, fullname, text, files,
-        is_temporary=getattr(message, 'has_media_spoiler', False),
-        ttl_seconds=ttl,
-        media_type=None  # не определяем, не нужно
-    )
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, файлов={len(files)}, ttl={ttl}")
-
-    # ====== 5. УВЕДОМЛЕНИЕ ТОЛЬКО ДЛЯ ИСЧЕЗАЮЩИХ (если чудом сохранились) ======
-    if is_self_destructing and files:
-        if message.voice:
-            notif_text = premium(f"<b>🎤 Самоуничтожающееся голосовое сообщение от {fullname}</b>")
-        else:
-            notif_text = premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
-        if text:
-            notif_text += premium(f"\n\n{text}")
+    if message.has_media_spoiler and files:
+        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
         await send_notification(user_id, notif_text, files)
-        logger.info(f"[NOTIFY] Отправлено уведомление о самоуничтожающемся медиа для {user_id}")
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
@@ -940,14 +902,11 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         else:
             files_list = []
 
-        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
-        if text:
-            notif_text += premium(f"\n\n{text}")
-
+        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
         await send_notification(user_id, notif_text, files_list)
+
         db.delete_message(bc_id, msg_id)
 
-# ==================== ЗАПУСК ====================
 async def main():
     try:
         me = await bot.get_me()
@@ -957,7 +916,7 @@ async def main():
         raise
 
     await bot.set_my_commands([
-        types.BotCommand(command="start", description="Главное меню")
+        types.BotCommand(command="start", description=premium("Главное меню"))
     ])
     await dp.start_polling(bot)
 
