@@ -453,7 +453,7 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на фото сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @CryptoViktor.</b>"
+        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
@@ -510,7 +510,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".spam 5 Привет!\n"
         ".duel\n"
         ".anim Привет мир!\n\n"
-        "❓ Остались вопросы? Пишите @CryptoViktor.</b>"
+        "❓ Остались вопросы? Пишите @SupXrayGramRobot.</b>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
