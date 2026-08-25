@@ -1125,35 +1125,33 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== НОВАЯ ЛОГИКА: ПРИ ОТВЕТЕ ОТПРАВЛЯЕМ СОХРАНЁННОЕ ИЗ БД =====
+    # ===== НОВАЯ ЛОГИКА (как в open source проектах) =====
+    # При ответе на любое сообщение с медиа – отправляем сохранённые файлы из БД
     if message.reply_to_message and is_owner:
         original_msg_id = message.reply_to_message.message_id
-        # Ищем сохранённое сообщение в БД по bc_id и msg_id
         data = db.get_message(bc_id, original_msg_id)
         if data and data["files"]:
-            files_json = data["files"]
-            if files_json:
-                files_list = json.loads(files_json) if isinstance(files_json, str) else files_json
-                if files_list:
-                    # Отправляем каждый файл владельцу
-                    for file_path in files_list:
+            files_list = json.loads(data["files"]) if isinstance(data["files"], str) else data["files"]
+            if files_list:
+                for file_path in files_list:
+                    if os.path.exists(file_path):
                         try:
-                            if os.path.exists(file_path):
-                                await bot.send_document(user_id, FSInputFile(file_path))
-                            else:
-                                logger.warning(f"[REPLY] Файл не найден: {file_path}")
+                            await bot.send_document(
+                                chat_id=user_id,
+                                document=FSInputFile(file_path),
+                                caption=f"💾 Сохранено от {data['fullname']}"
+                            )
+                            logger.info(f"[REPLY] Отправлен файл {file_path} пользователю {user_id}")
                         except Exception as e:
                             logger.error(f"[REPLY] Ошибка отправки файла {file_path}: {e}")
-                    # Уведомление
-                    sender_name = data["fullname"] or "Неизвестный"
-                    await bot.send_message(
-                        user_id,
-                        premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
-                        parse_mode="HTML"
-                    )
-                    logger.info(f"[REPLY] ✅ Медиа отправлено из БД для {user_id}")
-                else:
-                    logger.info("[REPLY] В БД нет файлов для этого сообщения")
+                    else:
+                        logger.warning(f"[REPLY] Файл не найден: {file_path}")
+                # Уведомление о том, что все файлы отправлены
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                    parse_mode="HTML"
+                )
             else:
                 logger.info("[REPLY] В БД нет файлов для этого сообщения")
         else:
