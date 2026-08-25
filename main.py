@@ -297,14 +297,14 @@ def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text="🔗 Подключить бота",
+                text="Подключить бота",
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text="📋 Команды",
+                text="Команды",
                 callback_data="show_commands",
                 style="success"
             )
@@ -313,7 +313,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text="⚙️ Админ-панель",
+                text="    Админ-панель",
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -436,7 +436,7 @@ async def send_main_menu(chat_id: int, is_admin: bool):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "Сохраняет самоуничтожающиеся медиа. (soon)</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     reply_markup = main_menu_keyboard(is_admin)
@@ -846,7 +846,7 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на фото сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @CryptoViktor.</b>"
+        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
@@ -907,7 +907,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".anim Привет мир!\n"
         ".ttt\n"
         ".gn Как дела?</blockquote>\n\n"
-        "❓ Остались вопросы? Пишите @CryptoViktor."
+        "❓ Остались вопросы? Пишите @SupXrayGramRobot."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
