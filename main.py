@@ -19,7 +19,6 @@ from aiogram.types import (
 )
 from database import Database
 
-# Отключение предупреждений об SSL
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 load_dotenv()
@@ -39,12 +38,10 @@ INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-# ==================== GIGACHAT НАСТРОЙКИ ====================
 GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
 GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
-# ==================== PREMIUM ЭМОДЗИ ====================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -106,10 +103,7 @@ else:
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
-# ==================== GIGACHAT (РАБОЧАЯ ВЕРСИЯ) ====================
 class GigaChatAPI:
-    """Класс для работы с GigaChat API"""
-    
     def __init__(self, api_key: str):
         self.api_key = api_key
         self._access_token = None
@@ -119,10 +113,8 @@ class GigaChatAPI:
         self._session.timeout = 60
         
     def _get_access_token(self) -> str | None:
-        """Получение токена доступа"""
         if self._access_token and time.time() < self._token_expires:
             return self._access_token
-            
         try:
             headers = {
                 "Authorization": f"Basic {self.api_key}",
@@ -130,14 +122,12 @@ class GigaChatAPI:
                 "RqUID": "6f0b1291-c7f3-4c6a-a5e7-8a6b5d3e2f1a",
                 "Accept": "application/json"
             }
-            
             response = self._session.post(
                 GIGACHAT_AUTH_URL,
                 headers=headers,
                 data={"scope": "GIGACHAT_API_PERS"},
                 timeout=60
             )
-            
             if response.status_code == 200:
                 data = response.json()
                 token = data.get("access_token")
@@ -148,43 +138,35 @@ class GigaChatAPI:
                     return token
             else:
                 logger.error(f"Ошибка получения токена: {response.status_code} - {response.text}")
-                
         except Exception as e:
             logger.error(f"Ошибка получения токена: {e}")
-        
         return None
     
     def get_text_response(self, messages: list) -> str:
-        """Получение ответа от GigaChat"""
         token = self._get_access_token()
         if not token:
             return "🔧 Сервис временно недоступен. Пожалуйста, попробуйте позже."
-        
         try:
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json"
             }
-            
             system_message = {
                 "role": "system",
                 "content": "Ты - полезный и вежливый ассистент. Отвечай на русском языке подробно и понятно."
             }
-            
             data = {
                 "model": "GigaChat",
                 "messages": [system_message] + messages,
                 "temperature": 0.7,
                 "max_tokens": 2000
             }
-            
             response = self._session.post(
                 GIGACHAT_API_URL,
                 headers=headers,
                 json=data,
                 timeout=60
             )
-            
             if response.status_code == 200:
                 result = response.json()
                 if "choices" in result and len(result["choices"]) > 0:
@@ -193,29 +175,22 @@ class GigaChatAPI:
                     text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t').strip()
                     if text:
                         return self._format_response(text)
-            
             return "⚠️ Не удалось получить ответ. Попробуйте переформулировать вопрос."
-            
         except Exception as e:
             logger.error(f"Ошибка GigaChat API: {e}")
             return "❌ Ошибка при обработке запроса. Пожалуйста, попробуйте позже."
     
     def _format_response(self, text: str) -> str:
-        """Форматирование ответа"""
         formatted = "🤖 <b>Ответ:</b>\n\n"
-        
         paragraphs = text.split('\n\n')
         for paragraph in paragraphs:
             if paragraph.strip():
                 formatted += paragraph.strip() + "\n\n"
-        
         formatted += "─\nБот - @XrayGramRobot"
         return formatted
 
-# Инициализация GigaChat
 giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
-# ==================== TTT ====================
 ttt_games = {}
 
 def ttt_board_to_text(board):
@@ -269,10 +244,8 @@ def ttt_keyboard(board, game_id):
     )])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-# ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
-    
     current_text = ""
     last_text = ""
     for i, char in enumerate(text):
@@ -284,7 +257,6 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             except:
                 pass
         await asyncio.sleep(delay)
-    
     await asyncio.sleep(0.5)
     if current_text != last_text:
         try:
@@ -292,7 +264,6 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
         except:
             pass
 
-# ==================== КЛАВИАТУРЫ ====================
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
@@ -428,10 +399,7 @@ def commands_keyboard():
         ]
     )
 
-# ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-
 async def send_main_menu(chat_id: int, is_admin: bool):
-    """Отправляет главное меню с баннером (если есть)"""
     main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
@@ -473,70 +441,7 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
-# ===== УЛУЧШЕННАЯ ФУНКЦИЯ С ДИАГНОСТИКОЙ =====
-def get_media_file_id(message: types.Message) -> tuple:
-    """
-    Извлекает file_id и тип медиа из сообщения.
-    Включает диагностику для бизнес-сообщений.
-    Возвращает (file_id, media_type) или (None, None)
-    """
-    # Логируем все атрибуты для диагностики
-    logger.info(f"[DIAG] content_type={message.content_type}")
-    logger.info(f"[DIAG] has_media={message.has_media_spoiler}")
-    logger.info(f"[DIAG] media_ttl_seconds={getattr(message, 'media_ttl_seconds', None)}")
-    
-    # Проверяем стандартные атрибуты
-    if message.photo:
-        file_id = message.photo[-1].file_id
-        logger.info(f"[DIAG] Найден photo, file_id={file_id[:10]}...")
-        return file_id, "photo"
-    elif message.video:
-        file_id = message.video.file_id
-        logger.info(f"[DIAG] Найден video, file_id={file_id[:10]}...")
-        return file_id, "video"
-    elif message.voice:
-        file_id = message.voice.file_id
-        logger.info(f"[DIAG] Найден voice, file_id={file_id[:10]}...")
-        return file_id, "voice"
-    elif message.video_note:
-        file_id = message.video_note.file_id
-        logger.info(f"[DIAG] Найден video_note, file_id={file_id[:10]}...")
-        return file_id, "video_note"
-    elif message.document:
-        file_id = message.document.file_id
-        logger.info(f"[DIAG] Найден document, file_id={file_id[:10]}...")
-        return file_id, "document"
-    elif message.audio:
-        file_id = message.audio.file_id
-        logger.info(f"[DIAG] Найден audio, file_id={file_id[:10]}...")
-        return file_id, "audio"
-    elif message.animation:
-        file_id = message.animation.file_id
-        logger.info(f"[DIAG] Найден animation, file_id={file_id[:10]}...")
-        return file_id, "animation"
-    elif message.sticker:
-        file_id = message.sticker.file_id
-        logger.info(f"[DIAG] Найден sticker, file_id={file_id[:10]}...")
-        return file_id, "sticker"
-    
-    # Дополнительная проверка через message.media (для бизнес-сообщений)
-    if hasattr(message, 'media') and message.media:
-        media = message.media
-        logger.info(f"[DIAG] Найден media, type={type(media)}")
-        if hasattr(media, 'file_id'):
-            file_id = media.file_id
-            logger.info(f"[DIAG] media.file_id={file_id[:10]}...")
-            # Попробуем определить тип
-            if hasattr(media, 'type'):
-                return file_id, media.type
-            return file_id, "unknown"
-    
-    # Если ничего не нашли, логируем полный объект
-    logger.warning(f"[DIAG] Не удалось найти file_id. Полный объект: {message}")
-    return None, None
-
 async def download_files(message: types.Message, user_id: int) -> list:
-    """Скачивает медиа на диск (для обычных медиа) или сохраняет file_id в БД"""
     file_paths = []
     if not message.content_type:
         return file_paths
@@ -617,7 +522,26 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
-# ==================== ОБРАБОТЧИКИ КОМАНД ====================
+# ===== НОВАЯ ФУНКЦИЯ ДЛЯ СОХРАНЕНИЯ САМОУНИЧТОЖАЮЩЕГОСЯ МЕДИА =====
+async def save_self_destructing_media(message: types.Message, user_id: int, bc_id: str):
+    """Немедленно копирует самоуничтожающееся медиа в ЛС владельца"""
+    try:
+        await bot.copy_message(
+            chat_id=user_id,
+            from_chat_id=message.chat.id,
+            message_id=message.message_id
+        )
+        await bot.send_message(
+            user_id,
+            premium("<b>💾 Самоуничтожающееся медиа сохранено</b>"),
+            parse_mode="HTML"
+        )
+        logger.info(f"[SAVE_SD] ✅ Медиа скопировано в ЛС для {user_id}")
+        return True
+    except Exception as e:
+        logger.error(f"[SAVE_SD] ❌ Ошибка копирования: {e}")
+        return False
+
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -647,20 +571,15 @@ async def cmd_gn(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     bc_id = message.business_connection_id
-    
     question = message.text.replace("/gn", "").strip()
     if not question:
         await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
         return
-    
     loading_msg = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-    
     try:
         messages = [{"role": "user", "content": question}]
         answer = giga_chat.get_text_response(messages)
-        
         await loading_msg.delete()
-        
         if bc_id:
             await bot.send_message(
                 chat_id,
@@ -682,18 +601,13 @@ async def cmd_gn(message: types.Message):
             parse_mode="HTML"
         )
 
-# ==================== ФУНКЦИИ ДЛЯ ИГР ====================
-
 async def start_duel(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    
     if message.chat.type != "private":
         await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
         return
-    
     msg = await message.answer(premium("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!"), parse_mode="HTML")
-    
     stages = [
         "⚔️ 3...",
         "⚔️ 2...",
@@ -701,36 +615,26 @@ async def start_duel(message: types.Message):
         "🔫 ПРИЦЕЛИВАЙСЯ!",
         "💥 ВЫСТРЕЛ!"
     ]
-    
     for stage in stages:
         await asyncio.sleep(0.7)
         await msg.edit_text(premium(f"<b>{stage}</b>"), parse_mode="HTML")
-    
     await asyncio.sleep(0.5)
-    
     winner = random.choice([user_id, chat_id])
-    
     if winner == user_id:
         result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
     else:
         result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
-    
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
-
-# ==================== TTT ====================
 
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
-    
     if message.chat.type != "private":
         await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
         return
-    
     if chat_id in ttt_games:
         await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
         return
-    
     board = [" "] * 9
     game_id = int(time.time())
     ttt_games[chat_id] = {
@@ -740,9 +644,7 @@ async def start_ttt(message: types.Message):
         "player_o": 0,
         "game_id": game_id
     }
-    
     player_x_name = format_user_info(message.from_user)
-    
     await message.answer(
         premium(
             f"<b>❌⭕ Крестики-Нолики</b>\n\n"
@@ -758,11 +660,9 @@ async def ttt_callback(callback: types.CallbackQuery):
     data = callback.data
     user_id = callback.from_user.id
     chat_id = callback.message.chat.id
-    
     if data == "ttt_no":
         await callback.answer("⏳ Занято!")
         return
-    
     if data.startswith("ttt_end_"):
         game_id = int(data.replace("ttt_end_", ""))
         if chat_id in ttt_games and ttt_games[chat_id]["game_id"] == game_id:
@@ -770,34 +670,27 @@ async def ttt_callback(callback: types.CallbackQuery):
         await callback.message.delete()
         await callback.answer("🔴 Игра завершена!")
         return
-    
     parts = data.split("_")
     if len(parts) != 3:
         await callback.answer("❌ Ошибка!")
         return
-    
     try:
         game_id = int(parts[1])
         cell = int(parts[2])
     except:
         await callback.answer("❌ Ошибка!")
         return
-    
     if chat_id not in ttt_games:
         await callback.answer("❌ Игра не найдена!")
         return
-    
     game = ttt_games[chat_id]
-    
     if game["game_id"] != game_id:
         await callback.answer("❌ Игра не найдена!")
         return
-    
     board = game["board"]
     turn = game["turn"]
     player_x = game["player_x"]
     player_o = game["player_o"]
-    
     if turn == "X":
         if user_id != player_x:
             await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
@@ -808,24 +701,19 @@ async def ttt_callback(callback: types.CallbackQuery):
             game["player_o"] = user_id
             logger.info(f"[TTT] Игрок O определён: {user_id}")
             ttt_games[chat_id] = game
-        
         if user_id != game["player_o"]:
             await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
             return
-    
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
         return
-    
     board[cell] = turn
     winner = ttt_check_winner(board)
-    
     if winner:
         try:
             player_x_name = format_user_info(await bot.get_chat(player_x))
         except:
             player_x_name = "Игрок X"
-        
         if player_o:
             try:
                 player_o_name = format_user_info(await bot.get_chat(player_o))
@@ -833,14 +721,12 @@ async def ttt_callback(callback: types.CallbackQuery):
                 player_o_name = "Игрок O"
         else:
             player_o_name = "Игрок O"
-        
         if winner == "X":
             result_text = f"🏆 <b>Победили КРЕСТИКИ! ({player_x_name})</b>"
         elif winner == "O":
             result_text = f"🏆 <b>Победили НОЛИКИ! ({player_o_name})</b>"
         else:
             result_text = "🤝 <b>Ничья!</b>"
-        
         await callback.message.edit_text(
             premium(f"{ttt_board_to_text(board)}\n\n{result_text}"),
             parse_mode="HTML"
@@ -848,14 +734,11 @@ async def ttt_callback(callback: types.CallbackQuery):
         del ttt_games[chat_id]
         await callback.answer("🏆 Игра завершена!")
         return
-    
     game["turn"] = "O" if turn == "X" else "X"
-    
     try:
         player_x_name = format_user_info(await bot.get_chat(player_x))
     except:
         player_x_name = "Игрок X"
-    
     if player_o:
         try:
             player_o_name = format_user_info(await bot.get_chat(player_o))
@@ -863,11 +746,9 @@ async def ttt_callback(callback: types.CallbackQuery):
             player_o_name = "Игрок O"
     else:
         player_o_name = "Ожидание соперника..."
-    
     new_turn = game["turn"]
     turn_symbol = "❌" if new_turn == "X" else "⭕"
     turn_player = player_x_name if new_turn == "X" else player_o_name
-    
     await callback.message.edit_text(
         premium(
             f"<b>❌⭕ Крестики-Нолики</b>\n\n"
@@ -879,13 +760,11 @@ async def ttt_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-# ==================== ОСТАЛЬНЫЕ CALLBACK ====================
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("|")
     action = parts[1] if len(parts) > 1 else None
-
     if await is_subscribed(user_id):
         await callback.message.delete()
         if action == "show_instruction":
@@ -940,7 +819,6 @@ async def show_instruction(callback: types.CallbackQuery):
         await callback.message.edit_text(text, reply_markup=subscription_keyboard("show_instruction"), parse_mode="HTML")
         await callback.answer()
         return
-
     await callback.message.delete()
     await show_instruction_logic(user_id)
     await callback.answer()
@@ -1023,16 +901,13 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         await state.clear()
         return
-
     cursor = db.conn.cursor()
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
-
     if not users:
         await message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
         await state.clear()
         return
-
     sent = 0
     failed = 0
     for (user_id,) in users:
@@ -1047,7 +922,6 @@ async def process_broadcast(message: types.Message, state: FSMContext):
         except Exception as e:
             logger.error(f"Ошибка отправки пользователю {user_id}: {e}")
             failed += 1
-
     result_text = premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>")
     await message.answer(result_text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
@@ -1057,16 +931,13 @@ async def users_txt(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-
     cursor = db.conn.cursor()
     cursor.execute("SELECT user_id, username, first_name, last_name, registered_at FROM users ORDER BY registered_at DESC")
     users = cursor.fetchall()
-
     if not users:
         await callback.message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
         await callback.answer()
         return
-
     content = "Список всех зарегистрированных пользователей XrayGram\n"
     content += f"Всего: {len(users)}\n"
     content += "=" * 50 + "\n\n"
@@ -1078,7 +949,6 @@ async def users_txt(callback: types.CallbackQuery):
         content += f"ID: {user_id}\n"
         content += f"Зарегистрирован: {reg_time}\n"
         content += "-" * 30 + "\n"
-
     file_bytes = content.encode("utf-8")
     await callback.message.answer_document(
         BufferedInputFile(file_bytes, filename="users_list.txt"),
@@ -1092,7 +962,6 @@ async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-
     cursor = db.conn.cursor()
     cursor.execute("SELECT DISTINCT user_id FROM connections")
     conn_users = cursor.fetchall()
@@ -1105,29 +974,22 @@ async def active_connections(callback: types.CallbackQuery):
         users = cursor.fetchall()
         lines = [f"• {u[2] or ''} {u[3] or ''} (@{u[1]}) - ID: {u[0]}" for u in users]
         text = premium(f"<b>🔗 Активные подключения ({len(users)})\n\n" + "\n".join(lines) + "</b>")
-
     await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await callback.answer()
 
-# ==================== БИЗНЕС-ОБРАБОТЧИКИ ====================
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
     user_id = connection.user.id
     is_enabled = connection.is_enabled
-
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
         return
-
     logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
-
     db.set_connection(bc_id, user_id)
-
     if not db.is_user_registered(user_id):
         user = connection.user
         db.register_user(user_id, user.username, user.first_name, user.last_name)
-
     try:
         await bot.send_message(
             user_id,
@@ -1138,7 +1000,6 @@ async def handle_business_connection(connection: BusinessConnection):
         )
     except Exception as e:
         logger.error(f"[CONN] Не удалось отправить уведомление пользователю {user_id}: {e}")
-
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -1163,7 +1024,6 @@ async def handle_business_message(message: types.Message):
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
-
     if not user_id and message.from_user and message.from_user.id == ADMIN_ID:
         db.set_connection(bc_id, ADMIN_ID)
         if not db.is_user_registered(ADMIN_ID):
@@ -1189,73 +1049,60 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== ЛОГИКА ОТВЕТА (по методу iSeeAllRobot) =====
+    # ===== ОБНАРУЖЕНИЕ САМОУНИЧТОЖАЮЩЕГОСЯ МЕДИА =====
+    ttl = getattr(message, 'media_ttl_seconds', 0)
+    has_media = bool(message.photo or message.video or message.voice or 
+                     message.video_note or message.document or message.audio or 
+                     message.animation or message.sticker)
+    
+    if has_media and ttl > 0 and not is_owner:
+        fullname = format_user_info(message.from_user) if message.from_user else "Неизвестный"
+        logger.info(f"[SD] Обнаружено самоуничтожающееся медиа (ttl={ttl}) от {fullname}")
+        await save_self_destructing_media(message, user_id, bc_id)
+        # Не прерываем обработку, чтобы также сохранить в БД (но файлы уже скопированы)
+        # Можно добавить return, если не нужно сохранять в БД
+
+    # ===== ОТВЕТ НА СООБЩЕНИЕ (если владелец ответил) =====
     if message.reply_to_message and is_owner:
         original_msg_id = message.reply_to_message.message_id
         logger.info(f"[REPLY] Ищем в БД сообщение bc_id={bc_id}, msg_id={original_msg_id}")
         data = db.get_message(bc_id, original_msg_id)
         if data:
-            file_id = data.get("file_id")
-            if file_id:
-                try:
-                    await bot.send_document(
-                        chat_id=user_id,
-                        document=file_id,
-                        caption=f"💾 Сохранено от {data['fullname']}"
-                    )
-                    logger.info(f"[REPLY] ✅ Отправлено по file_id (документ) для {user_id}")
-                    await bot.send_message(
-                        user_id,
-                        premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
-                        parse_mode="HTML"
-                    )
-                except Exception as e:
-                    logger.error(f"[REPLY] ❌ Ошибка отправки по file_id: {e}")
-                    files_list = json.loads(data["files"]) if data["files"] else []
-                    if files_list:
-                        for file_path in files_list:
-                            if os.path.exists(file_path):
-                                try:
-                                    await bot.send_document(
-                                        chat_id=user_id,
-                                        document=FSInputFile(file_path),
-                                        caption=f"💾 Сохранено от {data['fullname']}"
-                                    )
-                                    logger.info(f"[REPLY] ✅ Отправлен файл {file_path}")
-                                except Exception as e2:
-                                    logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
-                        await bot.send_message(
-                            user_id,
-                            premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
-                            parse_mode="HTML"
-                        )
-                    else:
-                        logger.info("[REPLY] Нет сохранённых файлов")
+            # Отправляем сохранённые файлы
+            files_list = json.loads(data["files"]) if data["files"] else []
+            if files_list:
+                for file_path in files_list:
+                    if os.path.exists(file_path):
+                        try:
+                            await bot.send_document(
+                                chat_id=user_id,
+                                document=FSInputFile(file_path),
+                                caption=f"💾 Сохранено от {data['fullname']}"
+                            )
+                            logger.info(f"[REPLY] ✅ Отправлен файл {file_path}")
+                        except Exception as e:
+                            logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e}")
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                    parse_mode="HTML"
+                )
             else:
-                logger.info("[REPLY] file_id отсутствует, пробуем отправить файлы с диска")
-                files_list = json.loads(data["files"]) if data["files"] else []
-                if files_list:
-                    for file_path in files_list:
-                        if os.path.exists(file_path):
-                            try:
-                                await bot.send_document(
-                                    chat_id=user_id,
-                                    document=FSInputFile(file_path),
-                                    caption=f"💾 Сохранено от {data['fullname']}"
-                                )
-                                logger.info(f"[REPLY] ✅ Отправлен файл {file_path}")
-                            except Exception as e2:
-                                logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
-                    await bot.send_message(
-                        user_id,
-                        premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
-                        parse_mode="HTML"
-                    )
-                else:
-                    logger.info("[REPLY] Нет сохранённых файлов")
+                # Если файлов нет, пробуем отправить по file_id
+                file_id = data.get("file_id")
+                if file_id:
+                    try:
+                        await bot.send_document(
+                            chat_id=user_id,
+                            document=file_id,
+                            caption=f"💾 Сохранено от {data['fullname']}"
+                        )
+                        logger.info(f"[REPLY] ✅ Отправлено по file_id (документ)")
+                    except Exception as e:
+                        logger.error(f"[REPLY] ❌ Ошибка отправки по file_id: {e}")
         else:
             logger.info("[REPLY] Сообщение не найдено в БД")
-            # Fallback: пробуем скопировать оригинал (если ещё доступен)
+            # Fallback: пробуем скопировать оригинал
             try:
                 await bot.copy_message(
                     chat_id=user_id,
@@ -1264,7 +1111,7 @@ async def handle_business_message(message: types.Message):
                 )
                 await bot.send_message(
                     user_id,
-                    premium("<b>⚠️ Медиа было скопировано напрямую (возможно, самоуничтожающееся)</b>"),
+                    premium("<b>⚠️ Медиа было скопировано напрямую</b>"),
                     parse_mode="HTML"
                 )
                 logger.info("[REPLY] ✅ Удалось скопировать оригинал в ЛС")
@@ -1274,7 +1121,6 @@ async def handle_business_message(message: types.Message):
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
-
         try:
             await bot.delete_business_messages(
                 business_connection_id=bc_id,
@@ -1361,15 +1207,11 @@ async def handle_business_message(message: types.Message):
             if not question:
                 await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
                 return
-            
             loading_msg = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
-            
             try:
                 messages = [{"role": "user", "content": question}]
                 answer = giga_chat.get_text_response(messages)
-                
                 await loading_msg.delete()
-                
                 await bot.send_message(
                     chat_id,
                     premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -1384,7 +1226,6 @@ async def handle_business_message(message: types.Message):
                     parse_mode="HTML"
                 )
             return
-
         return
 
     # ========== МУТ ==========
@@ -1413,14 +1254,35 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Получаем file_id и media_type (с диагностикой)
-    file_id, media_type = get_media_file_id(message)
-    logger.info(f"[DIAG] Получен file_id={file_id}, media_type={media_type}")
+    # Сохраняем file_id (если есть)
+    file_id = None
+    media_type = None
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        media_type = "photo"
+    elif message.video:
+        file_id = message.video.file_id
+        media_type = "video"
+    elif message.voice:
+        file_id = message.voice.file_id
+        media_type = "voice"
+    elif message.video_note:
+        file_id = message.video_note.file_id
+        media_type = "video_note"
+    elif message.document:
+        file_id = message.document.file_id
+        media_type = "document"
+    elif message.audio:
+        file_id = message.audio.file_id
+        media_type = "audio"
+    elif message.animation:
+        file_id = message.animation.file_id
+        media_type = "animation"
+    elif message.sticker:
+        file_id = message.sticker.file_id
+        media_type = "sticker"
 
-    # Скачиваем файлы (если возможно)
     files = await download_files(message, user_id)
-    
-    # Сохраняем в БД, передавая file_id
     db.save_message(
         bc_id, msg_id, user_id, fullname, text, files,
         file_id=file_id,
@@ -1440,39 +1302,30 @@ async def handle_edited_business_message(message: types.Message):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
-
     chat_id = message.chat.id
     if db.is_chat_muted(user_id, chat_id):
         return
-
     msg_id = message.message_id
     new_text = message.text or message.caption or ""
-
     old_data = db.get_message(bc_id, msg_id)
     if not old_data:
         return
-
     old_text = old_data["text"] or ""
     old_fullname = old_data["fullname"]
-
     if new_text.strip() == old_text.strip():
         return
-
     db.update_message_text(bc_id, msg_id, new_text)
-
     new_sender = message.from_user
     if new_sender:
         new_fullname = format_user_info(new_sender)
         if new_fullname != old_fullname:
             db.update_message_fullname(bc_id, msg_id, new_fullname)
             old_fullname = new_fullname
-
     files = old_data["files"]
     if files:
         files_list = json.loads(files) if isinstance(files, str) else files
     else:
         files_list = []
-
     notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
     await send_notification(user_id, notif_text, files_list)
 
@@ -1482,7 +1335,6 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
-
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
@@ -1494,10 +1346,8 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
             files_list = json.loads(files) if isinstance(files, str) else files
         else:
             files_list = []
-
         notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
         await send_notification(user_id, notif_text, files_list)
-
         db.delete_message(bc_id, msg_id)
 
 async def main():
@@ -1507,7 +1357,6 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
         raise
-
     await bot.set_my_commands([
         types.BotCommand(command="start", description=premium("Главное меню"))
     ])
