@@ -1125,79 +1125,39 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== НОВАЯ ЛОГИКА: СОХРАНЕНИЕ МЕДИА ПРИ ОТВЕТЕ (БЕЗ ПРОВЕРКИ ttl) =====
+    # ===== НОВАЯ ЛОГИКА: ПРИ ОТВЕТЕ ОТПРАВЛЯЕМ СОХРАНЁННОЕ ИЗ БД =====
     if message.reply_to_message and is_owner:
-        original = message.reply_to_message
-        # Проверяем, есть ли в оригинальном сообщении медиа
-        has_media = (
-            original.photo or original.video or original.voice or 
-            original.video_note or original.document or original.audio or 
-            original.animation or original.sticker
-        )
-        
-        if has_media:
-            logger.info(f"[REPLY] Владелец ответил на сообщение с медиа от {original.from_user.id if original.from_user else 'неизвестно'}")
-            try:
-                # Копируем оригинальное медиа в ЛС владельца
-                await bot.copy_message(
-                    chat_id=user_id,
-                    from_chat_id=chat_id,
-                    message_id=original.message_id
-                )
-                sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
-                    parse_mode="HTML"
-                )
-                logger.info(f"[REPLY] ✅ Медиа сохранено для {user_id}")
-            except Exception as e:
-                logger.error(f"[REPLY] ❌ Ошибка сохранения медиа через copy_message: {e}")
-                # Fallback: отправка напрямую по file_id
-                try:
-                    media = None
-                    media_type = None
-                    if original.photo:
-                        media = original.photo[-1]
-                        media_type = "photo"
-                    elif original.video:
-                        media = original.video
-                        media_type = "video"
-                    elif original.voice:
-                        media = original.voice
-                        media_type = "voice"
-                    elif original.video_note:
-                        media = original.video_note
-                        media_type = "video_note"
-                    elif original.document:
-                        media = original.document
-                        media_type = "document"
-                    elif original.audio:
-                        media = original.audio
-                        media_type = "audio"
-                    elif original.animation:
-                        media = original.animation
-                        media_type = "animation"
-                    elif original.sticker:
-                        media = original.sticker
-                        media_type = "sticker"
-                    
-                    if media and media_type:
-                        send_func = getattr(bot, f"send_{media_type}")
-                        await send_func(user_id, media.file_id)
-                        sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
-                        await bot.send_message(
-                            user_id,
-                            premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
-                            parse_mode="HTML"
-                        )
-                        logger.info(f"[REPLY] ✅ Медиа сохранено (fallback) для {user_id}")
-                    else:
-                        logger.error("[REPLY] Не удалось определить тип медиа для отправки")
-                except Exception as e2:
-                    logger.error(f"[REPLY] ❌ Ошибка отправки через fallback: {e2}")
-            
-            # ВАЖНО: НЕ ПРЕРЫВАЕМ ОБРАБОТКУ! Ответное сообщение сохраняется как обычно.
+        original_msg_id = message.reply_to_message.message_id
+        # Ищем сохранённое сообщение в БД по bc_id и msg_id
+        data = db.get_message(bc_id, original_msg_id)
+        if data and data["files"]:
+            files_json = data["files"]
+            if files_json:
+                files_list = json.loads(files_json) if isinstance(files_json, str) else files_json
+                if files_list:
+                    # Отправляем каждый файл владельцу
+                    for file_path in files_list:
+                        try:
+                            if os.path.exists(file_path):
+                                await bot.send_document(user_id, FSInputFile(file_path))
+                            else:
+                                logger.warning(f"[REPLY] Файл не найден: {file_path}")
+                        except Exception as e:
+                            logger.error(f"[REPLY] Ошибка отправки файла {file_path}: {e}")
+                    # Уведомление
+                    sender_name = data["fullname"] or "Неизвестный"
+                    await bot.send_message(
+                        user_id,
+                        premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
+                        parse_mode="HTML"
+                    )
+                    logger.info(f"[REPLY] ✅ Медиа отправлено из БД для {user_id}")
+                else:
+                    logger.info("[REPLY] В БД нет файлов для этого сообщения")
+            else:
+                logger.info("[REPLY] В БД нет файлов для этого сообщения")
+        else:
+            logger.info("[REPLY] Сообщение не найдено в БД или не содержит файлов")
 
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
