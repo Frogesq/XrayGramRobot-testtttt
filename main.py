@@ -473,7 +473,31 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
+def get_media_file_id(message: types.Message) -> tuple:
+    """
+    Извлекает file_id и тип медиа из сообщения.
+    Возвращает (file_id, media_type) или (None, None)
+    """
+    if message.photo:
+        return message.photo[-1].file_id, "photo"
+    elif message.video:
+        return message.video.file_id, "video"
+    elif message.voice:
+        return message.voice.file_id, "voice"
+    elif message.video_note:
+        return message.video_note.file_id, "video_note"
+    elif message.document:
+        return message.document.file_id, "document"
+    elif message.audio:
+        return message.audio.file_id, "audio"
+    elif message.animation:
+        return message.animation.file_id, "animation"
+    elif message.sticker:
+        return message.sticker.file_id, "sticker"
+    return None, None
+
 async def download_files(message: types.Message, user_id: int) -> list:
+    """Скачивает медиа на диск (для обычных медиа) или сохраняет file_id в БД"""
     file_paths = []
     if not message.content_type:
         return file_paths
@@ -496,10 +520,15 @@ async def download_files(message: types.Message, user_id: int) -> list:
         media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
     elif message.video_note:
         media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
+    else:
+        logger.info(f"[DOWNLOAD] Неизвестный тип контента: {message.content_type}")
+        return file_paths
 
     user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
         try:
+            # Пытаемся скачать файл
+            logger.info(f"[DOWNLOAD] Начинаем скачивание {media_type} (file_id={file_id[:10]}...)")
             file = await bot.get_file(file_id)
             safe_name = "".join(c for c in original_name if c.isalnum() or c in "._- ")
             if not safe_name:
@@ -507,9 +536,13 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"Файл сохранён: {save_path}")
+            logger.info(f"[DOWNLOAD] ✅ Файл сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
+            logger.error(f"[DOWNLOAD] ❌ Ошибка скачивания файла {file_id}: {e}")
+            # Если скачивание не удалось (например, self-destructing), сохраняем только file_id
+            # file_id будет сохранён отдельно в БД через save_message
+            # Мы просто логируем ошибку
+            pass
 
     return file_paths
 
@@ -1125,37 +1158,90 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== НОВАЯ ЛОГИКА (как в open source проектах) =====
-    # При ответе на любое сообщение с медиа – отправляем сохранённые файлы из БД
+    # ===== ЛОГИКА ОТВЕТА ПО МЕТОДУ @iSeeAllRobot =====
     if message.reply_to_message and is_owner:
         original_msg_id = message.reply_to_message.message_id
+        logger.info(f"[REPLY] Ищем в БД сообщение bc_id={bc_id}, msg_id={original_msg_id}")
         data = db.get_message(bc_id, original_msg_id)
-        if data and data["files"]:
-            files_list = json.loads(data["files"]) if isinstance(data["files"], str) else data["files"]
-            if files_list:
-                for file_path in files_list:
-                    if os.path.exists(file_path):
-                        try:
-                            await bot.send_document(
-                                chat_id=user_id,
-                                document=FSInputFile(file_path),
-                                caption=f"💾 Сохранено от {data['fullname']}"
-                            )
-                            logger.info(f"[REPLY] Отправлен файл {file_path} пользователю {user_id}")
-                        except Exception as e:
-                            logger.error(f"[REPLY] Ошибка отправки файла {file_path}: {e}")
+        if data:
+            # Сначала пробуем отправить по file_id (если есть)
+            file_id = data.get("file_id")
+            if file_id:
+                try:
+                    # Отправляем как документ — это обходит ограничение SelfDestructingPhoto
+                    await bot.send_document(
+                        chat_id=user_id,
+                        document=file_id,
+                        caption=f"💾 Сохранено от {data['fullname']}"
+                    )
+                    logger.info(f"[REPLY] ✅ Медиа отправлено по file_id (как документ) для {user_id}")
+                    await bot.send_message(
+                        user_id,
+                        premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                        parse_mode="HTML"
+                    )
+                except Exception as e:
+                    logger.error(f"[REPLY] ❌ Ошибка отправки по file_id: {e}")
+                    # Если не сработало, пробуем отправить сохранённый файл с диска
+                    files_list = json.loads(data["files"]) if data["files"] else []
+                    if files_list:
+                        for file_path in files_list:
+                            if os.path.exists(file_path):
+                                try:
+                                    await bot.send_document(
+                                        chat_id=user_id,
+                                        document=FSInputFile(file_path),
+                                        caption=f"💾 Сохранено от {data['fullname']}"
+                                    )
+                                    logger.info(f"[REPLY] ✅ Отправлен файл {file_path} пользователю {user_id}")
+                                except Exception as e2:
+                                    logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
+                        await bot.send_message(
+                            user_id,
+                            premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                            parse_mode="HTML"
+                        )
                     else:
-                        logger.warning(f"[REPLY] Файл не найден: {file_path}")
-                # Уведомление о том, что все файлы отправлены
+                        logger.info("[REPLY] Нет сохранённых файлов и file_id")
+            else:
+                # Если file_id нет, пытаемся отправить сохранённый файл с диска
+                files_list = json.loads(data["files"]) if data["files"] else []
+                if files_list:
+                    for file_path in files_list:
+                        if os.path.exists(file_path):
+                            try:
+                                await bot.send_document(
+                                    chat_id=user_id,
+                                    document=FSInputFile(file_path),
+                                    caption=f"💾 Сохранено от {data['fullname']}"
+                                )
+                                logger.info(f"[REPLY] ✅ Отправлен файл {file_path} пользователю {user_id}")
+                            except Exception as e2:
+                                logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
+                    await bot.send_message(
+                        user_id,
+                        premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                        parse_mode="HTML"
+                    )
+                else:
+                    logger.info("[REPLY] Нет сохранённых файлов")
+        else:
+            logger.info("[REPLY] Сообщение не найдено в БД")
+            # Fallback: пробуем скопировать оригинал (если он ещё доступен)
+            try:
+                await bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=chat_id,
+                    message_id=original_msg_id
+                )
                 await bot.send_message(
                     user_id,
-                    premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
+                    premium("<b>⚠️ Медиа было скопировано напрямую (возможно, самоуничтожающееся)</b>"),
                     parse_mode="HTML"
                 )
-            else:
-                logger.info("[REPLY] В БД нет файлов для этого сообщения")
-        else:
-            logger.info("[REPLY] Сообщение не найдено в БД или не содержит файлов")
+                logger.info("[REPLY] ✅ Удалось скопировать оригинал в ЛС")
+            except Exception as copy_err:
+                logger.error(f"[REPLY] ❌ Не удалось скопировать оригинал: {copy_err}")
 
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
@@ -1256,7 +1342,6 @@ async def handle_business_message(message: types.Message):
                 
                 await loading_msg.delete()
                 
-                # Отправляем ответ ТОЛЬКО в чат, где была команда (без дублирования)
                 await bot.send_message(
                     chat_id,
                     premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -1300,9 +1385,21 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
+    # Получаем file_id и media_type
+    file_id, media_type = get_media_file_id(message)
+    
+    # Скачиваем файлы (если возможно)
     files = await download_files(message, user_id)
-    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
+    
+    # Сохраняем в БД, передавая file_id
+    db.save_message(
+        bc_id, msg_id, user_id, fullname, text, files,
+        file_id=file_id,
+        is_temporary=message.has_media_spoiler,
+        ttl_seconds=getattr(message, 'media_ttl_seconds', 0),
+        media_type=media_type
+    )
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, file_id={file_id}")
 
     if message.has_media_spoiler and files:
         notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
