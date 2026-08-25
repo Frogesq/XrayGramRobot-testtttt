@@ -430,7 +430,6 @@ def commands_keyboard():
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
-# ===== ДОБАВЛЕНО: функция определения ttl_seconds =====
 def get_ttl_seconds(message: types.Message) -> int:
     """Извлекает ttl_seconds из любого медиа-объекта (прямые поля + fallback через content_type)"""
     if message.photo:
@@ -447,7 +446,6 @@ def get_ttl_seconds(message: types.Message) -> int:
         return getattr(message.audio, 'ttl_seconds', 0)
     elif message.animation:
         return getattr(message.animation, 'ttl_seconds', 0)
-    # fallback через content_type
     if message.content_type and message.content_type != 'text':
         obj = getattr(message, message.content_type, None)
         if obj:
@@ -1158,14 +1156,15 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== ДОБАВЛЕНО: обработка ответа на самоуничтожающееся медиа =====
+    # ===== ДОБАВЛЕНО И УЛУЧШЕНО: обработка ответа на самоуничтожающееся медиа =====
     if message.reply_to_message and is_owner:
         original = message.reply_to_message
         original_ttl = get_ttl_seconds(original)
+        logger.info(f"[REPLY] Проверка ответа: ttl={original_ttl}, from_user={original.from_user}")
         if original_ttl > 0:
             logger.info(f"[REPLY] Владелец ответил на самоуничтожающееся медиа (ttl={original_ttl})")
             try:
-                # Копируем оригинал в ЛС владельца
+                # Попробуем скопировать
                 await bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=chat_id,
@@ -1179,12 +1178,70 @@ async def handle_business_message(message: types.Message):
                 )
                 logger.info(f"[REPLY] ✅ Копия сохранена для {user_id}")
             except Exception as e:
-                logger.error(f"[REPLY] ❌ Ошибка сохранения копии: {e}")
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>⚠️ Не удалось сохранить медиа:\n{e}</b>"),
-                    parse_mode="HTML"
-                )
+                logger.error(f"[REPLY] ❌ Ошибка сохранения копии через copy_message: {e}")
+                # Попробуем отправить вручную через file_id
+                try:
+                    # Определим тип медиа и отправим напрямую
+                    media = None
+                    media_type = None
+                    if original.photo:
+                        media = original.photo[-1]
+                        media_type = "photo"
+                    elif original.video:
+                        media = original.video
+                        media_type = "video"
+                    elif original.voice:
+                        media = original.voice
+                        media_type = "voice"
+                    elif original.video_note:
+                        media = original.video_note
+                        media_type = "video_note"
+                    elif original.document:
+                        media = original.document
+                        media_type = "document"
+                    elif original.audio:
+                        media = original.audio
+                        media_type = "audio"
+                    elif original.animation:
+                        media = original.animation
+                        media_type = "animation"
+                    
+                    if media and media_type:
+                        if media_type == "photo":
+                            await bot.send_photo(user_id, media.file_id)
+                        elif media_type == "video":
+                            await bot.send_video(user_id, media.file_id)
+                        elif media_type == "voice":
+                            await bot.send_voice(user_id, media.file_id)
+                        elif media_type == "video_note":
+                            await bot.send_video_note(user_id, media.file_id)
+                        elif media_type == "document":
+                            await bot.send_document(user_id, media.file_id)
+                        elif media_type == "audio":
+                            await bot.send_audio(user_id, media.file_id)
+                        elif media_type == "animation":
+                            await bot.send_animation(user_id, media.file_id)
+                        sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
+                        await bot.send_message(
+                            user_id,
+                            premium(f"<b>✅ Сохранено самоуничтожающееся медиа от {sender_name}</b>"),
+                            parse_mode="HTML"
+                        )
+                        logger.info(f"[REPLY] ✅ Копия сохранена (fallback) для {user_id}")
+                    else:
+                        logger.error("[REPLY] Не удалось определить тип медиа для отправки")
+                        await bot.send_message(
+                            user_id,
+                            premium("<b>⚠️ Не удалось распознать тип медиа для сохранения.</b>"),
+                            parse_mode="HTML"
+                        )
+                except Exception as e2:
+                    logger.error(f"[REPLY] ❌ Ошибка отправки через fallback: {e2}")
+                    await bot.send_message(
+                        user_id,
+                        premium(f"<b>⚠️ Не удалось сохранить медиа:\n{e2}</b>"),
+                        parse_mode="HTML"
+                    )
             # После сохранения копии прерываем обработку этого сообщения
             return
 
