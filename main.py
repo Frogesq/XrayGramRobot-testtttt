@@ -429,6 +429,33 @@ def commands_keyboard():
     )
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
+# ===== ДОБАВЛЕНО: функция определения ttl_seconds =====
+def get_ttl_seconds(message: types.Message) -> int:
+    """Извлекает ttl_seconds из любого медиа-объекта (прямые поля + fallback через content_type)"""
+    if message.photo:
+        return getattr(message.photo, 'ttl_seconds', 0)
+    elif message.video:
+        return getattr(message.video, 'ttl_seconds', 0)
+    elif message.voice:
+        return getattr(message.voice, 'ttl_seconds', 0)
+    elif message.video_note:
+        return getattr(message.video_note, 'ttl_seconds', 0)
+    elif message.document:
+        return getattr(message.document, 'ttl_seconds', 0)
+    elif message.audio:
+        return getattr(message.audio, 'ttl_seconds', 0)
+    elif message.animation:
+        return getattr(message.animation, 'ttl_seconds', 0)
+    # fallback через content_type
+    if message.content_type and message.content_type != 'text':
+        obj = getattr(message, message.content_type, None)
+        if obj:
+            if isinstance(obj, list):
+                obj = obj[-1]
+            return getattr(obj, 'ttl_seconds', 0)
+    return 0
+
 async def send_main_menu(chat_id: int, is_admin: bool):
     """Отправляет главное меню с баннером (если есть)"""
     main_text = premium(
@@ -1130,6 +1157,36 @@ async def handle_business_message(message: types.Message):
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
+
+    # ===== ДОБАВЛЕНО: обработка ответа на самоуничтожающееся медиа =====
+    if message.reply_to_message and is_owner:
+        original = message.reply_to_message
+        original_ttl = get_ttl_seconds(original)
+        if original_ttl > 0:
+            logger.info(f"[REPLY] Владелец ответил на самоуничтожающееся медиа (ttl={original_ttl})")
+            try:
+                # Копируем оригинал в ЛС владельца
+                await bot.copy_message(
+                    chat_id=user_id,
+                    from_chat_id=chat_id,
+                    message_id=original.message_id
+                )
+                sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>✅ Сохранено самоуничтожающееся медиа от {sender_name}</b>"),
+                    parse_mode="HTML"
+                )
+                logger.info(f"[REPLY] ✅ Копия сохранена для {user_id}")
+            except Exception as e:
+                logger.error(f"[REPLY] ❌ Ошибка сохранения копии: {e}")
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>⚠️ Не удалось сохранить медиа:\n{e}</b>"),
+                    parse_mode="HTML"
+                )
+            # После сохранения копии прерываем обработку этого сообщения
+            return
 
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
