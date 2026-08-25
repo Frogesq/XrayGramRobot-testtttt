@@ -431,27 +431,32 @@ def commands_keyboard():
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
 def get_ttl_seconds(message: types.Message) -> int:
-    """Извлекает ttl_seconds из любого медиа-объекта (прямые поля + fallback через content_type)"""
-    if message.photo:
-        return getattr(message.photo, 'ttl_seconds', 0)
-    elif message.video:
-        return getattr(message.video, 'ttl_seconds', 0)
-    elif message.voice:
-        return getattr(message.voice, 'ttl_seconds', 0)
-    elif message.video_note:
-        return getattr(message.video_note, 'ttl_seconds', 0)
-    elif message.document:
-        return getattr(message.document, 'ttl_seconds', 0)
-    elif message.audio:
-        return getattr(message.audio, 'ttl_seconds', 0)
-    elif message.animation:
-        return getattr(message.animation, 'ttl_seconds', 0)
+    """
+    Извлекает время жизни самоуничтожающегося медиа.
+    Приоритет: media_ttl_seconds (для бизнес-сообщений) → вложенные объекты → fallback.
+    """
+    # 1. media_ttl_seconds (бизнес-сообщения)
+    if hasattr(message, 'media_ttl_seconds') and message.media_ttl_seconds:
+        return message.media_ttl_seconds
+    
+    # 2. Проверка вложенных объектов
+    for attr in ['photo', 'video', 'voice', 'video_note', 'document', 'audio', 'animation']:
+        obj = getattr(message, attr, None)
+        if obj:
+            if isinstance(obj, list):
+                obj = obj[-1]
+            ttl = getattr(obj, 'ttl_seconds', 0)
+            if ttl:
+                return ttl
+    
+    # 3. Fallback через content_type
     if message.content_type and message.content_type != 'text':
         obj = getattr(message, message.content_type, None)
         if obj:
             if isinstance(obj, list):
                 obj = obj[-1]
             return getattr(obj, 'ttl_seconds', 0)
+    
     return 0
 
 async def send_main_menu(chat_id: int, is_admin: bool):
@@ -461,7 +466,7 @@ async def send_main_menu(chat_id: int, is_admin: bool):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа. (soon)</blockquote>\n\n"
+        "Сохраняет самоуничтожающиеся медиа, когда вы отвечаете на них.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     reply_markup = main_menu_keyboard(is_admin)
@@ -621,9 +626,7 @@ async def cmd_gn(message: types.Message):
         
         await loading_msg.delete()
         
-        # Отправляем ответ ТОЛЬКО в чат, где была команда
         if bc_id:
-            # Бизнес-чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -631,7 +634,6 @@ async def cmd_gn(message: types.Message):
                 business_connection_id=bc_id
             )
         else:
-            # Обычный чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -760,10 +762,6 @@ async def ttt_callback(callback: types.CallbackQuery):
     turn = game["turn"]
     player_x = game["player_x"]
     player_o = game["player_o"]
-    
-    # ==========================================
-    # ========== ПРОВЕРКА РОЛЕЙ ================
-    # ==========================================
     
     if turn == "X":
         if user_id != player_x:
@@ -1156,15 +1154,16 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== ДОБАВЛЕНО И УЛУЧШЕНО: обработка ответа на самоуничтожающееся медиа =====
+    # ===== ОБРАБОТКА ОТВЕТА НА САМОУНИЧТОЖАЮЩЕЕСЯ МЕДИА =====
     if message.reply_to_message and is_owner:
         original = message.reply_to_message
         original_ttl = get_ttl_seconds(original)
-        logger.info(f"[REPLY] Проверка ответа: ttl={original_ttl}, from_user={original.from_user}")
+        logger.info(f"[REPLY] Проверка ответа: ttl={original_ttl}, media_ttl_seconds={getattr(original, 'media_ttl_seconds', 'НЕТ')}, от пользователя: {original.from_user.id if original.from_user else 'неизвестно'}")
+        
         if original_ttl > 0:
             logger.info(f"[REPLY] Владелец ответил на самоуничтожающееся медиа (ttl={original_ttl})")
             try:
-                # Попробуем скопировать
+                # Попытка скопировать
                 await bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=chat_id,
@@ -1179,9 +1178,9 @@ async def handle_business_message(message: types.Message):
                 logger.info(f"[REPLY] ✅ Копия сохранена для {user_id}")
             except Exception as e:
                 logger.error(f"[REPLY] ❌ Ошибка сохранения копии через copy_message: {e}")
-                # Попробуем отправить вручную через file_id
+                # Fallback: отправка напрямую по file_id
                 try:
-                    # Определим тип медиа и отправим напрямую
+                    # Определяем тип медиа
                     media = None
                     media_type = None
                     if original.photo:
@@ -1207,20 +1206,9 @@ async def handle_business_message(message: types.Message):
                         media_type = "animation"
                     
                     if media and media_type:
-                        if media_type == "photo":
-                            await bot.send_photo(user_id, media.file_id)
-                        elif media_type == "video":
-                            await bot.send_video(user_id, media.file_id)
-                        elif media_type == "voice":
-                            await bot.send_voice(user_id, media.file_id)
-                        elif media_type == "video_note":
-                            await bot.send_video_note(user_id, media.file_id)
-                        elif media_type == "document":
-                            await bot.send_document(user_id, media.file_id)
-                        elif media_type == "audio":
-                            await bot.send_audio(user_id, media.file_id)
-                        elif media_type == "animation":
-                            await bot.send_animation(user_id, media.file_id)
+                        # Отправляем через соответствующий метод
+                        send_func = getattr(bot, f"send_{media_type}")
+                        await send_func(user_id, media.file_id)
                         sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
                         await bot.send_message(
                             user_id,
@@ -1242,7 +1230,7 @@ async def handle_business_message(message: types.Message):
                         premium(f"<b>⚠️ Не удалось сохранить медиа:\n{e2}</b>"),
                         parse_mode="HTML"
                     )
-            # После сохранения копии прерываем обработку этого сообщения
+            # Прерываем обработку ответа
             return
 
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
