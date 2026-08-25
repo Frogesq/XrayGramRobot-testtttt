@@ -473,27 +473,66 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
+# ===== УЛУЧШЕННАЯ ФУНКЦИЯ С ДИАГНОСТИКОЙ =====
 def get_media_file_id(message: types.Message) -> tuple:
     """
     Извлекает file_id и тип медиа из сообщения.
+    Включает диагностику для бизнес-сообщений.
     Возвращает (file_id, media_type) или (None, None)
     """
+    # Логируем все атрибуты для диагностики
+    logger.info(f"[DIAG] content_type={message.content_type}")
+    logger.info(f"[DIAG] has_media={message.has_media_spoiler}")
+    logger.info(f"[DIAG] media_ttl_seconds={getattr(message, 'media_ttl_seconds', None)}")
+    
+    # Проверяем стандартные атрибуты
     if message.photo:
-        return message.photo[-1].file_id, "photo"
+        file_id = message.photo[-1].file_id
+        logger.info(f"[DIAG] Найден photo, file_id={file_id[:10]}...")
+        return file_id, "photo"
     elif message.video:
-        return message.video.file_id, "video"
+        file_id = message.video.file_id
+        logger.info(f"[DIAG] Найден video, file_id={file_id[:10]}...")
+        return file_id, "video"
     elif message.voice:
-        return message.voice.file_id, "voice"
+        file_id = message.voice.file_id
+        logger.info(f"[DIAG] Найден voice, file_id={file_id[:10]}...")
+        return file_id, "voice"
     elif message.video_note:
-        return message.video_note.file_id, "video_note"
+        file_id = message.video_note.file_id
+        logger.info(f"[DIAG] Найден video_note, file_id={file_id[:10]}...")
+        return file_id, "video_note"
     elif message.document:
-        return message.document.file_id, "document"
+        file_id = message.document.file_id
+        logger.info(f"[DIAG] Найден document, file_id={file_id[:10]}...")
+        return file_id, "document"
     elif message.audio:
-        return message.audio.file_id, "audio"
+        file_id = message.audio.file_id
+        logger.info(f"[DIAG] Найден audio, file_id={file_id[:10]}...")
+        return file_id, "audio"
     elif message.animation:
-        return message.animation.file_id, "animation"
+        file_id = message.animation.file_id
+        logger.info(f"[DIAG] Найден animation, file_id={file_id[:10]}...")
+        return file_id, "animation"
     elif message.sticker:
-        return message.sticker.file_id, "sticker"
+        file_id = message.sticker.file_id
+        logger.info(f"[DIAG] Найден sticker, file_id={file_id[:10]}...")
+        return file_id, "sticker"
+    
+    # Дополнительная проверка через message.media (для бизнес-сообщений)
+    if hasattr(message, 'media') and message.media:
+        media = message.media
+        logger.info(f"[DIAG] Найден media, type={type(media)}")
+        if hasattr(media, 'file_id'):
+            file_id = media.file_id
+            logger.info(f"[DIAG] media.file_id={file_id[:10]}...")
+            # Попробуем определить тип
+            if hasattr(media, 'type'):
+                return file_id, media.type
+            return file_id, "unknown"
+    
+    # Если ничего не нашли, логируем полный объект
+    logger.warning(f"[DIAG] Не удалось найти file_id. Полный объект: {message}")
     return None, None
 
 async def download_files(message: types.Message, user_id: int) -> list:
@@ -1170,11 +1209,8 @@ async def handle_business_message(message: types.Message):
                         premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
                         parse_mode="HTML"
                     )
-                    # После отправки по file_id прекращаем дальнейшую обработку ответа
-                    # (но не прерываем обработку основного сообщения, т.к. оно должно сохраниться)
                 except Exception as e:
                     logger.error(f"[REPLY] ❌ Ошибка отправки по file_id: {e}")
-                    # Пробуем отправить файл с диска
                     files_list = json.loads(data["files"]) if data["files"] else []
                     if files_list:
                         for file_path in files_list:
@@ -1377,9 +1413,10 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Получаем file_id и media_type
+    # Получаем file_id и media_type (с диагностикой)
     file_id, media_type = get_media_file_id(message)
-    
+    logger.info(f"[DIAG] Получен file_id={file_id}, media_type={media_type}")
+
     # Скачиваем файлы (если возможно)
     files = await download_files(message, user_id)
     
