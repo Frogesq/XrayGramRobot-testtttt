@@ -521,14 +521,11 @@ async def download_files(message: types.Message, user_id: int) -> list:
     elif message.video_note:
         media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
     else:
-        logger.info(f"[DOWNLOAD] Неизвестный тип контента: {message.content_type}")
         return file_paths
 
     user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
         try:
-            # Пытаемся скачать файл
-            logger.info(f"[DOWNLOAD] Начинаем скачивание {media_type} (file_id={file_id[:10]}...)")
             file = await bot.get_file(file_id)
             safe_name = "".join(c for c in original_name if c.isalnum() or c in "._- ")
             if not safe_name:
@@ -539,11 +536,6 @@ async def download_files(message: types.Message, user_id: int) -> list:
             logger.info(f"[DOWNLOAD] ✅ Файл сохранён: {save_path}")
         except Exception as e:
             logger.error(f"[DOWNLOAD] ❌ Ошибка скачивания файла {file_id}: {e}")
-            # Если скачивание не удалось (например, self-destructing), сохраняем только file_id
-            # file_id будет сохранён отдельно в БД через save_message
-            # Мы просто логируем ошибку
-            pass
-
     return file_paths
 
 def format_user_info(user: types.User) -> str:
@@ -1158,31 +1150,31 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== ЛОГИКА ОТВЕТА ПО МЕТОДУ @iSeeAllRobot =====
+    # ===== ЛОГИКА ОТВЕТА (по методу iSeeAllRobot) =====
     if message.reply_to_message and is_owner:
         original_msg_id = message.reply_to_message.message_id
         logger.info(f"[REPLY] Ищем в БД сообщение bc_id={bc_id}, msg_id={original_msg_id}")
         data = db.get_message(bc_id, original_msg_id)
         if data:
-            # Сначала пробуем отправить по file_id (если есть)
             file_id = data.get("file_id")
             if file_id:
                 try:
-                    # Отправляем как документ — это обходит ограничение SelfDestructingPhoto
                     await bot.send_document(
                         chat_id=user_id,
                         document=file_id,
                         caption=f"💾 Сохранено от {data['fullname']}"
                     )
-                    logger.info(f"[REPLY] ✅ Медиа отправлено по file_id (как документ) для {user_id}")
+                    logger.info(f"[REPLY] ✅ Отправлено по file_id (документ) для {user_id}")
                     await bot.send_message(
                         user_id,
                         premium(f"<b>✅ Медиа сохранено от {data['fullname']}</b>"),
                         parse_mode="HTML"
                     )
+                    # После отправки по file_id прекращаем дальнейшую обработку ответа
+                    # (но не прерываем обработку основного сообщения, т.к. оно должно сохраниться)
                 except Exception as e:
                     logger.error(f"[REPLY] ❌ Ошибка отправки по file_id: {e}")
-                    # Если не сработало, пробуем отправить сохранённый файл с диска
+                    # Пробуем отправить файл с диска
                     files_list = json.loads(data["files"]) if data["files"] else []
                     if files_list:
                         for file_path in files_list:
@@ -1193,7 +1185,7 @@ async def handle_business_message(message: types.Message):
                                         document=FSInputFile(file_path),
                                         caption=f"💾 Сохранено от {data['fullname']}"
                                     )
-                                    logger.info(f"[REPLY] ✅ Отправлен файл {file_path} пользователю {user_id}")
+                                    logger.info(f"[REPLY] ✅ Отправлен файл {file_path}")
                                 except Exception as e2:
                                     logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
                         await bot.send_message(
@@ -1202,9 +1194,9 @@ async def handle_business_message(message: types.Message):
                             parse_mode="HTML"
                         )
                     else:
-                        logger.info("[REPLY] Нет сохранённых файлов и file_id")
+                        logger.info("[REPLY] Нет сохранённых файлов")
             else:
-                # Если file_id нет, пытаемся отправить сохранённый файл с диска
+                logger.info("[REPLY] file_id отсутствует, пробуем отправить файлы с диска")
                 files_list = json.loads(data["files"]) if data["files"] else []
                 if files_list:
                     for file_path in files_list:
@@ -1215,7 +1207,7 @@ async def handle_business_message(message: types.Message):
                                     document=FSInputFile(file_path),
                                     caption=f"💾 Сохранено от {data['fullname']}"
                                 )
-                                logger.info(f"[REPLY] ✅ Отправлен файл {file_path} пользователю {user_id}")
+                                logger.info(f"[REPLY] ✅ Отправлен файл {file_path}")
                             except Exception as e2:
                                 logger.error(f"[REPLY] ❌ Ошибка отправки файла {file_path}: {e2}")
                     await bot.send_message(
@@ -1227,7 +1219,7 @@ async def handle_business_message(message: types.Message):
                     logger.info("[REPLY] Нет сохранённых файлов")
         else:
             logger.info("[REPLY] Сообщение не найдено в БД")
-            # Fallback: пробуем скопировать оригинал (если он ещё доступен)
+            # Fallback: пробуем скопировать оригинал (если ещё доступен)
             try:
                 await bot.copy_message(
                     chat_id=user_id,
