@@ -430,35 +430,6 @@ def commands_keyboard():
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 
-def get_ttl_seconds(message: types.Message) -> int:
-    """
-    Извлекает время жизни самоуничтожающегося медиа.
-    Приоритет: media_ttl_seconds (для бизнес-сообщений) → вложенные объекты → fallback.
-    """
-    # 1. media_ttl_seconds (бизнес-сообщения)
-    if hasattr(message, 'media_ttl_seconds') and message.media_ttl_seconds:
-        return message.media_ttl_seconds
-    
-    # 2. Проверка вложенных объектов
-    for attr in ['photo', 'video', 'voice', 'video_note', 'document', 'audio', 'animation']:
-        obj = getattr(message, attr, None)
-        if obj:
-            if isinstance(obj, list):
-                obj = obj[-1]
-            ttl = getattr(obj, 'ttl_seconds', 0)
-            if ttl:
-                return ttl
-    
-    # 3. Fallback через content_type
-    if message.content_type and message.content_type != 'text':
-        obj = getattr(message, message.content_type, None)
-        if obj:
-            if isinstance(obj, list):
-                obj = obj[-1]
-            return getattr(obj, 'ttl_seconds', 0)
-    
-    return 0
-
 async def send_main_menu(chat_id: int, is_admin: bool):
     """Отправляет главное меню с баннером (если есть)"""
     main_text = premium(
@@ -466,7 +437,7 @@ async def send_main_menu(chat_id: int, is_admin: bool):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа, когда вы отвечаете на них.</blockquote>\n\n"
+        "Сохраняет медиа (в т.ч. самоуничтожающиеся), если вы на них ответите.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     reply_markup = main_menu_keyboard(is_admin)
@@ -1154,16 +1125,20 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== ОБРАБОТКА ОТВЕТА НА САМОУНИЧТОЖАЮЩЕЕСЯ МЕДИА =====
+    # ===== НОВАЯ ЛОГИКА: СОХРАНЕНИЕ МЕДИА ПРИ ОТВЕТЕ (БЕЗ ПРОВЕРКИ ttl) =====
     if message.reply_to_message and is_owner:
         original = message.reply_to_message
-        original_ttl = get_ttl_seconds(original)
-        logger.info(f"[REPLY] Проверка ответа: ttl={original_ttl}, media_ttl_seconds={getattr(original, 'media_ttl_seconds', 'НЕТ')}, от пользователя: {original.from_user.id if original.from_user else 'неизвестно'}")
+        # Проверяем, есть ли в оригинальном сообщении медиа
+        has_media = (
+            original.photo or original.video or original.voice or 
+            original.video_note or original.document or original.audio or 
+            original.animation or original.sticker
+        )
         
-        if original_ttl > 0:
-            logger.info(f"[REPLY] Владелец ответил на самоуничтожающееся медиа (ttl={original_ttl})")
+        if has_media:
+            logger.info(f"[REPLY] Владелец ответил на сообщение с медиа от {original.from_user.id if original.from_user else 'неизвестно'}")
             try:
-                # Попытка скопировать
+                # Копируем оригинальное медиа в ЛС владельца
                 await bot.copy_message(
                     chat_id=user_id,
                     from_chat_id=chat_id,
@@ -1172,15 +1147,14 @@ async def handle_business_message(message: types.Message):
                 sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
                 await bot.send_message(
                     user_id,
-                    premium(f"<b>✅ Сохранено самоуничтожающееся медиа от {sender_name}</b>"),
+                    premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
                     parse_mode="HTML"
                 )
-                logger.info(f"[REPLY] ✅ Копия сохранена для {user_id}")
+                logger.info(f"[REPLY] ✅ Медиа сохранено для {user_id}")
             except Exception as e:
-                logger.error(f"[REPLY] ❌ Ошибка сохранения копии через copy_message: {e}")
+                logger.error(f"[REPLY] ❌ Ошибка сохранения медиа через copy_message: {e}")
                 # Fallback: отправка напрямую по file_id
                 try:
-                    # Определяем тип медиа
                     media = None
                     media_type = None
                     if original.photo:
@@ -1204,34 +1178,26 @@ async def handle_business_message(message: types.Message):
                     elif original.animation:
                         media = original.animation
                         media_type = "animation"
+                    elif original.sticker:
+                        media = original.sticker
+                        media_type = "sticker"
                     
                     if media and media_type:
-                        # Отправляем через соответствующий метод
                         send_func = getattr(bot, f"send_{media_type}")
                         await send_func(user_id, media.file_id)
                         sender_name = format_user_info(original.from_user) if original.from_user else "Неизвестный"
                         await bot.send_message(
                             user_id,
-                            premium(f"<b>✅ Сохранено самоуничтожающееся медиа от {sender_name}</b>"),
+                            premium(f"<b>✅ Сохранено медиа от {sender_name}</b>"),
                             parse_mode="HTML"
                         )
-                        logger.info(f"[REPLY] ✅ Копия сохранена (fallback) для {user_id}")
+                        logger.info(f"[REPLY] ✅ Медиа сохранено (fallback) для {user_id}")
                     else:
                         logger.error("[REPLY] Не удалось определить тип медиа для отправки")
-                        await bot.send_message(
-                            user_id,
-                            premium("<b>⚠️ Не удалось распознать тип медиа для сохранения.</b>"),
-                            parse_mode="HTML"
-                        )
                 except Exception as e2:
                     logger.error(f"[REPLY] ❌ Ошибка отправки через fallback: {e2}")
-                    await bot.send_message(
-                        user_id,
-                        premium(f"<b>⚠️ Не удалось сохранить медиа:\n{e2}</b>"),
-                        parse_mode="HTML"
-                    )
-            # Прерываем обработку ответа
-            return
+            
+            # ВАЖНО: НЕ ПРЕРЫВАЕМ ОБРАБОТКУ! Ответное сообщение сохраняется как обычно.
 
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
