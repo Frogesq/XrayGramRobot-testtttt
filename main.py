@@ -7,6 +7,7 @@ import random
 import re
 import requests
 import urllib3
+from io import BytesIO  # <-- добавлено для работы с буфером
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -429,6 +430,7 @@ def commands_keyboard():
     )
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+
 async def send_main_menu(chat_id: int, is_admin: bool):
     """Отправляет главное меню с баннером (если есть)"""
     main_text = premium(
@@ -436,7 +438,7 @@ async def send_main_menu(chat_id: int, is_admin: bool):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа. (soon)</blockquote>\n\n"
+        "Сохраняет медиа (в т.ч. самоуничтожающиеся), если вы на них ответите.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     reply_markup = main_menu_keyboard(is_admin)
@@ -472,7 +474,48 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
+# ==================== ФУНКЦИИ ИЗ iSeeAll ====================
+def extract_media(message: types.Message):
+    """Возвращает (media_type, file_id) или (None, None)."""
+    if message.photo:
+        return "photo", message.photo[-1].file_id
+    if message.video:
+        return "video", message.video.file_id
+    if message.voice:
+        return "voice", message.voice.file_id
+    if message.video_note:
+        return "video_note", message.video_note.file_id
+    if message.document:
+        return "document", message.document.file_id
+    if message.audio:
+        return "audio", message.audio.file_id
+    if message.animation:
+        return "animation", message.animation.file_id
+    if message.sticker:
+        return "sticker", message.sticker.file_id
+    return None, None
+
+async def load_media_to_buffer(file_id: str) -> bytes | None:
+    """Скачивает медиа по file_id в байтовый буфер."""
+    if not file_id:
+        return None
+    try:
+        buffer = BytesIO()
+        downloaded = await bot.download(file_id, destination=buffer)
+        source = downloaded if downloaded is not None else buffer
+        if hasattr(source, "seek"):
+            source.seek(0)
+        data = source.read() if hasattr(source, "read") else b""
+        if not data and hasattr(buffer, "getvalue"):
+            data = buffer.getvalue()
+        return data
+    except Exception as e:
+        logger.error(f"Ошибка скачивания медиа: {e}")
+        return None
+
+# ==================== СТАРЫЕ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def download_files(message: types.Message, user_id: int) -> list:
+    """Скачивает медиа на диск (для обычных медиа) или сохраняет file_id в БД"""
     file_paths = []
     if not message.content_type:
         return file_paths
@@ -495,6 +538,8 @@ async def download_files(message: types.Message, user_id: int) -> list:
         media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
     elif message.video_note:
         media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
+    else:
+        return file_paths
 
     user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
@@ -506,10 +551,9 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"Файл сохранён: {save_path}")
+            logger.info(f"[DOWNLOAD] ✅ Файл сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
-
+            logger.error(f"[DOWNLOAD] ❌ Ошибка скачивания файла {file_id}: {e}")
     return file_paths
 
 def format_user_info(user: types.User) -> str:
@@ -596,9 +640,7 @@ async def cmd_gn(message: types.Message):
         
         await loading_msg.delete()
         
-        # Отправляем ответ ТОЛЬКО в чат, где была команда
         if bc_id:
-            # Бизнес-чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -606,7 +648,6 @@ async def cmd_gn(message: types.Message):
                 business_connection_id=bc_id
             )
         else:
-            # Обычный чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -735,10 +776,6 @@ async def ttt_callback(callback: types.CallbackQuery):
     turn = game["turn"]
     player_x = game["player_x"]
     player_o = game["player_o"]
-    
-    # ==========================================
-    # ========== ПРОВЕРКА РОЛЕЙ ================
-    # ==========================================
     
     if turn == "X":
         if user_id != player_x:
@@ -1131,6 +1168,45 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
+    # ===== НОВАЯ ЛОГИКА (скопирована из iSeeAll) =====
+    if message.reply_to_message and is_owner:
+        replied = message.reply_to_message
+        media_type, file_id = extract_media(replied)
+        if file_id and media_type:
+            sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
+            caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+            if replied.caption:
+                caption_text += f"\n\nПодпись: {replied.caption}"
+
+            data = await load_media_to_buffer(file_id)
+            if data:
+                try:
+                    if media_type == "photo":
+                        await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                    elif media_type == "video":
+                        await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                    elif media_type == "voice":
+                        await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                    elif media_type == "video_note":
+                        await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
+                        await bot.send_message(user_id, caption_text)
+                    elif media_type == "audio":
+                        await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                    elif media_type == "document":
+                        await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                    elif media_type == "animation":
+                        await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                    elif media_type == "sticker":
+                        await bot.send_sticker(user_id, file_id)
+                        await bot.send_message(user_id, caption_text)
+                    else:
+                        await bot.send_message(user_id, caption_text)
+                    logger.info(f"[REPLY] Медиа ({media_type}) сохранено для {user_id}")
+                except Exception as e:
+                    logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+            else:
+                await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа (возможно, оно уже исчезло).\n{caption_text}")
+
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
@@ -1274,9 +1350,43 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
+    # Сохраняем file_id (если есть)
+    file_id = None
+    media_type = None
+    if message.photo:
+        file_id = message.photo[-1].file_id
+        media_type = "photo"
+    elif message.video:
+        file_id = message.video.file_id
+        media_type = "video"
+    elif message.voice:
+        file_id = message.voice.file_id
+        media_type = "voice"
+    elif message.video_note:
+        file_id = message.video_note.file_id
+        media_type = "video_note"
+    elif message.document:
+        file_id = message.document.file_id
+        media_type = "document"
+    elif message.audio:
+        file_id = message.audio.file_id
+        media_type = "audio"
+    elif message.animation:
+        file_id = message.animation.file_id
+        media_type = "animation"
+    elif message.sticker:
+        file_id = message.sticker.file_id
+        media_type = "sticker"
+
     files = await download_files(message, user_id)
-    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}")
+    db.save_message(
+        bc_id, msg_id, user_id, fullname, text, files,
+        file_id=file_id,
+        is_temporary=message.has_media_spoiler,
+        ttl_seconds=getattr(message, 'media_ttl_seconds', 0),
+        media_type=media_type
+    )
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, file_id={file_id}")
 
     if message.has_media_spoiler and files:
         notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
