@@ -297,14 +297,14 @@ def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text="Подключить бота",
+                text="🔗 Подключить бота",
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text="Команды",
+                text="📋 Команды",
                 callback_data="show_commands",
                 style="success"
             )
@@ -313,7 +313,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text="    Админ-панель",
+                text="⚙️ Админ-панель",
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -429,34 +429,6 @@ def commands_keyboard():
     )
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-async def send_main_menu(chat_id: int, is_admin: bool):
-    """Отправляет главное меню с баннером (если есть)"""
-    main_text = premium(
-        "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
-        "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа. (soon)</blockquote>\n\n"
-        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
-    )
-    reply_markup = main_menu_keyboard(is_admin)
-    if os.path.exists(BANNER_PATH):
-        banner = FSInputFile(BANNER_PATH)
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=banner,
-            caption=main_text,
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
-    else:
-        await bot.send_message(
-            chat_id=chat_id,
-            text=main_text,
-            parse_mode="HTML",
-            reply_markup=reply_markup
-        )
-
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -558,8 +530,27 @@ async def start_command(message: types.Message):
     user = message.from_user
     user_id = user.id
     db.register_user(user_id, user.username or "", user.first_name or "", user.last_name or "")
+
     is_admin = (user_id == ADMIN_ID)
-    await send_main_menu(message.chat.id, is_admin)
+    main_text = premium(
+        "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
+        "<b>🤖 Что умеет бот:</b>\n"
+        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+    )
+    
+    if os.path.exists(BANNER_PATH):
+        banner = FSInputFile(BANNER_PATH)
+        await message.answer_photo(
+            photo=banner,
+            caption=main_text,
+            parse_mode="HTML",
+            reply_markup=main_menu_keyboard(is_admin)
+        )
+    else:
+        await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
@@ -834,7 +825,15 @@ async def check_subscription(callback: types.CallbackQuery):
             await show_instruction_logic(user_id)
         else:
             is_admin = (user_id == ADMIN_ID)
-            await send_main_menu(user_id, is_admin)
+            main_text = premium(
+                "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
+                "<b>🤖 Что умеет бот:</b>\n"
+                "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+                "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+                "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+                "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+            )
+            await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
         await callback.answer("✅ Подписка подтверждена!", show_alert=True)
     else:
         await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и нажмите снова.", show_alert=True)
@@ -846,7 +845,7 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на фото сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
+        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @CryptoViktor.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
@@ -907,7 +906,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".anim Привет мир!\n"
         ".ttt\n"
         ".gn Как дела?</blockquote>\n\n"
-        "❓ Остались вопросы? Пишите @SupXrayGramRobot."
+        "❓ Остались вопросы? Пишите @CryptoViktor."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
@@ -916,8 +915,15 @@ async def show_commands(callback: types.CallbackQuery):
 async def back_to_main(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     is_admin = (user_id == ADMIN_ID)
-    await callback.message.delete()
-    await send_main_menu(user_id, is_admin)
+    main_text = premium(
+        "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
+        "<b>🤖 Что умеет бот:</b>\n"
+        "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
+        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
+    )
+    await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
