@@ -109,6 +109,8 @@ class BroadcastStates(StatesGroup):
 
 # ==================== GIGACHAT (РАБОЧАЯ ВЕРСИЯ) ====================
 class GigaChatAPI:
+    """Класс для работы с GigaChat API"""
+    
     def __init__(self, api_key: str):
         self.api_key = api_key
         self._access_token = None
@@ -118,8 +120,10 @@ class GigaChatAPI:
         self._session.timeout = 60
         
     def _get_access_token(self) -> str | None:
+        """Получение токена доступа"""
         if self._access_token and time.time() < self._token_expires:
             return self._access_token
+            
         try:
             headers = {
                 "Authorization": f"Basic {self.api_key}",
@@ -127,12 +131,14 @@ class GigaChatAPI:
                 "RqUID": "6f0b1291-c7f3-4c6a-a5e7-8a6b5d3e2f1a",
                 "Accept": "application/json"
             }
+            
             response = self._session.post(
                 GIGACHAT_AUTH_URL,
                 headers=headers,
                 data={"scope": "GIGACHAT_API_PERS"},
                 timeout=60
             )
+            
             if response.status_code == 200:
                 data = response.json()
                 token = data.get("access_token")
@@ -143,35 +149,43 @@ class GigaChatAPI:
                     return token
             else:
                 logger.error(f"Ошибка получения токена: {response.status_code} - {response.text}")
+                
         except Exception as e:
             logger.error(f"Ошибка получения токена: {e}")
+        
         return None
     
     def get_text_response(self, messages: list) -> str:
+        """Получение ответа от GigaChat"""
         token = self._get_access_token()
         if not token:
             return "🔧 Сервис временно недоступен. Пожалуйста, попробуйте позже."
+        
         try:
             headers = {
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json"
             }
+            
             system_message = {
                 "role": "system",
                 "content": "Ты - полезный и вежливый ассистент. Отвечай на русском языке подробно и понятно."
             }
+            
             data = {
                 "model": "GigaChat",
                 "messages": [system_message] + messages,
                 "temperature": 0.7,
                 "max_tokens": 2000
             }
+            
             response = self._session.post(
                 GIGACHAT_API_URL,
                 headers=headers,
                 json=data,
                 timeout=60
             )
+            
             if response.status_code == 200:
                 result = response.json()
                 if "choices" in result and len(result["choices"]) > 0:
@@ -180,20 +194,26 @@ class GigaChatAPI:
                     text = ''.join(char for char in text if char.isprintable() or char in '\n\r\t').strip()
                     if text:
                         return self._format_response(text)
+            
             return "⚠️ Не удалось получить ответ. Попробуйте переформулировать вопрос."
+            
         except Exception as e:
             logger.error(f"Ошибка GigaChat API: {e}")
             return "❌ Ошибка при обработке запроса. Пожалуйста, попробуйте позже."
     
     def _format_response(self, text: str) -> str:
+        """Форматирование ответа"""
         formatted = "🤖 <b>Ответ:</b>\n\n"
+        
         paragraphs = text.split('\n\n')
         for paragraph in paragraphs:
             if paragraph.strip():
                 formatted += paragraph.strip() + "\n\n"
+        
         formatted += "─\nБот - @XrayGramRobot"
         return formatted
 
+# Инициализация GigaChat
 giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
 # ==================== TTT ====================
@@ -253,6 +273,7 @@ def ttt_keyboard(board, game_id):
 # ==================== АНИМАЦИЯ ====================
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация запущена...</i>", parse_mode="HTML")
+    
     current_text = ""
     last_text = ""
     for i, char in enumerate(text):
@@ -264,6 +285,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             except:
                 pass
         await asyncio.sleep(delay)
+    
     await asyncio.sleep(0.5)
     if current_text != last_text:
         try:
@@ -408,14 +430,14 @@ def commands_keyboard():
     )
 
 # ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
-
 async def send_main_menu(chat_id: int, is_admin: bool):
+    """Отправляет главное меню с баннером (если есть)"""
     main_text = premium(
         "<b>👋 Добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет медиа (в т.ч. самоуничтожающиеся), если вы на них ответите.</blockquote>\n\n"
+        "Сохраняет самоуничтожающиеся медиа, если вы ответите на них.</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     reply_markup = main_menu_keyboard(is_admin)
@@ -451,7 +473,7 @@ def get_user_download_dir(user_id: int) -> str:
     os.makedirs(user_dir, exist_ok=True)
     return user_dir
 
-# ==================== ФУНКЦИИ ИЗ iSeeAll ====================
+# ==================== ФУНКЦИИ ДЛЯ ОДНОРАЗОВЫХ МЕДИА (iSeeAll) ====================
 def extract_media(message: types.Message):
     """Возвращает (media_type, file_id) или (None, None)."""
     if message.photo:
@@ -490,7 +512,7 @@ async def load_media_to_buffer(file_id: str) -> bytes | None:
         logger.error(f"Ошибка скачивания медиа: {e}")
         return None
 
-# ==================== СТАРЫЕ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+# ==================== ОСТАЛЬНЫЕ ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
 async def download_files(message: types.Message, user_id: int) -> list:
     file_paths = []
     if not message.content_type:
@@ -514,8 +536,6 @@ async def download_files(message: types.Message, user_id: int) -> list:
         media_items.append(("animation", message.animation.file_id, f"animation_{message.message_id}.mp4"))
     elif message.video_note:
         media_items.append(("video_note", message.video_note.file_id, f"video_note_{message.message_id}.mp4"))
-    else:
-        return file_paths
 
     user_dir = get_user_download_dir(user_id)
     for media_type, file_id, original_name in media_items:
@@ -527,62 +547,34 @@ async def download_files(message: types.Message, user_id: int) -> list:
             save_path = os.path.join(user_dir, safe_name)
             await bot.download_file(file.file_path, save_path)
             file_paths.append(save_path)
-            logger.info(f"[DOWNLOAD] ✅ Файл сохранён: {save_path}")
+            logger.info(f"Файл сохранён: {save_path}")
         except Exception as e:
-            logger.error(f"[DOWNLOAD] ❌ Ошибка скачивания файла {file_id}: {e}")
+            logger.error(f"Ошибка скачивания файла {file_id}: {e}")
+
     return file_paths
 
 def format_user_info(user: types.User) -> str:
     full_name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
     return f"{full_name} (@{user.username})" if user.username else f"{full_name} (ID: {user.id})"
 
-async def send_notification(chat_id: int, text: str, files: list = None, file_id: str = None, media_type: str = None, parse_mode: str = "HTML"):
+async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     """
-    Универсальная отправка уведомлений с поддержкой как файлов с диска, так и file_id.
+    Отправляет уведомление владельцу. Если есть files, отправляет их как документы.
     """
-    if files:
-        # Отправляем файлы с диска как документы
-        try:
-            await bot.send_document(chat_id, FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
+    try:
+        if files:
+            await bot.send_document(chat_id, types.FSInputFile(files[0]), caption=premium(text), parse_mode=parse_mode)
             for file_path in files[1:]:
-                await bot.send_document(chat_id, FSInputFile(file_path))
+                await bot.send_document(chat_id, types.FSInputFile(file_path))
             for file_path in files:
                 try:
                     os.remove(file_path)
                 except:
                     pass
-        except Exception as e:
-            logger.error(f"Ошибка отправки уведомления с файлами: {e}")
+        else:
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
-    elif file_id and media_type:
-        # Отправляем по file_id, используя соответствующий тип
-        try:
-            if media_type == "photo":
-                await bot.send_photo(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "video":
-                await bot.send_video(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "voice":
-                await bot.send_voice(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "video_note":
-                await bot.send_video_note(chat_id, file_id)
-                await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
-            elif media_type == "audio":
-                await bot.send_audio(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "document":
-                await bot.send_document(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "animation":
-                await bot.send_animation(chat_id, file_id, caption=premium(text), parse_mode=parse_mode)
-            elif media_type == "sticker":
-                await bot.send_sticker(chat_id, file_id)
-                await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
-            else:
-                await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
-        except Exception as e:
-            logger.error(f"Ошибка отправки по file_id: {e}")
-            await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
-    else:
-        # Только текст
-        await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
+    except Exception as e:
+        logger.error(f"Ошибка отправки уведомления пользователю {chat_id}: {e}")
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -648,7 +640,9 @@ async def cmd_gn(message: types.Message):
         
         await loading_msg.delete()
         
+        # Отправляем ответ ТОЛЬКО в чат, где была команда
         if bc_id:
+            # Бизнес-чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -656,6 +650,7 @@ async def cmd_gn(message: types.Message):
                 business_connection_id=bc_id
             )
         else:
+            # Обычный чат
             await bot.send_message(
                 chat_id,
                 premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
@@ -784,6 +779,10 @@ async def ttt_callback(callback: types.CallbackQuery):
     turn = game["turn"]
     player_x = game["player_x"]
     player_o = game["player_o"]
+    
+    # ==========================================
+    # ========== ПРОВЕРКА РОЛЕЙ ================
+    # ==========================================
     
     if turn == "X":
         if user_id != player_x:
@@ -1105,7 +1104,6 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Бизнес-подключение ОТКЛЮЧЕНО: bc_id={bc_id}, user_id={user_id}")
-        db.delete_connection(bc_id)
         return
 
     logger.info(f"[CONN] Новое бизнес-подключение: bc_id={bc_id}, user_id={user_id}")
@@ -1177,7 +1175,8 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ===== НОВАЯ ЛОГИКА (скопирована из iSeeAll) =====
+    # ==================== НОВАЯ ЛОГИКА (iSeeAll) ====================
+    # Если владелец отвечает на сообщение с медиа, скачиваем и отправляем ему копию
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
         media_type, file_id = extract_media(replied)
@@ -1359,7 +1358,7 @@ async def handle_business_message(message: types.Message):
     fullname = format_user_info(sender) if sender else "Неизвестный"
     text = message.text or message.caption or ""
 
-    # Сохраняем file_id (если есть)
+    # Определяем file_id и media_type
     file_id = None
     media_type = None
     if message.photo:
@@ -1391,11 +1390,11 @@ async def handle_business_message(message: types.Message):
     db.save_message(
         bc_id, msg_id, user_id, fullname, text, files,
         file_id=file_id,
+        media_type=media_type,
         is_temporary=message.has_media_spoiler,
-        ttl_seconds=getattr(message, 'media_ttl_seconds', 0),
-        media_type=media_type
+        ttl_seconds=getattr(message, 'media_ttl_seconds', 0)
     )
-    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, file_id={file_id}")
+    logger.info(f"[SAVE] Сохранено сообщение {msg_id} для {user_id}, file_id={file_id}, media_type={media_type}")
 
     if message.has_media_spoiler and files:
         notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
@@ -1406,12 +1405,10 @@ async def handle_edited_business_message(message: types.Message):
     bc_id = message.business_connection_id
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
-        logger.warning(f"[EDIT] Пользователь не найден для bc_id={bc_id}")
         return
 
     chat_id = message.chat.id
     if db.is_chat_muted(user_id, chat_id):
-        logger.info(f"[EDIT] Чат {chat_id} замучен, пропускаем")
         return
 
     msg_id = message.message_id
@@ -1419,23 +1416,16 @@ async def handle_edited_business_message(message: types.Message):
 
     old_data = db.get_message(bc_id, msg_id)
     if not old_data:
-        logger.warning(f"[EDIT] Сообщение {msg_id} не найдено в БД")
         return
 
     old_text = old_data["text"] or ""
     old_fullname = old_data["fullname"]
-    old_file_id = old_data["file_id"]
-    old_media_type = old_data["media_type"]
 
-    # Проверяем, изменился ли текст
     if new_text.strip() == old_text.strip():
-        logger.info(f"[EDIT] Текст не изменился")
         return
 
-    # Обновляем текст в БД
     db.update_message_text(bc_id, msg_id, new_text)
 
-    # Обновляем имя отправителя (если изменилось)
     new_sender = message.from_user
     if new_sender:
         new_fullname = format_user_info(new_sender)
@@ -1443,63 +1433,36 @@ async def handle_edited_business_message(message: types.Message):
             db.update_message_fullname(bc_id, msg_id, new_fullname)
             old_fullname = new_fullname
 
-    # Подготавливаем уведомление
-    notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}</b>\n\n")
-    notif_text += f"❌ <b>Было:</b>\n{quote_text(old_text)}\n\n"
-    notif_text += f"✅ <b>Стало:</b>\n{quote_text(new_text)}"
-
-    # Отправляем с медиа, если есть
     files = old_data["files"]
     if files:
         files_list = json.loads(files) if isinstance(files, str) else files
     else:
         files_list = []
 
-    await send_notification(
-        user_id,
-        notif_text,
-        files=files_list,
-        file_id=old_file_id,
-        media_type=old_media_type
-    )
-    logger.info(f"[EDIT] Уведомление об изменении отправлено для {user_id}")
+    notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
+    await send_notification(user_id, notif_text, files_list)
 
 @dp.deleted_business_messages()
-async def handle_deleted_business_messages(event: types.BusinessMessagesDeleted):
+async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     bc_id = event.business_connection_id
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
-        logger.warning(f"[DELETE] Пользователь не найден для bc_id={bc_id}")
         return
 
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
-            logger.warning(f"[DELETE] Сообщение {msg_id} не найдено в БД")
             continue
-
         fullname = data["fullname"]
         text = data["text"] or ""
-        file_id = data["file_id"]
-        media_type = data["media_type"]
         files = data["files"]
         if files:
             files_list = json.loads(files) if isinstance(files, str) else files
         else:
             files_list = []
 
-        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
-        if text:
-            notif_text += premium(f"\n\n{text}")
-
-        await send_notification(
-            user_id,
-            notif_text,
-            files=files_list,
-            file_id=file_id,
-            media_type=media_type
-        )
-        logger.info(f"[DELETE] Уведомление об удалении отправлено для {user_id}")
+        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+        await send_notification(user_id, notif_text, files_list)
 
         db.delete_message(bc_id, msg_id)
 
