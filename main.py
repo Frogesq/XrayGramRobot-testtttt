@@ -7,6 +7,7 @@ import random
 import re
 import requests
 import urllib3
+from io import BytesIO  # <-- добавлено для iSeeAll
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
@@ -297,14 +298,14 @@ def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [
             InlineKeyboardButton(
-                text="🔗 Подключить бота",
+                text="Подключить бота",
                 callback_data="show_instruction",
                 style="primary"
             )
         ],
         [
             InlineKeyboardButton(
-                text="📋 Команды",
+                text="Команды",
                 callback_data="show_commands",
                 style="success"
             )
@@ -313,7 +314,7 @@ def main_menu_keyboard(is_admin: bool = False):
     if is_admin:
         kb.append([
             InlineKeyboardButton(
-                text="⚙️ Админ-панель",
+                text="Админ-панель",
                 callback_data="admin_panel",
                 style="danger"
             )
@@ -524,6 +525,45 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
 
+# ========== ФУНКЦИИ ДЛЯ МЕТОДА iSeeAll ==========
+def extract_media(message: types.Message):
+    """Возвращает (media_type, file_id) или (None, None)."""
+    if message.photo:
+        return "photo", message.photo[-1].file_id
+    if message.video:
+        return "video", message.video.file_id
+    if message.voice:
+        return "voice", message.voice.file_id
+    if message.video_note:
+        return "video_note", message.video_note.file_id
+    if message.document:
+        return "document", message.document.file_id
+    if message.audio:
+        return "audio", message.audio.file_id
+    if message.animation:
+        return "animation", message.animation.file_id
+    if message.sticker:
+        return "sticker", message.sticker.file_id
+    return None, None
+
+async def load_media_to_buffer(file_id: str) -> bytes | None:
+    """Скачивает медиа по file_id в байтовый буфер."""
+    if not file_id:
+        return None
+    try:
+        buffer = BytesIO()
+        downloaded = await bot.download(file_id, destination=buffer)
+        source = downloaded if downloaded is not None else buffer
+        if hasattr(source, "seek"):
+            source.seek(0)
+        data = source.read() if hasattr(source, "read") else b""
+        if not data and hasattr(buffer, "getvalue"):
+            data = buffer.getvalue()
+        return data
+    except Exception as e:
+        logger.error(f"Ошибка скачивания медиа: {e}")
+        return None
+
 # ==================== ОБРАБОТЧИКИ КОМАНД ====================
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
@@ -537,7 +577,7 @@ async def start_command(message: types.Message):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "Сохраняет самоуничтожающиеся медиа.(чтобы сохранить надо ответить на сообщение с одноразовым медиа)</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     
@@ -607,7 +647,7 @@ async def cmd_gn(message: types.Message):
         await loading_msg.delete()
         await bot.send_message(
             chat_id,
-            premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
+            premium(f"<b>❌ Ошибка при обращении к Нейросети:\n{str(e)}</b>"),
             parse_mode="HTML"
         )
 
@@ -830,7 +870,7 @@ async def check_subscription(callback: types.CallbackQuery):
                 "<b>🤖 Что умеет бот:</b>\n"
                 "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
                 "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-                "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+                "Сохраняет самоуничтожающиеся медиа.(чтобы сохранить надо ответить на сообщение с одноразовым медиа)</blockquote>\n\n"
                 "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
             )
             await bot.send_message(user_id, main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
@@ -845,7 +885,7 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Откройте Настройки → Телеграм для бизнеса → Чат-боты.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на фото сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @CryptoViktor.</b>"
+        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
@@ -906,7 +946,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".anim Привет мир!\n"
         ".ttt\n"
         ".gn Как дела?</blockquote>\n\n"
-        "❓ Остались вопросы? Пишите @CryptoViktor."
+        "❓ Остались вопросы? Пишите @SupXrayGramRobot."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
@@ -920,7 +960,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "<b>🤖 Что умеет бот:</b>\n"
         "<blockquote>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа.</blockquote>\n\n"
+        "Сохраняет самоуничтожающиеся медиа.(чтобы сохранить надо ответить на сообщение с одноразовым медиа)</blockquote>\n\n"
         "📋 Нажмите «Команды», чтобы узнать о дополнительных возможностях."
     )
     await safe_edit_or_send(callback.message, main_text, main_menu_keyboard(is_admin))
@@ -1137,6 +1177,44 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
+    # ========== НОВЫЙ БЛОК: СОХРАНЕНИЕ ОДНОРАЗОВЫХ МЕДИА ПРИ ОТВЕТЕ (iSeeAll) ==========
+    if message.reply_to_message and is_owner:
+        replied = message.reply_to_message
+        media_type, file_id = extract_media(replied)
+        if file_id and media_type:
+            sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
+            caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+            if replied.caption:
+                caption_text += f"\n\nПодпись: {replied.caption}"
+            data = await load_media_to_buffer(file_id)
+            if data:
+                try:
+                    if media_type == "photo":
+                        await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                    elif media_type == "video":
+                        await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                    elif media_type == "voice":
+                        await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                    elif media_type == "video_note":
+                        await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
+                        await bot.send_message(user_id, caption_text)
+                    elif media_type == "audio":
+                        await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                    elif media_type == "document":
+                        await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                    elif media_type == "animation":
+                        await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                    elif media_type == "sticker":
+                        await bot.send_sticker(user_id, file_id)
+                        await bot.send_message(user_id, caption_text)
+                    else:
+                        await bot.send_message(user_id, caption_text)
+                    logger.info(f"[REPLY] Медиа ({media_type}) сохранено для {user_id}")
+                except Exception as e:
+                    logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+            else:
+                await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+
     # ========== ВСЕ КОМАНДЫ ВЛАДЕЛЬЦА ==========
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
@@ -1247,7 +1325,7 @@ async def handle_business_message(message: types.Message):
                 await loading_msg.delete()
                 await bot.send_message(
                     user_id,
-                    premium(f"<b>❌ Ошибка при обращении к Gigachat:\n{str(e)}</b>"),
+                    premium(f"<b>❌ Ошибка при обращении к Нейросети:\n{str(e)}</b>"),
                     parse_mode="HTML"
                 )
             return
