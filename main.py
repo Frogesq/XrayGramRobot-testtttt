@@ -888,40 +888,42 @@ async def handle_business_message(message: types.Message):
     # ---- iSeeAll: сохранение одноразовых медиа при ответе ----
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
-        media_type, file_id = extract_media(replied)
-        if file_id and media_type:
-            sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
-            caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
-            if replied.caption:
-                caption_text += f"\n\nПодпись: {replied.caption}"
-            data = await load_media_to_buffer(file_id)
-            if data:
-                try:
-                    if media_type == "photo":
-                        await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
-                    elif media_type == "video":
-                        await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
-                    elif media_type == "voice":
-                        await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
-                    elif media_type == "video_note":
-                        await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
-                        await bot.send_message(user_id, caption_text)
-                    elif media_type == "audio":
-                        await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
-                    elif media_type == "document":
-                        await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
-                    elif media_type == "animation":
-                        await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
-                    elif media_type == "sticker":
-                        await bot.send_sticker(user_id, file_id)
-                        await bot.send_message(user_id, caption_text)
-                    else:
-                        await bot.send_message(user_id, caption_text)
-                    logger.info(f"[REPLY] Медиа ({media_type}) сохранено для {user_id}")
-                except Exception as e:
-                    logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
-            else:
-                await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+        # Проверяем, что это именно одноразовое медиа (has_media_spoiler)
+        if replied.has_media_spoiler:
+            media_type, file_id = extract_media(replied)
+            if file_id and media_type:
+                sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
+                caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+                if replied.caption:
+                    caption_text += f"\n\nПодпись: {replied.caption}"
+                data = await load_media_to_buffer(file_id)
+                if data:
+                    try:
+                        if media_type == "photo":
+                            await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                        elif media_type == "video":
+                            await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                        elif media_type == "voice":
+                            await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                        elif media_type == "video_note":
+                            await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
+                            await bot.send_message(user_id, caption_text)
+                        elif media_type == "audio":
+                            await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                        elif media_type == "document":
+                            await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                        elif media_type == "animation":
+                            await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                        elif media_type == "sticker":
+                            await bot.send_sticker(user_id, file_id)
+                            await bot.send_message(user_id, caption_text)
+                        else:
+                            await bot.send_message(user_id, caption_text)
+                        logger.info(f"[REPLY] Одноразовое медиа ({media_type}) сохранено для {user_id}")
+                    except Exception as e:
+                        logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+                else:
+                    await bot.send_message(user_id, f"⚠️ Не удалось скачать одноразовое медиа.\n{caption_text}")
 
     # ---- Команды владельца ----
     if is_owner and message.text and message.text.startswith('.'):
