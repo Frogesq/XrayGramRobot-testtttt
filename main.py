@@ -39,7 +39,7 @@ INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
+GIGACHAT_API_KEY = "GIGACHAT_API_KEY"
 GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
@@ -168,6 +168,16 @@ class GigaChatAPI:
 giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
 ttt_games = {}
+
+# TROLL: список шаблонов оскорблений (из предоставленных файлов)
+TROLL_MESSAGES = [
+    "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
+    "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
+    "как же ты тут нахуй впитываешь все харчи в твое гнилозубое ебло которое направлено на переисбыток нарастание различных обличий для опыта ты лишь пробирочный хуесос сынуля тайской шлюхи которого я буду ебашировать в каждой позе не дам способа и шанса выжить в данной ситуации хабальник расхуярю в шепни которые будут использоваться в качестве посыпки для отравления дегенеративных существ а именно тебе подобных попробуй только высказаться мне в залупу я же тут  яйцами тебя задушу уебанский сыночек тухлой выблядкой шлюхи выбью тебе каждое зубище для того чтобы начать точить рельсы ты свин жиробасный хуесосный пидорас дегенеративный зубасто вонючий шлюшьи сын зека черного"
+]
+
+# TROLL: словарь для хранения задач спама (по chat_id)
+troll_tasks = {}
 
 def ttt_board_to_text(board):
     res = ""
@@ -374,6 +384,27 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             except:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+
+# ---- TROLL: функция спама ----
+async def troll_spam(chat_id: int, bc_id: str, user_id: int):
+    """Бесконечно отправляет случайные оскорбления в чат с задержкой 5 секунд."""
+    logger.info(f"[TROLL] Запущен спам для чата {chat_id}")
+    while True:
+        # Проверяем, не отменена ли задача
+        if chat_id not in troll_tasks or troll_tasks[chat_id].get("stopped", False):
+            logger.info(f"[TROLL] Остановка спама для чата {chat_id}")
+            break
+        try:
+            msg = random.choice(TROLL_MESSAGES)
+            await bot.send_message(chat_id, msg, business_connection_id=bc_id)
+            await asyncio.sleep(5)  # задержка 5 секунд
+        except Exception as e:
+            logger.error(f"[TROLL] Ошибка отправки: {e}")
+            break
+    # Удаляем задачу из словаря при завершении
+    if chat_id in troll_tasks:
+        del troll_tasks[chat_id]
+    logger.info(f"[TROLL] Спам для чата {chat_id} завершён")
 
 # ---- Command handlers ----
 @dp.message(Command("start"))
@@ -659,7 +690,9 @@ async def show_commands(callback: types.CallbackQuery):
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
         "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
         "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
-        "🤖 .gn &lt;вопрос&gt; – задать вопрос Gigachat (ИИ-ассистент).</blockquote>\n\n"
+        "🤖 .gn &lt;вопрос&gt; – задать вопрос Gigachat (ИИ-ассистент).\n"
+        "🤬 .troll – начать спам оскорблениями в этот чат (задержка 5 сек).\n"
+        "⛔ .stoptroll – остановить спам оскорблениями.</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
@@ -667,7 +700,9 @@ async def show_commands(callback: types.CallbackQuery):
         ".duel\n"
         ".anim Привет мир!\n"
         ".ttt\n"
-        ".gn Как дела?</blockquote>\n\n"
+        ".gn Как дела?\n"
+        ".troll\n"
+        ".stoptroll</blockquote>\n\n"
         "❓ Остались вопросы? Пишите @SupXrayGramRobot."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -885,54 +920,97 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ---- iSeeAll: сохранение одноразовых медиа при ответе ----
+    # ---- Сохранение сообщения (сначала) ----
+    msg_id = message.message_id
+    sender = message.from_user
+    fullname = format_user_info(sender) if sender else "Неизвестный"
+    text = message.text or message.caption or ""
+
+    files = await download_files(message, user_id)
+    is_temporary = message.has_media_spoiler
+    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=is_temporary)
+    logger.info(f"[SAVE] Сохранено {msg_id} для {user_id}")
+
+    # ---- Отправка уведомления, если это самоуничтожающееся сообщение ----
+    if is_temporary and files:
+        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
+        await send_notification(user_id, notif_text, files)
+
+    # ---- Обработка ответа на сообщение (теперь после сохранения) ----
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
-        media_type, file_id = extract_media(replied)
-        if file_id and media_type:
-            sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
-            caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
-            if replied.caption:
-                caption_text += f"\n\nПодпись: {replied.caption}"
-            data = await load_media_to_buffer(file_id)
-            if data:
-                try:
-                    if media_type == "photo":
-                        await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
-                    elif media_type == "video":
-                        await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
-                    elif media_type == "voice":
-                        await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
-                    elif media_type == "video_note":
-                        await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
-                        await bot.send_message(user_id, caption_text)
-                    elif media_type == "audio":
-                        await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
-                    elif media_type == "document":
-                        await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
-                    elif media_type == "animation":
-                        await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
-                    elif media_type == "sticker":
-                        await bot.send_sticker(user_id, file_id)
-                        await bot.send_message(user_id, caption_text)
-                    else:
-                        await bot.send_message(user_id, caption_text)
-                    logger.info(f"[REPLY] Медиа ({media_type}) сохранено для {user_id}")
-                except Exception as e:
-                    logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
-            else:
-                await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+        replied_msg_id = replied.message_id
+        old_data = db.get_message(bc_id, replied_msg_id)
+        if old_data and old_data["is_temporary"] == 1:
+            media_type, file_id = extract_media(replied)
+            if file_id and media_type:
+                sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
+                caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+                if replied.caption:
+                    caption_text += f"\n\nПодпись: {replied.caption}"
+                data = await load_media_to_buffer(file_id)
+                if data:
+                    try:
+                        if media_type == "photo":
+                            await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                        elif media_type == "video":
+                            await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                        elif media_type == "voice":
+                            await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                        elif media_type == "video_note":
+                            await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
+                            await bot.send_message(user_id, caption_text)
+                        elif media_type == "audio":
+                            await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                        elif media_type == "document":
+                            await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                        elif media_type == "animation":
+                            await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                        elif media_type == "sticker":
+                            await bot.send_sticker(user_id, file_id)
+                            await bot.send_message(user_id, caption_text)
+                        else:
+                            await bot.send_message(user_id, caption_text)
+                        logger.info(f"[REPLY] Одноразовое медиа ({media_type}) сохранено для {user_id}")
+                    except Exception as e:
+                        logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+                else:
+                    await bot.send_message(user_id, f"⚠️ Не удалось скачать одноразовое медиа.\n{caption_text}")
 
-    # ---- Команды владельца ----
+    # ---- Команды владельца (обрабатываются после сохранения, но до удаления) ----
     if is_owner and message.text and message.text.startswith('.'):
-        text = message.text.strip()
+        text_cmd = message.text.strip()
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
-            logger.info(f"[CMD] Команда '{text}' удалена")
+            logger.info(f"[CMD] Команда '{text_cmd}' удалена")
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить команду: {e}")
 
-        if text == ".mute":
+        # ---- TROLL: команда .troll ----
+        if text_cmd == ".troll":
+            if chat_id in troll_tasks:
+                await bot.send_message(user_id, premium("<b>⚠️ Спам уже запущен в этом чате.</b>"), parse_mode="HTML")
+            else:
+                # Создаём задачу и сохраняем её в словаре
+                task = asyncio.create_task(troll_spam(chat_id, bc_id, user_id))
+                troll_tasks[chat_id] = {"task": task, "stopped": False}
+                await bot.send_message(user_id, premium("<b>🤬 Спам оскорблениями запущен!</b>"), parse_mode="HTML")
+            return
+
+        # ---- TROLL: команда .stoptroll ----
+        if text_cmd == ".stoptroll":
+            if chat_id in troll_tasks:
+                troll_tasks[chat_id]["stopped"] = True
+                # Отменяем задачу, чтобы она завершилась
+                task = troll_tasks[chat_id]["task"]
+                task.cancel()
+                # Удаляем из словаря, но функция сама удалит при завершении
+                await bot.send_message(user_id, premium("<b>⛔ Спам остановлен.</b>"), parse_mode="HTML")
+            else:
+                await bot.send_message(user_id, premium("<b>⚠️ Спам не был запущен.</b>"), parse_mode="HTML")
+            return
+
+        if text_cmd == ".mute":
             db.add_muted_chat(user_id, chat_id)
             await bot.send_message(chat_id, premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
                                    business_connection_id=bc_id, parse_mode="HTML")
@@ -941,7 +1019,7 @@ async def handle_business_message(message: types.Message):
             logger.info(f"[CMD] .mute выполнен для чата {chat_id}")
             return
 
-        if text == ".unmute":
+        if text_cmd == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
             await bot.send_message(chat_id, premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
                                    business_connection_id=bc_id, parse_mode="HTML")
@@ -950,8 +1028,8 @@ async def handle_business_message(message: types.Message):
             logger.info(f"[CMD] .unmute выполнен для чата {chat_id}")
             return
 
-        if text.startswith(".spam "):
-            parts = text.split(maxsplit=2)
+        if text_cmd.startswith(".spam "):
+            parts = text_cmd.split(maxsplit=2)
             if len(parts) >= 3:
                 try:
                     count = int(parts[1])
@@ -970,24 +1048,24 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam <число> <текст></b>"), parse_mode="HTML")
                 return
 
-        if text == ".duel":
+        if text_cmd == ".duel":
             await start_duel(message)
             return
 
-        if text.startswith(".anim "):
-            anim_text = text.replace(".anim", "").strip()
+        if text_cmd.startswith(".anim "):
+            anim_text = text_cmd.replace(".anim", "").strip()
             if not anim_text:
                 await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
                 return
             await animate_text(chat_id, anim_text, message)
             return
 
-        if text == ".ttt":
+        if text_cmd == ".ttt":
             await start_ttt(message)
             return
 
-        if text.startswith(".gn "):
-            question = text.replace(".gn", "").strip()
+        if text_cmd.startswith(".gn "):
+            question = text_cmd.replace(".gn", "").strip()
             if not question:
                 await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
                 return
@@ -1013,20 +1091,6 @@ async def handle_business_message(message: types.Message):
             if "message to delete not found" not in str(e):
                 logger.error(f"[MUTE] Ошибка удаления: {e}")
         return
-
-    # ---- Сохранение обычных сообщений ----
-    msg_id = message.message_id
-    sender = message.from_user
-    fullname = format_user_info(sender) if sender else "Неизвестный"
-    text = message.text or message.caption or ""
-
-    files = await download_files(message, user_id)
-    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"[SAVE] Сохранено {msg_id} для {user_id}")
-
-    if message.has_media_spoiler and files:
-        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
-        await send_notification(user_id, notif_text, files)
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
