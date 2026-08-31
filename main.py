@@ -390,20 +390,21 @@ def split_into_chunks(text: str) -> list[str]:
     return chunks
 
 async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
-    all_chunks = []
-    for template in TROLL_MESSAGES:
-        all_chunks.extend(split_into_chunks(template))
-    if not all_chunks:
-        return
     while True:
-        chunk = random.choice(all_chunks)
-        try:
-            await bot.send_message(chat_id, text=chunk, business_connection_id=bc_id)
-        except Exception as e:
-            logger.error(f"Ошибка отправки троллинга в чат {chat_id}: {e}")
-        await asyncio.sleep(random.uniform(2, 4))
-        if asyncio.current_task().cancelled():
-            return
+        # Выбираем случайный шаблон
+        template = random.choice(TROLL_MESSAGES)
+        chunks = split_into_chunks(template)  # разбиваем на фразы по 3–4 слова
+        if not chunks:
+            continue
+        # Отправляем все чанки этого шаблона по порядку
+        for chunk in chunks:
+            try:
+                await bot.send_message(chat_id, text=chunk, business_connection_id=bc_id)
+            except Exception as e:
+                logger.error(f"Ошибка отправки троллинга в чат {chat_id}: {e}")
+            await asyncio.sleep(random.uniform(2, 4))
+            if asyncio.current_task().cancelled():
+                return
 # ================================================
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
