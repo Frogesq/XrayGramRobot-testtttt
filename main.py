@@ -39,7 +39,7 @@ INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
-GIGACHAT_API_KEY = "GIGACHAT_API_KEY"
+GIGACHAT_API_KEY = "MDE5YzE5MDUtNWZiMC03Y2Y1LWE2MDMtZWI1ZWYwY2I0N2QxOjc5Y2Y2OTRiLWQxMTEtNDc1Zi05YzIyLWYyMmY0ZGE0NGNmMg=="
 GIGACHAT_AUTH_URL = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
 GIGACHAT_API_URL = "https://gigachat.devices.sberbank.ru/api/v1/chat/completions"
 
@@ -169,12 +169,28 @@ giga_chat = GigaChatAPI(GIGACHAT_API_KEY)
 
 ttt_games = {}
 
-# TROLL: список шаблонов оскорблений (из предоставленных файлов)
-TROLL_MESSAGES = [
+# TROLL: исходные шаблоны
+TROLL_TEMPLATES = [
     "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
     "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
     "как же ты тут нахуй впитываешь все харчи в твое гнилозубое ебло которое направлено на переисбыток нарастание различных обличий для опыта ты лишь пробирочный хуесос сынуля тайской шлюхи которого я буду ебашировать в каждой позе не дам способа и шанса выжить в данной ситуации хабальник расхуярю в шепни которые будут использоваться в качестве посыпки для отравления дегенеративных существ а именно тебе подобных попробуй только высказаться мне в залупу я же тут  яйцами тебя задушу уебанский сыночек тухлой выблядкой шлюхи выбью тебе каждое зубище для того чтобы начать точить рельсы ты свин жиробасный хуесосный пидорас дегенеративный зубасто вонючий шлюшьи сын зека черного"
 ]
+
+# Разбиваем каждый шаблон на предложения (по . ! ?)
+TROLL_SENTENCES = []
+for template in TROLL_TEMPLATES:
+    # Заменяем переносы строк на пробелы
+    template = template.replace('\n', ' ')
+    # Разбиваем по . ! ? с учётом возможных пробелов
+    sentences = re.split(r'[.!?]\s*', template)
+    for s in sentences:
+        s = s.strip()
+        if s:  # не пустое
+            TROLL_SENTENCES.append(s)
+
+# Если вдруг список пуст, добавим запасное предложение
+if not TROLL_SENTENCES:
+    TROLL_SENTENCES = ["Ты ничтожество!"]
 
 # TROLL: словарь для хранения задач спама (по chat_id)
 troll_tasks = {}
@@ -206,7 +222,7 @@ def ttt_keyboard(board, game_id):
             else:
                 row.append(InlineKeyboardButton(text="❌" if board[cell]=="X" else "⭕", callback_data="ttt_no"))
         kb.append(row)
-    kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data=f"ttt_end_{game_id}", style="danger")])
+    kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data=f"ttt_end_{game_id}")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
@@ -222,10 +238,12 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
     await asyncio.sleep(0.5)
 
 def main_menu_keyboard(is_admin: bool = False):
-    kb = [[InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
-          [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="success")]]
+    kb = [
+        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction")],
+        [InlineKeyboardButton(text="Команды", callback_data="show_commands")]
+    ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="danger")])
+        kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -234,28 +252,28 @@ def subscription_keyboard(action: str = None):
         cb += f"|{action}"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
-        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=cb, style="success")]
+        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=cb)]
     ])
 
 def instruction_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]])
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast", style="primary")],
-        [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt", style="primary")],
-        [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast")],
+        [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt")],
+        [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]
     ])
 
 def cancel_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast")]])
 
 def back_to_admin_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin")]])
 
 def commands_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main")]])
 
 async def is_subscribed(user_id: int) -> bool:
     try:
@@ -366,28 +384,19 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
         logger.error(f"Ошибка отправки уведомления: {e}")
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
-    new_text = premium(new_text)
+    """
+    Удаляет исходное сообщение и отправляет новое текстовое.
+    Это предотвращает ошибки при попытке редактирования медиа-сообщений.
+    """
     try:
-        if message.text or message.caption:
-            await message.edit_text(new_text, parse_mode="HTML", reply_markup=reply_markup)
-        else:
-            await message.delete()
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
-    except Exception as e:
-        if "there is no text" in str(e) or "message to edit not found" in str(e):
-            await message.delete()
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
-        else:
-            logger.error(f"Ошибка редактирования: {e}")
-            try:
-                await message.delete()
-            except:
-                pass
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+        await message.delete()
+    except:
+        pass
+    await bot.send_message(message.chat.id, premium(new_text), parse_mode="HTML", reply_markup=reply_markup)
 
 # ---- TROLL: функция спама ----
-async def troll_spam(chat_id: int, bc_id: str, user_id: int):
-    """Бесконечно отправляет случайные оскорбления в чат с задержкой 5 секунд."""
+async def troll_spam(chat_id: int, bc_id: str):
+    """Бесконечно отправляет случайные предложения из списка оскорблений с задержкой 5 секунд."""
     logger.info(f"[TROLL] Запущен спам для чата {chat_id}")
     while True:
         # Проверяем, не отменена ли задача
@@ -395,7 +404,7 @@ async def troll_spam(chat_id: int, bc_id: str, user_id: int):
             logger.info(f"[TROLL] Остановка спама для чата {chat_id}")
             break
         try:
-            msg = random.choice(TROLL_MESSAGES)
+            msg = random.choice(TROLL_SENTENCES)
             await bot.send_message(chat_id, msg, business_connection_id=bc_id)
             await asyncio.sleep(5)  # задержка 5 секунд
         except Exception as e:
@@ -992,7 +1001,7 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>⚠️ Спам уже запущен в этом чате.</b>"), parse_mode="HTML")
             else:
                 # Создаём задачу и сохраняем её в словаре
-                task = asyncio.create_task(troll_spam(chat_id, bc_id, user_id))
+                task = asyncio.create_task(troll_spam(chat_id, bc_id))
                 troll_tasks[chat_id] = {"task": task, "stopped": False}
                 await bot.send_message(user_id, premium("<b>🤬 Спам оскорблениями запущен!</b>"), parse_mode="HTML")
             return
@@ -1004,7 +1013,6 @@ async def handle_business_message(message: types.Message):
                 # Отменяем задачу, чтобы она завершилась
                 task = troll_tasks[chat_id]["task"]
                 task.cancel()
-                # Удаляем из словаря, но функция сама удалит при завершении
                 await bot.send_message(user_id, premium("<b>⛔ Спам остановлен.</b>"), parse_mode="HTML")
             else:
                 await bot.send_message(user_id, premium("<b>⚠️ Спам не был запущен.</b>"), parse_mode="HTML")
