@@ -73,7 +73,7 @@ PREMIUM_EMOJI = {
 }
 EMPTY = "ㅤ"
 
-# ============ НОВЫЙ БЛОК ДЛЯ ТРОЛЛИНГА ============
+# ============ НОВЫЙ БЛОК ДЛЯ ТРОЛЛИНГА (без изменений) ============
 TROLL_MESSAGES = [
     "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
     "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
@@ -391,12 +391,10 @@ def split_into_chunks(text: str) -> list[str]:
 
 async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
     while True:
-        # Выбираем случайный шаблон
         template = random.choice(TROLL_MESSAGES)
-        chunks = split_into_chunks(template)  # разбиваем на фразы по 3–4 слова
+        chunks = split_into_chunks(template)
         if not chunks:
             continue
-        # Отправляем все чанки этого шаблона по порядку
         for chunk in chunks:
             try:
                 await bot.send_message(chat_id, text=chunk, business_connection_id=bc_id)
@@ -406,6 +404,87 @@ async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
             if asyncio.current_task().cancelled():
                 return
 # ================================================
+
+# ============ ФУНКЦИИ ДЛЯ ПРОВЕРКИ ОДНОРАЗОВОГО МЕДИА (скопированы из iSeeAllRobot) ============
+def _positive_ttl(value) -> bool:
+    try:
+        return value is not None and int(value) > 0
+    except (TypeError, ValueError):
+        return False
+
+def _object_value(obj, key: str):
+    if obj is None:
+        return None
+    value = getattr(obj, key, None)
+    if value is not None:
+        return value
+    extra = getattr(obj, "model_extra", None) or {}
+    return extra.get(key)
+
+def _nested_value(obj, *keys, _seen=None):
+    if obj is None:
+        return None
+    if _seen is None:
+        _seen = set()
+    if isinstance(obj, (dict, list, tuple)) or hasattr(obj, "__dict__"):
+        marker = id(obj)
+        if marker in _seen:
+            return None
+        _seen.add(marker)
+
+    if isinstance(obj, dict):
+        for key in keys:
+            if obj.get(key) is not None:
+                return obj[key]
+        values = obj.values()
+    elif isinstance(obj, (list, tuple)):
+        values = obj
+    else:
+        for key in keys:
+            value = _object_value(obj, key)
+            if value is not None:
+                return value
+        values = []
+        model_dump = getattr(obj, "model_dump", None)
+        if callable(model_dump):
+            try:
+                dumped = model_dump(exclude_none=True)
+                if isinstance(dumped, dict):
+                    values.extend(dumped.values())
+            except Exception:
+                pass
+        extra = getattr(obj, "model_extra", None)
+        if isinstance(extra, dict):
+            values.extend(extra.values())
+        raw_dict = getattr(obj, "__dict__", None)
+        if isinstance(raw_dict, dict):
+            values.extend(raw_dict.values())
+
+    for value in values:
+        found = _nested_value(value, *keys, _seen=_seen)
+        if found is not None:
+            return found
+    return None
+
+def _has_restricted_marker(message: types.Message) -> bool:
+    return (
+        _nested_value(message, "ephemeral_message_id") is not None
+        or _positive_ttl(_nested_value(message, "ttl_seconds"))
+        or any(_nested_value(message, key) is True for key in (
+            "has_view_once", "is_view_once", "view_once", "is_secret"
+        ))
+    )
+
+def is_restricted_media(message: types.Message) -> bool:
+    media_fields = (
+        "photo", "video", "video_note", "animation", "voice", "audio", "document", "sticker"
+    )
+    if not any(getattr(message, field, None) for field in media_fields):
+        return False
+    if getattr(message, "has_protected_content", False) is True:
+        return True
+    return _has_restricted_marker(message)
+# ===========================================================================================
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -941,43 +1020,48 @@ async def handle_business_message(message: types.Message):
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ---- iSeeAll: сохранение одноразовых медиа при ответе ----
+    # ---- iSeeAll: сохранение одноразовых медиа при ответе (ТОЛЬКО ДЛЯ ОДНОРАЗОВЫХ) ----
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
-        media_type, file_id = extract_media(replied)
-        if file_id and media_type:
-            sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
-            caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
-            if replied.caption:
-                caption_text += f"\n\nПодпись: {replied.caption}"
-            data = await load_media_to_buffer(file_id)
-            if data:
-                try:
-                    if media_type == "photo":
-                        await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
-                    elif media_type == "video":
-                        await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
-                    elif media_type == "voice":
-                        await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
-                    elif media_type == "video_note":
-                        await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
-                        await bot.send_message(user_id, caption_text)
-                    elif media_type == "audio":
-                        await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
-                    elif media_type == "document":
-                        await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
-                    elif media_type == "animation":
-                        await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
-                    elif media_type == "sticker":
-                        await bot.send_sticker(user_id, file_id)
-                        await bot.send_message(user_id, caption_text)
-                    else:
-                        await bot.send_message(user_id, caption_text)
-                    logger.info(f"[REPLY] Медиа ({media_type}) сохранено для {user_id}")
-                except Exception as e:
-                    logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
-            else:
-                await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+        # Проверяем, является ли отвеченное сообщение одноразовым медиа
+        if is_restricted_media(replied):
+            media_type, file_id = extract_media(replied)
+            if file_id and media_type:
+                sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
+                caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+                if replied.caption:
+                    caption_text += f"\n\nПодпись: {replied.caption}"
+                data = await load_media_to_buffer(file_id)
+                if data:
+                    try:
+                        if media_type == "photo":
+                            await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                        elif media_type == "video":
+                            await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                        elif media_type == "voice":
+                            await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                        elif media_type == "video_note":
+                            await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
+                            await bot.send_message(user_id, caption_text)
+                        elif media_type == "audio":
+                            await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                        elif media_type == "document":
+                            await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                        elif media_type == "animation":
+                            await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                        elif media_type == "sticker":
+                            await bot.send_sticker(user_id, file_id)
+                            await bot.send_message(user_id, caption_text)
+                        else:
+                            await bot.send_message(user_id, caption_text)
+                        logger.info(f"[REPLY] Одноразовое медиа ({media_type}) сохранено для {user_id}")
+                    except Exception as e:
+                        logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+                else:
+                    await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+        else:
+            # Обычное медиа – игнорируем, только логируем
+            logger.info(f"[REPLY] Ответ на обычное медиа (не одноразовое) – пропущено")
 
     # ---- Команды владельца ----
     if is_owner and message.text and message.text.startswith('.'):
