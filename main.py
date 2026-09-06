@@ -39,7 +39,7 @@ if not RANVIK_API_KEY:
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
-INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
+INSTRUCTION_VIDEO_PATH = os.path.join(BASE_DIR, "instruction.mp4")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
@@ -284,10 +284,10 @@ dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
-if os.path.exists(INSTRUCTION_IMAGE_PATH):
-    logger.info("✅ Картинка инструкции найдена")
+if os.path.exists(INSTRUCTION_VIDEO_PATH):
+    logger.info("✅ Видео инструкции найдено")
 else:
-    logger.warning("❌ Картинка инструкции НЕ найдена")
+    logger.warning("❌ Видео инструкции НЕ найдено (файл instruction.mp4 отсутствует)")
 if os.path.exists(BANNER_PATH):
     logger.info("✅ Баннер найден")
 else:
@@ -844,18 +844,18 @@ async def check_subscription(callback: types.CallbackQuery):
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
         "<b>📖 Инструкция по подключению XrayGram\n\n"
-        "<b>Для исползования бота НЕОБЯЗАТЕЛЬНО иметь телеграм премиум\n"
+        "<b>Для использования бота НЕОБЯЗАТЕЛЬНО иметь телеграм премиум\n"
         "2️⃣ Зайдите в свой профиль → Редактировать → Автоматизация чатов.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на видео сверху.\n\n"
         "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
     )
     try:
-        if os.path.exists(INSTRUCTION_IMAGE_PATH):
-            photo = FSInputFile(INSTRUCTION_IMAGE_PATH)
-            await bot.send_photo(
+        if os.path.exists(INSTRUCTION_VIDEO_PATH):
+            video = FSInputFile(INSTRUCTION_VIDEO_PATH)
+            await bot.send_video(
                 chat_id=user_id,
-                photo=photo,
+                video=video,
                 caption=instruction_text,
                 parse_mode="HTML",
                 reply_markup=instruction_keyboard()
