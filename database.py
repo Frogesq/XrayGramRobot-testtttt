@@ -47,7 +47,6 @@ def _try_recover(path):
         shutil.copy2(path, backup_path)
         logger.warning(f"[DB] Битая база сохранена как {backup_path}")
 
-        # Пытаемся восстановить через sqlite3 .recover
         new_path = f"{path}.recovered"
         conn_src = sqlite3.connect(path)
         conn_dst = sqlite3.connect(new_path)
@@ -88,7 +87,6 @@ def _ensure_valid_db(path):
         logger.info(f"[DB] Файл валиден, используем как есть")
         return
 
-    # Файл пустой — просто удаляем
     if size < 100:
         logger.warning(f"[DB] Файл пустой или слишком маленький, удаляем")
         try:
@@ -97,12 +95,10 @@ def _ensure_valid_db(path):
             logger.error(f"[DB] Не удалось удалить файл: {e}")
         return
 
-    # Пытаемся восстановить
     logger.warning(f"[DB] Файл повреждён, пробуем восстановить...")
     if _try_recover(path):
         return
 
-    # Не удалось восстановить — удаляем
     logger.error(f"[DB] Восстановить не удалось, удаляем файл")
     try:
         os.remove(path)
@@ -120,6 +116,7 @@ class Database:
     def _init_tables(self):
         cursor = self.conn.cursor()
 
+        # Таблица пользователей
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -130,6 +127,7 @@ class Database:
             )
         """)
 
+        # Таблица подключений (business_connection_id -> user_id)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 bc_id TEXT PRIMARY KEY,
@@ -137,6 +135,7 @@ class Database:
             )
         """)
 
+        # Таблица сообщений
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 bc_id TEXT,
@@ -151,6 +150,7 @@ class Database:
             )
         """)
 
+        # Таблица замученных чатов
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS muted_chats (
                 user_id INTEGER,
@@ -159,6 +159,7 @@ class Database:
             )
         """)
 
+        # Таблица для игр в крестики-нолики
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ttt_games (
                 chat_id INTEGER PRIMARY KEY,
@@ -170,6 +171,7 @@ class Database:
             )
         """)
 
+        # Индексы для ускорения запросов
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
@@ -178,7 +180,7 @@ class Database:
 
         self.conn.commit()
 
-    # ==================== ПОЛЬЗОВАТЕЛИ ====================
+    # ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -198,7 +200,16 @@ class Database:
         cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
         return cursor.fetchone()
 
-    # ==================== ПОДКЛЮЧЕНИЯ ====================
+    def delete_user_completely(self, user_id):
+        """Удаляет пользователя и ВСЕ его данные из БД."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM connections WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        self.conn.commit()
+
+    # ==================== РАБОТА С ПОДКЛЮЧЕНИЯМИ ====================
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -220,7 +231,7 @@ class Database:
         cursor.execute("SELECT bc_id, user_id FROM connections")
         return cursor.fetchall()
 
-    # ==================== СООБЩЕНИЯ ====================
+    # ==================== РАБОТА С СООБЩЕНИЯМИ ====================
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
@@ -260,7 +271,7 @@ class Database:
         cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
         return cursor.fetchall()
 
-    # ==================== MUTE ====================
+    # ==================== РАБОТА С MUTE ====================
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -281,7 +292,7 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
-    # ==================== TTT ====================
+    # ==================== РАБОТА С ИГРАМИ (TTT) ====================
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
