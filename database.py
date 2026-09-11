@@ -1,9 +1,15 @@
 import sqlite3
 import json
+import os
+
+# Папка для постоянного хранения данных (не сбрасывается при деплое на BotHost.ru)
+DATA_DIR = "/app/data"
+os.makedirs(DATA_DIR, exist_ok=True)
+DB_PATH = os.path.join(DATA_DIR, "messages.db")
 
 class Database:
     def __init__(self):
-        self.conn = sqlite3.connect("messages.db", check_same_thread=False)
+        self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_tables()
 
