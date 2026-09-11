@@ -991,7 +991,7 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
-# ------- ИСПРАВЛЕННАЯ РАССЫЛКА (retry + задержка) -------
+# ------- РАССЫЛКА С ОЧИСТКОЙ ЗАБЛОКИРОВАВШИХ -------
 @dp.message(StateFilter(BroadcastStates.waiting_for_content))
 async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -1004,37 +1004,55 @@ async def process_broadcast(message: types.Message, state: FSMContext):
         await message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
         await state.clear()
         return
+
     sent = 0
     failed = 0
+    blocked = 0
+    no_dialog = 0
+
     status_msg = await message.answer(premium("<b>⏳ Рассылка запущена...</b>"), parse_mode="HTML")
+
     for (user_id,) in users:
-        success = False
-        for attempt in range(3):
-            try:
-                await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
-                sent += 1
-                success = True
-                break
-            except Exception as e:
-                err_text = str(e).lower()
-                if "flood" in err_text or "retry after" in err_text or "too many requests" in err_text:
-                    await asyncio.sleep(3)
-                    continue
-                else:
-                    logger.error(f"Ошибка рассылки {user_id}: {e}")
+        try:
+            await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+            sent += 1
+            await asyncio.sleep(0.05)
+        except Exception as e:
+            err_text = str(e).lower()
+            if "flood" in err_text or "retry after" in err_text or "too many requests" in err_text:
+                await asyncio.sleep(3)
+                try:
+                    await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+                    sent += 1
+                except Exception as e2:
+                    logger.error(f"Ошибка рассылки {user_id} (retry): {e2}")
                     failed += 1
-                    break
-        if not success:
-            failed += 1
-        await asyncio.sleep(0.1)
+            elif "blocked" in err_text:
+                db.delete_user_completely(user_id)
+                blocked += 1
+                logger.info(f"[BROADCAST] {user_id} заблокировал бота — удалён из БД")
+            elif "can't initiate" in err_text or "chat not found" in err_text:
+                no_dialog += 1
+            else:
+                logger.error(f"Ошибка рассылки {user_id}: {e}")
+                failed += 1
+            await asyncio.sleep(0.05)
+
     try:
         await status_msg.delete()
     except:
         pass
-    await message.answer(premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>"),
-                         parse_mode="HTML", reply_markup=back_to_admin_keyboard())
+
+    report = (
+        f"<b>✅ Рассылка завершена!</b>\n\n"
+        f"📤 Отправлено: {sent}\n"
+        f"🚫 Заблокировали (удалены из БД): {blocked}\n"
+        f"💤 Не начинали диалог: {no_dialog}\n"
+        f"❌ Прочие ошибки: {failed}"
+    )
+    await message.answer(premium(report), parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
-# ---------------------------------------------------------
+# -------------------------------------------------------
 
 @dp.callback_query(lambda c: c.data == "users_txt")
 async def users_txt(callback: types.CallbackQuery):
@@ -1059,32 +1077,62 @@ async def users_txt(callback: types.CallbackQuery):
                                            caption=premium("<b>📄 Список всех пользователей (txt)</b>"), parse_mode="HTML")
     await callback.answer()
 
-# ------- ИСПРАВЛЕННЫЕ АКТИВНЫЕ ПОДКЛЮЧЕНИЯ (txt) -------
+# ------- АКТИВНЫЕ ПОДКЛЮЧЕНИЯ С ПРОВЕРКОЙ ЧЕРЕЗ API -------
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
+
     cursor = db.conn.cursor()
-    cursor.execute("SELECT DISTINCT user_id FROM connections")
-    conn_users = cursor.fetchall()
-    if not conn_users:
+    cursor.execute("SELECT bc_id, user_id FROM connections")
+    all_conns = cursor.fetchall()
+
+    if not all_conns:
         await callback.answer("Нет активных подключений.", show_alert=True)
         return
-    ids = [row[0] for row in conn_users]
-    placeholders = ",".join("?" for _ in ids)
-    cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", ids)
+
+    active_ids = []
+    removed = 0
+
+    for row in all_conns:
+        bc_id = row["bc_id"]
+        user_id = row["user_id"]
+        try:
+            conn = await bot.get_business_connection(bc_id)
+            if conn and conn.is_enabled:
+                active_ids.append(user_id)
+            else:
+                db.delete_user_completely(user_id)
+                removed += 1
+                logger.info(f"[ACTIVE] {user_id} отключил бота — удалён из БД")
+        except Exception as e:
+            # bc_id невалидный — значит подключение мертво
+            db.delete_user_completely(user_id)
+            removed += 1
+            logger.info(f"[ACTIVE] bc_id {bc_id} невалиден — {user_id} удалён из БД")
+
+    if not active_ids:
+        await callback.answer(f"Нет активных подключений. Очищено: {removed}", show_alert=True)
+        return
+
+    placeholders = ",".join("?" for _ in active_ids)
+    cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", active_ids)
     users = cursor.fetchall()
+
     content = "Активные подключения XrayGram\n"
-    content += f"Всего: {len(users)}\n" + "=" * 50 + "\n\n"
+    content += f"Всего активных: {len(users)}\n"
+    content += f"Очищено мёртвых: {removed}\n"
+    content += "=" * 50 + "\n\n"
     for u in users:
         uid, uname, fname, lname = u
         name = f"{fname or ''} {lname or ''}".strip() or "Без имени"
         un = f"@{uname}" if uname else f"ID: {uid}"
         content += f"{name} ({un})\nID: {uid}\n" + "-" * 30 + "\n"
+
     await callback.message.answer_document(
         BufferedInputFile(content.encode("utf-8"), filename="active_connections.txt"),
-        caption=premium("<b>🔗 Активные подключения (txt)</b>"),
+        caption=premium(f"<b>🔗 Активные подключения (txt)\nВсего: {len(users)} | Очищено мёртвых: {removed}</b>"),
         parse_mode="HTML"
     )
     await callback.answer()
@@ -1098,7 +1146,8 @@ async def handle_business_connection(connection: BusinessConnection):
     is_enabled = connection.is_enabled
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
-        db.delete_connection(bc_id)
+        # Полная очистка пользователя из БД
+        db.delete_user_completely(user_id)
         return
     logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
     db.set_connection(bc_id, user_id)
@@ -1148,6 +1197,11 @@ async def handle_business_message(message: types.Message):
 
     if not user_id:
         logger.warning(f"Не удалось определить user_id для bc_id={bc_id}")
+        return
+
+    # Если bc_id больше нет в connections — значит пользователь отключён, не сохраняем
+    if not db.get_user_by_bc_id(bc_id):
+        logger.info(f"[SKIP] bc_id={bc_id} не активен — сообщение не сохраняется")
         return
 
     if not db.is_user_registered(user_id):
