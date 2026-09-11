@@ -1,22 +1,125 @@
 import sqlite3
 import json
 import os
+import logging
+import shutil
+import time
+
+logger = logging.getLogger(__name__)
 
 # Папка для постоянного хранения данных (не сбрасывается при деплое на BotHost.ru)
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "messages.db")
 
+
+def _is_valid_sqlite(path):
+    """Проверяет, является ли файл валидной SQLite-БД."""
+    if not os.path.exists(path):
+        return False
+    size = os.path.getsize(path)
+    if size < 100:
+        logger.warning(f"[DB] Файл слишком маленький ({size} байт): {path}")
+        return False
+    try:
+        with open(path, "rb") as f:
+            header = f.read(16)
+        if header != b"SQLite format 3\x00":
+            logger.error(f"[DB] Неверный заголовок файла: {header!r}")
+            return False
+        conn = sqlite3.connect(path)
+        conn.execute("PRAGMA schema_version;")
+        conn.execute("SELECT name FROM sqlite_master LIMIT 1;")
+        conn.close()
+        return True
+    except sqlite3.DatabaseError as e:
+        logger.error(f"[DB] Файл не является SQLite: {e}")
+        return False
+    except Exception as e:
+        logger.error(f"[DB] Ошибка проверки файла: {e}")
+        return False
+
+
+def _try_recover(path):
+    """Пытается восстановить битую базу, создавая новую."""
+    try:
+        backup_path = f"{path}.broken.{int(time.time())}"
+        shutil.copy2(path, backup_path)
+        logger.warning(f"[DB] Битая база сохранена как {backup_path}")
+
+        # Пытаемся восстановить через sqlite3 .recover
+        new_path = f"{path}.recovered"
+        conn_src = sqlite3.connect(path)
+        conn_dst = sqlite3.connect(new_path)
+        with conn_dst:
+            for line in conn_src.iterdump():
+                try:
+                    conn_dst.execute(line)
+                except Exception:
+                    pass
+        conn_src.close()
+        conn_dst.close()
+
+        if os.path.exists(new_path) and os.path.getsize(new_path) > 0:
+            os.replace(new_path, path)
+            logger.info(f"[DB] База успешно восстановлена: {path}")
+            return True
+    except Exception as e:
+        logger.error(f"[DB] Не удалось восстановить базу: {e}")
+    return False
+
+
+def _ensure_valid_db(path):
+    """
+    Гарантирует, что файл — валидная SQLite-БД.
+    - Если файла нет — ничего не делает (создастся автоматически).
+    - Если файл пустой — удаляет.
+    - Если валидный — оставляет.
+    - Если битый — пытается восстановить, иначе удаляет.
+    """
+    if not os.path.exists(path):
+        logger.info(f"[DB] Файл не найден, будет создан новый: {path}")
+        return
+
+    size = os.path.getsize(path)
+    logger.info(f"[DB] Найден файл базы: {path} ({size} байт)")
+
+    if _is_valid_sqlite(path):
+        logger.info(f"[DB] Файл валиден, используем как есть")
+        return
+
+    # Файл пустой — просто удаляем
+    if size < 100:
+        logger.warning(f"[DB] Файл пустой или слишком маленький, удаляем")
+        try:
+            os.remove(path)
+        except Exception as e:
+            logger.error(f"[DB] Не удалось удалить файл: {e}")
+        return
+
+    # Пытаемся восстановить
+    logger.warning(f"[DB] Файл повреждён, пробуем восстановить...")
+    if _try_recover(path):
+        return
+
+    # Не удалось восстановить — удаляем
+    logger.error(f"[DB] Восстановить не удалось, удаляем файл")
+    try:
+        os.remove(path)
+    except Exception as e:
+        logger.error(f"[DB] Не удалось удалить файл: {e}")
+
+
 class Database:
     def __init__(self):
+        _ensure_valid_db(DB_PATH)
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_tables()
 
     def _init_tables(self):
         cursor = self.conn.cursor()
-        
-        # Таблица пользователей
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -26,16 +129,14 @@ class Database:
                 registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        
-        # Таблица подключений (business_connection_id -> user_id)
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 bc_id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL
             )
         """)
-        
-        # Таблица сообщений
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 bc_id TEXT,
@@ -49,8 +150,7 @@ class Database:
                 PRIMARY KEY (bc_id, msg_id)
             )
         """)
-        
-        # Таблица замученных чатов
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS muted_chats (
                 user_id INTEGER,
@@ -58,8 +158,7 @@ class Database:
                 PRIMARY KEY (user_id, chat_id)
             )
         """)
-        
-        # Таблица для игр в крестики-нолики
+
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ttt_games (
                 chat_id INTEGER PRIMARY KEY,
@@ -70,17 +169,16 @@ class Database:
                 game_id TEXT
             )
         """)
-        
-        # Индексы для ускорения запросов
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
-        
+
         self.conn.commit()
 
-    # ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
+    # ==================== ПОЛЬЗОВАТЕЛИ ====================
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -100,7 +198,7 @@ class Database:
         cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
         return cursor.fetchone()
 
-    # ==================== РАБОТА С ПОДКЛЮЧЕНИЯМИ ====================
+    # ==================== ПОДКЛЮЧЕНИЯ ====================
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -122,7 +220,7 @@ class Database:
         cursor.execute("SELECT bc_id, user_id FROM connections")
         return cursor.fetchall()
 
-    # ==================== РАБОТА С СООБЩЕНИЯМИ ====================
+    # ==================== СООБЩЕНИЯ ====================
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
@@ -134,16 +232,12 @@ class Database:
 
     def update_message_text(self, bc_id, msg_id, new_text):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            UPDATE messages SET text = ? WHERE bc_id = ? AND msg_id = ?
-        """, (new_text, bc_id, msg_id))
+        cursor.execute("UPDATE messages SET text = ? WHERE bc_id = ? AND msg_id = ?", (new_text, bc_id, msg_id))
         self.conn.commit()
 
     def update_message_fullname(self, bc_id, msg_id, new_fullname):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            UPDATE messages SET fullname = ? WHERE bc_id = ? AND msg_id = ?
-        """, (new_fullname, bc_id, msg_id))
+        cursor.execute("UPDATE messages SET fullname = ? WHERE bc_id = ? AND msg_id = ?", (new_fullname, bc_id, msg_id))
         self.conn.commit()
 
     def get_message(self, bc_id, msg_id):
@@ -166,7 +260,7 @@ class Database:
         cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
         return cursor.fetchall()
 
-    # ==================== РАБОТА С MUTE ====================
+    # ==================== MUTE ====================
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -187,7 +281,7 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
-    # ==================== РАБОТА С ИГРАМИ (TTT) ====================
+    # ==================== TTT ====================
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -218,16 +312,12 @@ class Database:
 
     def update_ttt_game(self, chat_id, board, turn):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?
-        """, (json.dumps(board), turn, chat_id))
+        cursor.execute("UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?", (json.dumps(board), turn, chat_id))
         self.conn.commit()
 
     def update_ttt_player_o(self, chat_id, player_o):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            UPDATE ttt_games SET player_o = ? WHERE chat_id = ?
-        """, (player_o, chat_id))
+        cursor.execute("UPDATE ttt_games SET player_o = ? WHERE chat_id = ?", (player_o, chat_id))
         self.conn.commit()
 
     def get_ttt_game_by_id(self, chat_id, game_id):
