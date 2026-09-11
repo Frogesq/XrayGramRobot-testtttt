@@ -991,6 +991,7 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
+# ------- ИСПРАВЛЕННАЯ РАССЫЛКА (retry + задержка) -------
 @dp.message(StateFilter(BroadcastStates.waiting_for_content))
 async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -1005,17 +1006,35 @@ async def process_broadcast(message: types.Message, state: FSMContext):
         return
     sent = 0
     failed = 0
+    status_msg = await message.answer(premium("<b>⏳ Рассылка запущена...</b>"), parse_mode="HTML")
     for (user_id,) in users:
-        try:
-            await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
-            sent += 1
-            await asyncio.sleep(0.05)
-        except Exception as e:
-            logger.error(f"Ошибка рассылки {user_id}: {e}")
+        success = False
+        for attempt in range(3):
+            try:
+                await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
+                sent += 1
+                success = True
+                break
+            except Exception as e:
+                err_text = str(e).lower()
+                if "flood" in err_text or "retry after" in err_text or "too many requests" in err_text:
+                    await asyncio.sleep(3)
+                    continue
+                else:
+                    logger.error(f"Ошибка рассылки {user_id}: {e}")
+                    failed += 1
+                    break
+        if not success:
             failed += 1
+        await asyncio.sleep(0.1)
+    try:
+        await status_msg.delete()
+    except:
+        pass
     await message.answer(premium(f"<b>✅ Рассылка завершена!\nОтправлено: {sent}\nНе удалось: {failed}</b>"),
                          parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
+# ---------------------------------------------------------
 
 @dp.callback_query(lambda c: c.data == "users_txt")
 async def users_txt(callback: types.CallbackQuery):
@@ -1040,6 +1059,7 @@ async def users_txt(callback: types.CallbackQuery):
                                            caption=premium("<b>📄 Список всех пользователей (txt)</b>"), parse_mode="HTML")
     await callback.answer()
 
+# ------- ИСПРАВЛЕННЫЕ АКТИВНЫЕ ПОДКЛЮЧЕНИЯ (txt) -------
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -1049,16 +1069,26 @@ async def active_connections(callback: types.CallbackQuery):
     cursor.execute("SELECT DISTINCT user_id FROM connections")
     conn_users = cursor.fetchall()
     if not conn_users:
-        text = premium("<b>🔗 Активные подключения\n\nНет пользователей с активным бизнес-подключением.</b>")
-    else:
-        ids = [row[0] for row in conn_users]
-        placeholders = ",".join("?" for _ in ids)
-        cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", ids)
-        users = cursor.fetchall()
-        lines = [f"• {u[2] or ''} {u[3] or ''} (@{u[1]}) - ID: {u[0]}" for u in users]
-        text = premium(f"<b>🔗 Активные подключения ({len(users)})\n\n" + "\n".join(lines) + "</b>")
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=back_to_admin_keyboard())
+        await callback.answer("Нет активных подключений.", show_alert=True)
+        return
+    ids = [row[0] for row in conn_users]
+    placeholders = ",".join("?" for _ in ids)
+    cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", ids)
+    users = cursor.fetchall()
+    content = "Активные подключения XrayGram\n"
+    content += f"Всего: {len(users)}\n" + "=" * 50 + "\n\n"
+    for u in users:
+        uid, uname, fname, lname = u
+        name = f"{fname or ''} {lname or ''}".strip() or "Без имени"
+        un = f"@{uname}" if uname else f"ID: {uid}"
+        content += f"{name} ({un})\nID: {uid}\n" + "-" * 30 + "\n"
+    await callback.message.answer_document(
+        BufferedInputFile(content.encode("utf-8"), filename="active_connections.txt"),
+        caption=premium("<b>🔗 Активные подключения (txt)</b>"),
+        parse_mode="HTML"
+    )
     await callback.answer()
+# -------------------------------------------------------
 
 # ---- Business handlers ----
 @dp.business_connection()
@@ -1068,6 +1098,7 @@ async def handle_business_connection(connection: BusinessConnection):
     is_enabled = connection.is_enabled
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
+        db.delete_connection(bc_id)
         return
     logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
     db.set_connection(bc_id, user_id)
