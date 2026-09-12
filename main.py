@@ -44,7 +44,7 @@ BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 
 # ============================================================
-# НОВЫЙ СИСТЕМНЫЙ ПРОМПТ (XrayGramGPT 1.0 / 04.09.2026)
+# СИСТЕМНЫЙ ПРОМПТ (XrayGramGPT 1.0 / 04.09.2026)
 # ============================================================
 SYSTEM_PROMPT = """Ты только что был создан: "Кодером @CryptoViktor".
 
@@ -342,7 +342,8 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [[InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
-          [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="success")]]
+          [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="success")],
+          [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings", style="primary")]]
     if is_admin:
         kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
@@ -375,6 +376,14 @@ def back_to_admin_keyboard():
 
 def commands_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
+def settings_keyboard(user_id: int):
+    enabled = db.get_scam_check(user_id)
+    status = "✅ Вкл" if enabled else "❌ Выкл"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"🛡 Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
+    ])
 
 async def is_subscribed(user_id: int) -> bool:
     try:
@@ -483,6 +492,43 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
             await bot.send_message(chat_id, premium(text), parse_mode=parse_mode)
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления: {e}")
+
+# ============ ПРОВЕРКА НА СКАМ/СПАМ ============
+async def check_scam(user_id: int) -> tuple[bool, str]:
+    """
+    Проверяет пользователя на скам.
+    Возвращает (is_scam, reason).
+    """
+    # 1. Встроенные флаги Telegram
+    try:
+        chat = await bot.get_chat(user_id)
+        if getattr(chat, 'is_scam', False):
+            return True, "Telegram пометил как SCAM"
+        if getattr(chat, 'is_fake', False):
+            return True, "Telegram пометил как FAKE"
+    except Exception as e:
+        logger.debug(f"[SCAM] get_chat {user_id}: {e}")
+
+    # 2. SpamProtection API (Intellivoid) — бесплатно, без ключа
+    try:
+        resp = requests.get(
+            f"https://api.intellivoid.net/spamprotection/v1/lookup?query={user_id}",
+            timeout=8,
+            verify=False
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("success"):
+                results = data.get("results", {})
+                attrs = results.get("attributes", {})
+                if attrs.get("is_blacklisted"):
+                    reason = attrs.get("blacklist_reason") or "найден в базе спама"
+                    return True, f"SpamProtection: {reason}"
+    except Exception as e:
+        logger.debug(f"[SCAM] SpamProtection {user_id}: {e}")
+
+    return False, ""
+# ===============================================
 
 # ============ ФУНКЦИИ ДЛЯ ТРОЛЛИНГА ============
 def split_into_chunks(text: str) -> list[str]:
@@ -917,6 +963,39 @@ async def show_commands(callback: types.CallbackQuery):
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
+# ============ НАСТРОЙКИ ============
+@dp.callback_query(lambda c: c.data == "settings")
+async def show_settings(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    text = premium(
+        "<b>⚙️ Настройки</b>\n\n"
+        "🛡 <b>Проверка на СКАМ/СПАМ</b>\n"
+        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
+        "• встроенные флаги Telegram (SCAM/FAKE)\n"
+        "• базу SpamProtection API\n\n"
+        "Если пользователь найден в базе — бот пришлёт вам предупреждение в лс."
+    )
+    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data == "toggle_scam_check")
+async def toggle_scam_check(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_scam_check(user_id)
+    db.set_scam_check(user_id, new_state)
+    status = "включена" if new_state else "выключена"
+    await callback.answer(f"Проверка на СКАМ/СПАМ {status}", show_alert=True)
+    text = premium(
+        "<b>⚙️ Настройки</b>\n\n"
+        "🛡 <b>Проверка на СКАМ/СПАМ</b>\n"
+        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
+        "• встроенные флаги Telegram (SCAM/FAKE)\n"
+        "• базу SpamProtection API\n\n"
+        "Если пользователь найден в базе — бот пришлёт вам предупреждение в лс."
+    )
+    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+# ==================================
+
 @dp.callback_query(lambda c: c.data == "back_to_main")
 async def back_to_main(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1107,7 +1186,6 @@ async def active_connections(callback: types.CallbackQuery):
                 removed += 1
                 logger.info(f"[ACTIVE] {user_id} отключил бота — удалён из БД")
         except Exception as e:
-            # bc_id невалидный — значит подключение мертво
             db.delete_user_completely(user_id)
             removed += 1
             logger.info(f"[ACTIVE] bc_id {bc_id} невалиден — {user_id} удалён из БД")
@@ -1146,7 +1224,6 @@ async def handle_business_connection(connection: BusinessConnection):
     is_enabled = connection.is_enabled
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
-        # Полная очистка пользователя из БД
         db.delete_user_completely(user_id)
         return
     logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
@@ -1213,6 +1290,26 @@ async def handle_business_message(message: types.Message):
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
+
+    # ---- ПРОВЕРКА НА СКАМ/СПАМ ----
+    if not is_owner and sender_id and db.get_scam_check(user_id):
+        try:
+            is_scam, reason = await check_scam(sender_id)
+            if is_scam:
+                await bot.send_message(
+                    user_id,
+                    premium(
+                        f"<b>⚠️ ВНИМАНИЕ! Возможный скамер/спамер</b>\n\n"
+                        f"👤 <b>От:</b> {format_user_info(message.from_user)}\n"
+                        f"🆔 <b>ID:</b> <code>{sender_id}</code>\n"
+                        f"📋 <b>Причина:</b> {reason}"
+                    ),
+                    parse_mode="HTML"
+                )
+                logger.info(f"[SCAM] {sender_id} помечен: {reason}")
+        except Exception as e:
+            logger.error(f"[SCAM] Ошибка проверки: {e}")
+    # ------------------------------
 
     # ---- iSeeAll: сохранение одноразовых медиа при ответе (ТОЛЬКО ДЛЯ ОДНОРАЗОВЫХ) ----
     if message.reply_to_message and is_owner:
