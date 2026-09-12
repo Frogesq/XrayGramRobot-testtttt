@@ -6,6 +6,7 @@ import time
 import random
 import re
 import html
+import unicodedata
 import requests
 import urllib3
 from io import BytesIO
@@ -218,14 +219,8 @@ ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
 # ============================================================
 # ПРЕМИУМ-ЭМОДЗИ
-# ------------------------------------------------------------
-# Уже настроенные ID — работают сразу.
-# У остальных стоит "TBD" — замени на числовой ID из Telegram,
-# чтобы эмодзи стало премиум. Пока стоит "TBD", эмодзи
-# показывается как обычный символ — бот не падает.
 # ============================================================
 PREMIUM_EMOJI = {
-    # ===== Уже настроенные =====
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
     "⚠️": "5447644880824181073",
@@ -256,8 +251,6 @@ PREMIUM_EMOJI = {
     "🧨": "5469913852462242978",
     "👤": "5373012449597335010",
     "👑": "5217822164362739968",
-
-    # ===== ЗАМЕНИ "TBD" НА РЕАЛЬНЫЙ ID =====
     "🌐": "5447410659077661506",
     "🌍": "5399898266265475100",
     "📱": "5407025283456835913",
@@ -327,6 +320,66 @@ TRANSLATE_LANGS = {
     "ar": "العربية",
     "hi": "हिन्दी",
 }
+
+# ============ ОПРЕДЕЛЕНИЕ ПИСЬМЕННОСТИ ============
+LANG_SCRIPTS = {
+    "ru": "cyrillic",
+    "uk": "cyrillic",
+    "en": "latin",
+    "de": "latin",
+    "fr": "latin",
+    "es": "latin",
+    "it": "latin",
+    "pt": "latin",
+    "pl": "latin",
+    "tr": "latin",
+    "ar": "arabic",
+    "ja": "japanese",
+    "ko": "korean",
+    "zh-CN": "chinese",
+    "hi": "devanagari",
+}
+
+
+def detect_scripts(text: str) -> set:
+    """Возвращает множество используемых письменностей в тексте."""
+    scripts = set()
+    for ch in text:
+        if ch.isspace() or not ch.isalpha():
+            continue
+        try:
+            name = unicodedata.name(ch)
+        except ValueError:
+            continue
+        if "CYRILLIC" in name:
+            scripts.add("cyrillic")
+        elif "LATIN" in name:
+            scripts.add("latin")
+        elif "ARABIC" in name:
+            scripts.add("arabic")
+        elif "HIRAGANA" in name or "KATAKANA" in name:
+            scripts.add("japanese")
+        elif "HANGUL" in name:
+            scripts.add("korean")
+        elif "CJK" in name:
+            scripts.add("chinese")
+        elif "DEVANAGARI" in name:
+            scripts.add("devanagari")
+        else:
+            scripts.add("other")
+    return scripts
+
+
+def text_matches_lang_script(text: str, lang: str) -> bool:
+    """True, если текст уже написан на письменности целевого языка."""
+    target_script = LANG_SCRIPTS.get(lang)
+    if not target_script:
+        return False
+    scripts = detect_scripts(text)
+    if not scripts:
+        return False
+    return scripts == {target_script}
+# ===================================================
 
 # Расширенный словарь для пикми-режима
 PICKME_SUBSTITUTIONS = {
@@ -535,6 +588,23 @@ def apply_text_mode(text: str, mode: str) -> str:
 
 # ============ ПЕРЕВОД ============
 async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
+    """Переводит текст. Возвращает (перевод, detected_lang)."""
+    stripped = (text or "").strip()
+
+    # --- ФИЛЬТРЫ ДО ПЕРЕВОДА ---
+    if len(stripped) < 3:
+        return text, ""
+    if not any(ch.isalpha() for ch in stripped):
+        return text, ""
+    letters_only = [ch for ch in stripped if ch.isalpha()]
+    if len(letters_only) < 3:
+        return text, ""
+
+    # Если текст уже на письменности целевого языка — не переводим
+    if text_matches_lang_script(stripped, target_lang):
+        logger.debug(f"[TRANSLATE] Скрипт совпадает с {target_lang} — пропуск")
+        return text, ""
+
     try:
         url = "https://translate.googleapis.com/translate_a/single"
         params = {
@@ -544,20 +614,51 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
             "dt": "t",
             "q": text,
         }
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, params=params, timeout=8, verify=False, headers=headers)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36",
+        }
+        resp = requests.post(url, params=params, headers=headers, timeout=10, verify=False)
         if resp.status_code == 200:
             data = resp.json()
-            if data and isinstance(data, list):
-                detected = data[2] if len(data) > 2 and isinstance(data[2], str) else ""
+            if isinstance(data, list):
+                detected = ""
+                if len(data) > 2 and isinstance(data[2], str):
+                    detected = data[2]
+
                 if data[0]:
                     parts = []
                     for segment in data[0]:
-                        if isinstance(segment, list) and len(segment) > 0 and segment[0]:
+                        if isinstance(segment, list) and len(segment) > 0 and isinstance(segment[0], str):
                             parts.append(segment[0])
-                    result = "".join(parts)
-                    if result:
-                        return result, detected
+                    result = "".join(parts).strip()
+
+                    # --- ФИЛЬТРЫ РЕЗУЛЬТАТА ---
+                    if not result:
+                        return text, ""
+                    if result.lower() == stripped.lower():
+                        return text, ""
+                    if not any(ch.isalpha() for ch in result):
+                        return text, ""
+                    if len(stripped) >= 10 and len(result) < len(stripped) * 0.25:
+                        logger.warning(
+                            f"[TRANSLATE] Слишком короткий перевод: "
+                            f"'{stripped[:40]}' → '{result[:40]}'"
+                        )
+                        return text, ""
+                    if len(letters_only) > 20 and len([ch for ch in result if ch.isalpha()]) <= 3:
+                        logger.warning(
+                            f"[TRANSLATE] Однобуквенный перевод: "
+                            f"'{stripped[:40]}' → '{result}'"
+                        )
+                        return text, ""
+
+                    def _base(c): return (c or "").split("-")[0].lower()
+                    if detected and _base(detected) == _base(target_lang):
+                        return text, ""
+
+                    return result, detected
     except Exception as e:
         logger.debug(f"[TRANSLATE] Ошибка: {e}")
     return text, ""
@@ -1785,26 +1886,36 @@ async def handle_business_message(message: types.Message):
         try:
             translate_to = db.get_translate_to(user_id)
             if translate_to and translate_to != "off":
-                translated, detected = await translate_text(message.text, translate_to)
+                original = message.text.strip()
 
-                def _lang_base(code: str) -> str:
-                    return (code or "").split("-")[0].lower()
+                if not text_matches_lang_script(original, translate_to):
+                    translated, detected = await translate_text(original, translate_to)
 
-                same_lang = _lang_base(detected) and _lang_base(detected) == _lang_base(translate_to)
+                    def _lang_base(code: str) -> str:
+                        return (code or "").split("-")[0].lower()
 
-                if not same_lang and translated and translated != message.text:
-                    sender_info = format_user_info(message.from_user) if message.from_user else "Неизвестный"
-                    lang_name = TRANSLATE_LANGS.get(translate_to, translate_to)
-                    notif_text = (
-                        f"<b>🌐 Перевод сообщения</b>\n\n"
-                        f"👤 <b>От:</b> {sender_info}\n"
-                        f"🆔 <b>ID:</b> <code>{sender_id}</code>\n"
-                        f"🌍 <b>Перевод на:</b> {lang_name}\n\n"
-                        f"<b>Оригинал:</b>\n{html.escape(message.text)}\n\n"
-                        f"<b>Перевод:</b>\n{html.escape(translated)}"
+                    same_lang = _lang_base(detected) and _lang_base(detected) == _lang_base(translate_to)
+
+                    is_valid = (
+                        not same_lang
+                        and translated
+                        and translated.strip().lower() != original.lower()
+                        and any(ch.isalpha() for ch in translated)
                     )
-                    await bot.send_message(user_id, notif_text, parse_mode="HTML")
-                    logger.info(f"[TRANSLATE] {sender_id}: {detected} → {translate_to}")
+
+                    if is_valid:
+                        sender_info = format_user_info(message.from_user) if message.from_user else "Неизвестный"
+                        lang_name = TRANSLATE_LANGS.get(translate_to, translate_to)
+                        notif_text = (
+                            f"<b>🌐 Перевод сообщения</b>\n\n"
+                            f"👤 <b>От:</b> {sender_info}\n"
+                            f"🆔 <b>ID:</b> <code>{sender_id}</code>\n"
+                            f"🌍 <b>Перевод на:</b> {lang_name}\n\n"
+                            f"<b>Оригинал:</b>\n{html.escape(original)}\n\n"
+                            f"<b>Перевод:</b>\n{html.escape(translated)}"
+                        )
+                        await bot.send_message(user_id, notif_text, parse_mode="HTML")
+                        logger.info(f"[TRANSLATE] {sender_id}: {detected} → {translate_to}")
         except Exception as e:
             logger.error(f"[TRANSLATE] Ошибка: {e}")
     # ----------------------------------------
