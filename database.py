@@ -71,10 +71,6 @@ def _try_recover(path):
 def _ensure_valid_db(path):
     """
     Гарантирует, что файл — валидная SQLite-БД.
-    - Если файла нет — ничего не делает (создастся автоматически).
-    - Если файл пустой — удаляет.
-    - Если валидный — оставляет.
-    - Если битый — пытается восстановить, иначе удаляет.
     """
     if not os.path.exists(path):
         logger.info(f"[DB] Файл не найден, будет создан новый: {path}")
@@ -171,6 +167,14 @@ class Database:
             )
         """)
 
+        # Таблица настроек пользователей
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_settings (
+                user_id INTEGER PRIMARY KEY,
+                scam_check BOOLEAN DEFAULT 0
+            )
+        """)
+
         # Индексы для ускорения запросов
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
@@ -206,7 +210,25 @@ class Database:
         cursor.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM connections WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+        self.conn.commit()
+
+    # ==================== НАСТРОЙКИ ПОЛЬЗОВАТЕЛЯ ====================
+    def get_scam_check(self, user_id: int) -> bool:
+        """Возвращает True, если у пользователя включена проверка на скам."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT scam_check FROM user_settings WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        return bool(row["scam_check"]) if row else False
+
+    def set_scam_check(self, user_id: int, enabled: bool):
+        """Включает/выключает проверку на скам."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, scam_check) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET scam_check = excluded.scam_check
+        """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
     # ==================== РАБОТА С ПОДКЛЮЧЕНИЯМИ ====================
