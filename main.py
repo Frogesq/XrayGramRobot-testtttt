@@ -216,7 +216,9 @@ class RanvikAPI:
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
 # ============================================================
-
+# ВАЖНО: только реально работающие ID премиум-эмодзи.
+# Фейковые ID из прошлой версии удалены (они вызывали DOCUMENT_INVALID).
+# ============================================================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -246,29 +248,6 @@ PREMIUM_EMOJI = {
     "🔄": "5264727218734524899",
     "⏹️": "5469913852462242978",
     "🧨": "5469913852462242978",
-    "🛡": "5386395192641475051",
-    "🔴": "5411225014148014587",
-    "🏆": "5406745015378105004",
-    "🤝": "5375292108958339359",
-    "⏳": "5382193063891873131",
-    "🔫": "5352736563295915472",
-    "💥": "5332498403358361279",
-    "🔔": "5386295619794035284",
-    "👤": "5370765033403604116",
-    "📱": "5373141138124033501",
-    "🆔": "5388803082502150072",
-    "💾": "5381938728237021046",
-    "📤": "5384182693451417432",
-    "🚫": "5359364625514574983",
-    "💤": "5395682828514551373",
-    "📭": "5380132648788574323",
-    "🆕": "5379754653069752331",
-    "👤": "5370765033403604116",
-    "📅": "5413879192267805083",
-    "💎": "5346042941345695931",
-    "🥉": "5447203607294265305",
-    "🥈": "5447203607294265306",
-    "🥇": "5447203607294265307",
 }
 EMPTY = "ㅤ"
 
@@ -364,10 +343,12 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
     await asyncio.sleep(0.5)
 
 def main_menu_keyboard(is_admin: bool = False):
-    kb = [[InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
-          [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="success")],
-          [InlineKeyboardButton(text="👤 Профиль", callback_data="profile", style="primary")],
-          [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings", style="primary")]]
+    kb = [
+        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="success")],
+        [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="primary")],
+        [InlineKeyboardButton(text="Профиль", callback_data="profile", style="primary")],
+        [InlineKeyboardButton(text="Настройки", callback_data="settings", style="success")],
+    ]
     if is_admin:
         kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
@@ -672,7 +653,10 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
     except Exception as e:
         if "there is no text" in str(e) or "message to edit not found" in str(e):
-            await message.delete()
+            try:
+                await message.delete()
+            except:
+                pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
         else:
             logger.error(f"Ошибка редактирования: {e}")
@@ -680,7 +664,10 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 await message.delete()
             except:
                 pass
-            await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+            try:
+                await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
+            except Exception as e2:
+                logger.error(f"Ошибка отправки: {e2}")
 
 # ---- Command handlers ----
 @dp.message(Command("start"))
@@ -1006,11 +993,11 @@ async def show_profile(callback: types.CallbackQuery):
 
     text = premium(
         "<b>👤 Профиль</b>\n\n"
-        f"👤 <b>Имя:</b> {full_name}\n"
-        f"📱 <b>Username:</b> {username}\n"
-        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
-        f"📅 <b>Регистрация:</b> {registered_at}\n"
-        f"💎 <b>Тариф:</b> {tariff}"
+        f"Имя: {full_name}\n"
+        f"Username: {username}\n"
+        f"ID: <code>{user_id}</code>\n"
+        f"Регистрация: {registered_at}\n"
+        f"Тариф: {tariff}"
     )
     await safe_edit_or_send(callback.message, text, profile_keyboard())
     await callback.answer()
@@ -1022,7 +1009,7 @@ async def show_settings(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     text = premium(
         "<b>⚙️ Настройки</b>\n\n"
-        "🛡 <b>Проверка на СКАМ/СПАМ</b>\n"
+        "<b>Проверка на СКАМ/СПАМ</b>\n"
         "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
@@ -1040,7 +1027,7 @@ async def toggle_scam_check(callback: types.CallbackQuery):
     await callback.answer(f"Проверка на СКАМ/СПАМ {status}", show_alert=True)
     text = premium(
         "<b>⚙️ Настройки</b>\n\n"
-        "🛡 <b>Проверка на СКАМ/СПАМ</b>\n"
+        "<b>Проверка на СКАМ/СПАМ</b>\n"
         "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
@@ -1352,9 +1339,9 @@ async def handle_business_message(message: types.Message):
                     user_id,
                     premium(
                         f"<b>⚠️ ВНИМАНИЕ! Возможный скамер/спамер</b>\n\n"
-                        f"👤 <b>От:</b> {format_user_info(message.from_user)}\n"
-                        f"🆔 <b>ID:</b> <code>{sender_id}</code>\n"
-                        f"📋 <b>Причина:</b> {reason}"
+                        f"От: {format_user_info(message.from_user)}\n"
+                        f"ID: <code>{sender_id}</code>\n"
+                        f"Причина: {reason}"
                     ),
                     parse_mode="HTML"
                 )
