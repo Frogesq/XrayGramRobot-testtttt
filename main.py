@@ -5,6 +5,7 @@ import json
 import time
 import random
 import re
+import html
 import requests
 import urllib3
 from io import BytesIO
@@ -216,10 +217,6 @@ class RanvikAPI:
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
 # ============================================================
-# Только реально работающие ID премиум-эмодзи.
-# 👤 и 👑 — предполагаемые ID. Если бот упадёт с DOCUMENT_INVALID,
-# просто удали эти две строки.
-# ============================================================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
     "❌": "5210952531676504517",
@@ -254,7 +251,252 @@ PREMIUM_EMOJI = {
 }
 EMPTY = "ㅤ"
 
-# ============ ПОЛНЫЙ СПИСОК ТРОЛЛИНГА ============
+# ============ РЕЖИМЫ ТЕКСТА ============
+MODE_NAMES = {
+    "off": "Выкл",
+    "bold": "Жирный",
+    "italic": "Курсив",
+    "underline": "Подчёркнутый",
+    "strike": "Зачёркнутый",
+    "spoiler": "Скрытый",
+    "bolditalic": "Жирный курсив",
+    "pickme": "Пикми",
+    "uwu": "UwU",
+    "wide": "Широкий",
+    "mono": "Моноширинный",
+    "code": "Код",
+    "quote": "Цитата",
+    "upper": "КАПС",
+    "reverse": "Перевёрнутый",
+    "clap": "С хлопками",
+}
+
+# Расширенный словарь для пикми-режима
+PICKME_SUBSTITUTIONS = {
+    "привет": "приветик",
+    "приветствую": "приветики",
+    "здравствуйте": "здравствуйте~",
+    "пока": "покасики",
+    "до свидания": "до свиданьица",
+    "хорошо": "хорошенько",
+    "спасибо": "спасибки",
+    "пожалуйста": "пожалуйста~",
+    "круто": "крутосики",
+    "крутой": "крутосенький",
+    "да": "да~",
+    "нет": "нееет",
+    "ок": "оке~",
+    "окей": "океюшки",
+    "норм": "нормик",
+    "нормально": "нормальненько",
+    "что": "что~",
+    "как": "как~",
+    "ты": "ты~",
+    "я": "я~",
+    "мы": "мы~",
+    "мне": "мне~",
+    "тебе": "тебе~",
+    "давай": "давай~",
+    "можно": "можно~",
+    "нельзя": "нельзя~",
+    "извини": "извиняюсь",
+    "прости": "прости~",
+    "люблю": "люблю~",
+    "любить": "любить~",
+    "друг": "дружочек",
+    "друзья": "друзьяшки",
+    "милый": "милашка",
+    "красивый": "красивенький",
+    "умный": "умненький",
+    "глупый": "глупенький",
+    "смешной": "смешнючий",
+    "грустный": "грустненький",
+    "хороший": "хорошенький",
+    "плохой": "плохенький",
+    "большой": "большущий",
+    "маленький": "малюсенький",
+    "много": "много~",
+    "мало": "мало~",
+    "очень": "очень~",
+    "чуть-чуть": "чуточку",
+    "немного": "немножечко",
+    "иди": "иди~",
+    "идите": "идите~",
+    "стоп": "стоп~",
+    "хватит": "хватит~",
+    "жди": "жди~",
+    "подожди": "подожди~",
+    "думаю": "думаю~",
+    "знаю": "знаю~",
+    "понимаю": "понимаю~",
+    "вижу": "вижу~",
+    "слышу": "слышу~",
+    "хочу": "хочу~",
+    "буду": "буду~",
+    "есть": "есть~",
+    "кушать": "кушать~",
+    "спать": "спатки",
+    "хочу спать": "хочу спатки",
+    "дела": "делишки",
+    "работы": "работишка",
+    "учёба": "учёбка",
+    "школа": "школка",
+    "работа": "работишка",
+    "дом": "домик",
+    "город": "городишко",
+    "кот": "котик",
+    "кошка": "кошечка",
+    "пёс": "пёсик",
+    "собака": "собачка",
+    "солнце": "солнышко",
+    "луна": "лунушка",
+    "звезда": "звёздочка",
+    "небо": "небишко",
+    "дождь": "дождик",
+    "снег": "снежок",
+    "любовь": "любовь~",
+    "сердце": "сердечко",
+    "душа": "душенька",
+    "глаза": "глазки",
+    "руки": "ручки",
+    "ноги": "ножки",
+    "голова": "головушка",
+    "лицо": "личико",
+    "улыбка": "улыбочка",
+    "слёзы": "слёзки",
+    "смех": "смехуёчки",
+    "день": "денёк",
+    "ночь": "ноченька",
+    "утро": "утро~",
+    "вечер": "вечерок",
+}
+
+PICKME_EMOJIS = ["✨", "💖", "🌸", "👑", "💅", "🎀", "🥺", "😊", "💕", "🌷", "🧸", "🦋", "💐", "🍓", "🎔"]
+
+
+def pickmeify(text: str) -> str:
+    """Превращает текст в 'пикми'-стиль."""
+    words = text.split()
+    result = []
+    for w in words:
+        # Сохраняем знаки препинания
+        prefix = ""
+        suffix = ""
+        core = w
+        while core and not core[0].isalnum():
+            prefix += core[0]
+            core = core[1:]
+        while core and not core[-1].isalnum():
+            suffix = core[-1] + suffix
+            core = core[:-1]
+
+        low = core.lower()
+        if low in PICKME_SUBSTITUTIONS:
+            result.append(prefix + PICKME_SUBSTITUTIONS[low] + suffix)
+        else:
+            # Иногда добавляем ~
+            if random.random() < 0.20 and len(core) > 2 and not suffix:
+                result.append(prefix + core + "~" + suffix)
+            else:
+                result.append(w)
+
+    out = " ".join(result)
+    # Добавляем 1-2 эмодзи в конец
+    out += " " + random.choice(PICKME_EMOJIS)
+    if random.random() < 0.5:
+        out += " " + random.choice(PICKME_EMOJIS)
+    return out
+
+
+def uwuify(text: str) -> str:
+    """UwU-стиль."""
+    out = text
+    replacements = [
+        ("р", "в"),
+        ("Р", "В"),
+        ("л", "в"),
+        ("Л", "В"),
+    ]
+    for a, b in replacements:
+        if random.random() < 0.7:
+            out = out.replace(a, b)
+    suffixes = [" owo", " uwu", " >w<", " ^w^", " :3", " nya~"]
+    if random.random() < 0.6:
+        out += random.choice(suffixes)
+    return out
+
+
+# Unicode-стили
+WIDE_MAP = {chr(i): chr(i) + "\u200b" for i in range(33, 127)}
+
+def wideify(text: str) -> str:
+    return "\u200b".join(text)
+
+
+def upperify(text: str) -> str:
+    return text.upper()
+
+
+def clapify(text: str) -> str:
+    return " 👏 ".join(text.split())
+
+
+# Перевёрнутый текст
+REVERSE_MAP = {
+    "a": "ɐ", "b": "q", "c": "ɔ", "d": "p", "e": "ǝ", "f": "ɟ", "g": "ƃ",
+    "h": "ɥ", "i": "ᴉ", "j": "ɾ", "k": "ʞ", "l": "l", "m": "ɯ", "n": "u",
+    "o": "o", "p": "d", "q": "b", "r": "ɹ", "s": "s", "t": "ʇ", "u": "n",
+    "v": "ʌ", "w": "ʍ", "x": "x", "y": "ʎ", "z": "z",
+    "а": "а", "б": "б", "в": "в", "г": "г", "д": "д", "е": "е", "ж": "ж",
+    "з": "з", "и": "и", "й": "й", "к": "к", "л": "л", "м": "м", "н": "н",
+    "о": "о", "п": "п", "р": "р", "с": "с", "т": "т", "у": "у", "ф": "ф",
+    "х": "х", "ц": "ц", "ч": "ч", "ш": "ш", "щ": "щ", "ъ": "ъ", "ы": "ы",
+    "ь": "ь", "э": "э", "ю": "ю", "я": "я",
+}
+
+
+def reverseify(text: str) -> str:
+    return "".join(REVERSE_MAP.get(ch.lower(), ch) for ch in reversed(text))
+
+
+def apply_text_mode(text: str, mode: str) -> str:
+    """Применяет выбранный режим к тексту. Возвращает готовый HTML-текст."""
+    if not text:
+        return text
+    if mode == "bold":
+        return f"<b>{html.escape(text)}</b>"
+    elif mode == "italic":
+        return f"<i>{html.escape(text)}</i>"
+    elif mode == "underline":
+        return f"<u>{html.escape(text)}</u>"
+    elif mode == "strike":
+        return f"<s>{html.escape(text)}</s>"
+    elif mode == "spoiler":
+        return f"<tg-spoiler>{html.escape(text)}</tg-spoiler>"
+    elif mode == "bolditalic":
+        return f"<b><i>{html.escape(text)}</i></b>"
+    elif mode == "mono":
+        return f"<code>{html.escape(text)}</code>"
+    elif mode == "code":
+        return f"<pre>{html.escape(text)}</pre>"
+    elif mode == "quote":
+        return f"<blockquote>{html.escape(text)}</blockquote>"
+    elif mode == "pickme":
+        return pickmeify(text)
+    elif mode == "uwu":
+        return uwuify(text)
+    elif mode == "wide":
+        return wideify(text)
+    elif mode == "upper":
+        return upperify(text)
+    elif mode == "reverse":
+        return reverseify(text)
+    elif mode == "clap":
+        return clapify(text)
+    return text
+# ======================================
+
+# ============ ТРОЛЛИНГ ============
 TROLL_MESSAGES = [
     "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
     "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
@@ -391,10 +633,40 @@ def profile_keyboard():
 def settings_keyboard(user_id: int):
     enabled = db.get_scam_check(user_id)
     status = "✅ Вкл" if enabled else "❌ Выкл"
+    mode = db.get_text_mode(user_id)
+    mode_name = MODE_NAMES.get(mode, "Выкл")
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
+        [InlineKeyboardButton(text=f"Режим текста: {mode_name}", callback_data="text_mode_menu", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
+
+def text_mode_keyboard(user_id: int):
+    current = db.get_text_mode(user_id)
+    modes = [
+        ("off", "Выкл"),
+        ("bold", "Жирный"),
+        ("italic", "Курсив"),
+        ("underline", "Подчёркнутый"),
+        ("strike", "Зачёркнутый"),
+        ("spoiler", "Скрытый"),
+        ("bolditalic", "Жирный курсив"),
+        ("mono", "Моноширинный"),
+        ("code", "Код"),
+        ("quote", "Цитата"),
+        ("pickme", "Пикми"),
+        ("uwu", "UwU"),
+        ("wide", "Широкий"),
+        ("upper", "КАПС"),
+        ("reverse", "Перевёрнутый"),
+        ("clap", "С хлопками"),
+    ]
+    buttons = []
+    for mode_id, mode_name in modes:
+        marker = "✅ " if mode_id == current else ""
+        buttons.append([InlineKeyboardButton(text=f"{marker}{mode_name}", callback_data=f"set_text_mode_{mode_id}", style="primary")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 async def is_subscribed(user_id: int) -> bool:
     try:
@@ -1016,7 +1288,8 @@ async def show_settings(callback: types.CallbackQuery):
         "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
-        "Если пользователь найден в базе — бот пришлёт вам предупреждение в лс."
+        "<b>Режим текста</b>\n"
+        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.)."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
     await callback.answer()
@@ -1034,9 +1307,56 @@ async def toggle_scam_check(callback: types.CallbackQuery):
         "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
-        "Если пользователь найден в базе — бот пришлёт вам предупреждение в лс."
+        "<b>Режим текста</b>\n"
+        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.)."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+
+# ---- Режим текста ----
+@dp.callback_query(lambda c: c.data == "text_mode_menu")
+async def text_mode_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    text = premium(
+        "<b>✏️ Режим текста</b>\n\n"
+        "Выберите стиль, который бот будет применять к вашим сообщениям в бизнес-чатах.\n\n"
+        "<b>HTML-стили:</b>\n"
+        "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
+        "<b>Специальные стили:</b>\n"
+        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
+        "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
+        "• <b>Широкий</b> — пробелы между буквами\n"
+        "• <b>КАПС</b> — всё капсом\n"
+        "• <b>Перевёрнутый</b> — текст перевёрнут вверх ногами\n"
+        "• <b>С хлопками</b> — 👏 между словами\n\n"
+        "Команды (сообщения, начинающиеся с точки) не изменяются."
+    )
+    await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("set_text_mode_"))
+async def set_text_mode(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    mode = callback.data.replace("set_text_mode_", "")
+    if mode not in MODE_NAMES:
+        await callback.answer("❌ Неизвестный режим.", show_alert=True)
+        return
+    db.set_text_mode(user_id, mode)
+    await callback.answer(f"Режим: {MODE_NAMES[mode]}", show_alert=True)
+    text = premium(
+        "<b>✏️ Режим текста</b>\n\n"
+        "Выберите стиль, который бот будет применять к вашим сообщениям в бизнес-чатах.\n\n"
+        "<b>HTML-стили:</b>\n"
+        "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
+        "<b>Специальные стили:</b>\n"
+        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
+        "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
+        "• <b>Широкий</b> — пробелы между буквами\n"
+        "• <b>КАПС</b> — всё капсом\n"
+        "• <b>Перевёрнутый</b> — текст перевёрнут вверх ногами\n"
+        "• <b>С хлопками</b> — 👏 между словами\n\n"
+        "Команды (сообщения, начинающиеся с точки) не изменяются."
+    )
+    await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
 # ==================================
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
@@ -1352,6 +1672,28 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[SCAM] Ошибка проверки: {e}")
     # ------------------------------
+
+    # ---- РЕЖИМ ТЕКСТА (только для сообщений владельца) ----
+    if is_owner and message.text and not message.text.startswith('.'):
+        try:
+            mode = db.get_text_mode(user_id)
+            if mode and mode != "off":
+                new_text = apply_text_mode(message.text, mode)
+                if new_text and new_text != message.text:
+                    try:
+                        await bot.edit_message_text(
+                            text=new_text,
+                            chat_id=chat_id,
+                            message_id=message.message_id,
+                            business_connection_id=bc_id,
+                            parse_mode="HTML"
+                        )
+                        logger.info(f"[TEXT_MODE] Применён режим '{mode}' к сообщению {message.message_id}")
+                    except Exception as e:
+                        logger.error(f"[TEXT_MODE] Не удалось изменить сообщение: {e}")
+        except Exception as e:
+            logger.error(f"[TEXT_MODE] Ошибка: {e}")
+    # -------------------------------------------------------
 
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
