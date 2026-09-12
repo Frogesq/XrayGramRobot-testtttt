@@ -216,8 +216,9 @@ class RanvikAPI:
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
 # ============================================================
-# ВАЖНО: только реально работающие ID премиум-эмодзи.
-# Фейковые ID из прошлой версии удалены (они вызывали DOCUMENT_INVALID).
+# Только реально работающие ID премиум-эмодзи.
+# 👤 и 👑 — предполагаемые ID. Если бот упадёт с DOCUMENT_INVALID,
+# просто удали эти две строки.
 # ============================================================
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820",
@@ -248,10 +249,12 @@ PREMIUM_EMOJI = {
     "🔄": "5264727218734524899",
     "⏹️": "5469913852462242978",
     "🧨": "5469913852462242978",
+    "👤": "5373012449597335010",
+    "👑": "5217822164362739968",
 }
 EMPTY = "ㅤ"
 
-# ============ ТРОЛЛИНГ ============
+# ============ ПОЛНЫЙ СПИСОК ТРОЛЛИНГА ============
 TROLL_MESSAGES = [
     "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
     "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
@@ -344,13 +347,13 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="success")],
+        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
         [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="primary")],
         [InlineKeyboardButton(text="Профиль", callback_data="profile", style="primary")],
-        [InlineKeyboardButton(text="Настройки", callback_data="settings", style="success")],
+        [InlineKeyboardButton(text="Настройки", callback_data="settings", style="primary")],
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="danger")])
+        kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="primary")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -389,7 +392,7 @@ def settings_keyboard(user_id: int):
     enabled = db.get_scam_check(user_id)
     status = "✅ Вкл" if enabled else "❌ Выкл"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"🛡 Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
+        [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
@@ -989,7 +992,7 @@ async def show_profile(callback: types.CallbackQuery):
     if user_id == ADMIN_ID:
         tariff = "👑 Админ"
     else:
-        tariff = "🥉 Free"
+        tariff = "👤 Free"
 
     text = premium(
         "<b>👤 Профиль</b>\n\n"
