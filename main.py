@@ -246,6 +246,29 @@ PREMIUM_EMOJI = {
     "🔄": "5264727218734524899",
     "⏹️": "5469913852462242978",
     "🧨": "5469913852462242978",
+    "🛡": "5386395192641475051",
+    "🔴": "5411225014148014587",
+    "🏆": "5406745015378105004",
+    "🤝": "5375292108958339359",
+    "⏳": "5382193063891873131",
+    "🔫": "5352736563295915472",
+    "💥": "5332498403358361279",
+    "🔔": "5386295619794035284",
+    "👤": "5370765033403604116",
+    "📱": "5373141138124033501",
+    "🆔": "5388803082502150072",
+    "💾": "5381938728237021046",
+    "📤": "5384182693451417432",
+    "🚫": "5359364625514574983",
+    "💤": "5395682828514551373",
+    "📭": "5380132648788574323",
+    "🆕": "5379754653069752331",
+    "👤": "5370765033403604116",
+    "📅": "5413879192267805083",
+    "💎": "5346042941345695931",
+    "🥉": "5447203607294265305",
+    "🥈": "5447203607294265306",
+    "🥇": "5447203607294265307",
 }
 EMPTY = "ㅤ"
 
@@ -343,6 +366,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 def main_menu_keyboard(is_admin: bool = False):
     kb = [[InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
           [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="success")],
+          [InlineKeyboardButton(text="👤 Профиль", callback_data="profile", style="primary")],
           [InlineKeyboardButton(text="⚙️ Настройки", callback_data="settings", style="primary")]]
     if is_admin:
         kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="danger")])
@@ -375,6 +399,9 @@ def back_to_admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]])
 
 def commands_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
+def profile_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
 
 def settings_keyboard(user_id: int):
@@ -495,11 +522,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
 
 # ============ ПРОВЕРКА НА СКАМ/СПАМ ============
 async def check_scam(user_id: int) -> tuple[bool, str]:
-    """
-    Проверяет пользователя на скам.
-    Возвращает (is_scam, reason).
-    """
-    # 1. Встроенные флаги Telegram
     try:
         chat = await bot.get_chat(user_id)
         if getattr(chat, 'is_scam', False):
@@ -509,7 +531,6 @@ async def check_scam(user_id: int) -> tuple[bool, str]:
     except Exception as e:
         logger.debug(f"[SCAM] get_chat {user_id}: {e}")
 
-    # 2. SpamProtection API (Intellivoid) — бесплатно, без ключа
     try:
         resp = requests.get(
             f"https://api.intellivoid.net/spamprotection/v1/lookup?query={user_id}",
@@ -963,6 +984,38 @@ async def show_commands(callback: types.CallbackQuery):
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
+# ============ ПРОФИЛЬ ============
+@dp.callback_query(lambda c: c.data == "profile")
+async def show_profile(callback: types.CallbackQuery):
+    user = callback.from_user
+    user_id = user.id
+
+    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
+    username = f"@{user.username}" if user.username else "без username"
+
+    row = db.get_user(user_id)
+    if row and row["registered_at"]:
+        registered_at = row["registered_at"]
+    else:
+        registered_at = "неизвестно"
+
+    if user_id == ADMIN_ID:
+        tariff = "👑 Админ"
+    else:
+        tariff = "🥉 Free"
+
+    text = premium(
+        "<b>👤 Профиль</b>\n\n"
+        f"👤 <b>Имя:</b> {full_name}\n"
+        f"📱 <b>Username:</b> {username}\n"
+        f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
+        f"📅 <b>Регистрация:</b> {registered_at}\n"
+        f"💎 <b>Тариф:</b> {tariff}"
+    )
+    await safe_edit_or_send(callback.message, text, profile_keyboard())
+    await callback.answer()
+# ================================
+
 # ============ НАСТРОЙКИ ============
 @dp.callback_query(lambda c: c.data == "settings")
 async def show_settings(callback: types.CallbackQuery):
@@ -1276,7 +1329,6 @@ async def handle_business_message(message: types.Message):
         logger.warning(f"Не удалось определить user_id для bc_id={bc_id}")
         return
 
-    # Если bc_id больше нет в connections — значит пользователь отключён, не сохраняем
     if not db.get_user_by_bc_id(bc_id):
         logger.info(f"[SKIP] bc_id={bc_id} не активен — сообщение не сохраняется")
         return
@@ -1311,7 +1363,6 @@ async def handle_business_message(message: types.Message):
             logger.error(f"[SCAM] Ошибка проверки: {e}")
     # ------------------------------
 
-    # ---- iSeeAll: сохранение одноразовых медиа при ответе (ТОЛЬКО ДЛЯ ОДНОРАЗОВЫХ) ----
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
         if is_restricted_media(replied):
@@ -1352,7 +1403,6 @@ async def handle_business_message(message: types.Message):
         else:
             logger.info(f"[REPLY] Ответ на обычное медиа (не одноразовое) – пропущено")
 
-    # ---- Команды владельца ----
     if is_owner and message.text and message.text.startswith('.'):
         text = message.text.strip()
         try:
@@ -1431,7 +1481,6 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium(f"<b>❌ Ошибка при обращении к Нейросети:\n{str(e)}</b>"), parse_mode="HTML")
             return
 
-        # ========== КОМАНДЫ ТРОЛЛИНГА ==========
         if text == ".troll":
             if chat_id in troll_tasks:
                 await bot.send_message(user_id, "⚠️ Троллинг уже запущен в этом чате.", parse_mode="HTML")
@@ -1453,11 +1502,9 @@ async def handle_business_message(message: types.Message):
             else:
                 await bot.send_message(user_id, "❌ Троллинг не был запущен.", parse_mode="HTML")
             return
-        # =======================================
 
         return
 
-    # ---- Мут ----
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
@@ -1467,7 +1514,6 @@ async def handle_business_message(message: types.Message):
                 logger.error(f"[MUTE] Ошибка удаления: {e}")
         return
 
-    # ---- Сохранение обычных сообщений ----
     msg_id = message.message_id
     sender = message.from_user
     fullname = format_user_info(sender) if sender else "Неизвестный"
