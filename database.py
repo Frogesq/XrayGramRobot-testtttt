@@ -69,9 +69,7 @@ def _try_recover(path):
 
 
 def _ensure_valid_db(path):
-    """
-    Гарантирует, что файл — валидная SQLite-БД.
-    """
+    """Гарантирует, что файл — валидная SQLite-БД."""
     if not os.path.exists(path):
         logger.info(f"[DB] Файл не найден, будет создан новый: {path}")
         return
@@ -171,9 +169,20 @@ class Database:
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id INTEGER PRIMARY KEY,
-                scam_check BOOLEAN DEFAULT 0
+                scam_check BOOLEAN DEFAULT 0,
+                text_mode TEXT DEFAULT 'off'
             )
         """)
+
+        # Миграция: добавляем колонку text_mode, если её ещё нет
+        cursor.execute("PRAGMA table_info(user_settings)")
+        cols = [row["name"] for row in cursor.fetchall()]
+        if "scam_check" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN scam_check BOOLEAN DEFAULT 0")
+            logger.info("[DB] Миграция: добавлена колонка scam_check")
+        if "text_mode" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN text_mode TEXT DEFAULT 'off'")
+            logger.info("[DB] Миграция: добавлена колонка text_mode")
 
         # Индексы для ускорения запросов
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
@@ -184,7 +193,7 @@ class Database:
 
         self.conn.commit()
 
-    # ==================== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ====================
+    # ==================== ПОЛЬЗОВАТЕЛИ ====================
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -231,7 +240,23 @@ class Database:
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
-    # ==================== РАБОТА С ПОДКЛЮЧЕНИЯМИ ====================
+    def get_text_mode(self, user_id: int) -> str:
+        """Возвращает текущий режим текста (по умолчанию 'off')."""
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT text_mode FROM user_settings WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        return (row["text_mode"] if row and row["text_mode"] else "off")
+
+    def set_text_mode(self, user_id: int, mode: str):
+        """Устанавливает режим текста."""
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, text_mode) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET text_mode = excluded.text_mode
+        """, (user_id, mode))
+        self.conn.commit()
+
+    # ==================== ПОДКЛЮЧЕНИЯ ====================
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -253,7 +278,7 @@ class Database:
         cursor.execute("SELECT bc_id, user_id FROM connections")
         return cursor.fetchall()
 
-    # ==================== РАБОТА С СООБЩЕНИЯМИ ====================
+    # ==================== СООБЩЕНИЯ ====================
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None, is_temporary=False):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
@@ -293,7 +318,7 @@ class Database:
         cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
         return cursor.fetchall()
 
-    # ==================== РАБОТА С MUTE ====================
+    # ==================== MUTE ====================
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -314,7 +339,7 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
-    # ==================== РАБОТА С ИГРАМИ (TTT) ====================
+    # ==================== TTT ====================
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
