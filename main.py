@@ -271,6 +271,26 @@ MODE_NAMES = {
     "clap": "С хлопками",
 }
 
+# ============ ЯЗЫКИ ПЕРЕВОДА ============
+TRANSLATE_LANGS = {
+    "off": "Выкл",
+    "en": "English",
+    "ru": "Русский",
+    "de": "Deutsch",
+    "fr": "Français",
+    "es": "Español",
+    "it": "Italiano",
+    "pt": "Português",
+    "zh-CN": "中文",
+    "ja": "日本語",
+    "ko": "한국어",
+    "tr": "Türkçe",
+    "uk": "Українська",
+    "pl": "Polski",
+    "ar": "العربية",
+    "hi": "हिन्दी",
+}
+
 # Расширенный словарь для пикми-режима
 PICKME_SUBSTITUTIONS = {
     "привет": "приветик",
@@ -375,11 +395,9 @@ PICKME_EMOJIS = ["✨", "💖", "🌸", "👑", "💅", "🎀", "🥺", "😊", 
 
 
 def pickmeify(text: str) -> str:
-    """Превращает текст в 'пикми'-стиль."""
     words = text.split()
     result = []
     for w in words:
-        # Сохраняем знаки препинания
         prefix = ""
         suffix = ""
         core = w
@@ -394,14 +412,12 @@ def pickmeify(text: str) -> str:
         if low in PICKME_SUBSTITUTIONS:
             result.append(prefix + PICKME_SUBSTITUTIONS[low] + suffix)
         else:
-            # Иногда добавляем ~
             if random.random() < 0.20 and len(core) > 2 and not suffix:
                 result.append(prefix + core + "~" + suffix)
             else:
                 result.append(w)
 
     out = " ".join(result)
-    # Добавляем 1-2 эмодзи в конец
     out += " " + random.choice(PICKME_EMOJIS)
     if random.random() < 0.5:
         out += " " + random.choice(PICKME_EMOJIS)
@@ -409,14 +425,8 @@ def pickmeify(text: str) -> str:
 
 
 def uwuify(text: str) -> str:
-    """UwU-стиль."""
     out = text
-    replacements = [
-        ("р", "в"),
-        ("Р", "В"),
-        ("л", "в"),
-        ("Л", "В"),
-    ]
+    replacements = [("р", "в"), ("Р", "В"), ("л", "в"), ("Л", "В")]
     for a, b in replacements:
         if random.random() < 0.7:
             out = out.replace(a, b)
@@ -425,9 +435,6 @@ def uwuify(text: str) -> str:
         out += random.choice(suffixes)
     return out
 
-
-# Unicode-стили
-WIDE_MAP = {chr(i): chr(i) + "\u200b" for i in range(33, 127)}
 
 def wideify(text: str) -> str:
     return "\u200b".join(text)
@@ -441,17 +448,11 @@ def clapify(text: str) -> str:
     return " 👏 ".join(text.split())
 
 
-# Перевёрнутый текст
 REVERSE_MAP = {
     "a": "ɐ", "b": "q", "c": "ɔ", "d": "p", "e": "ǝ", "f": "ɟ", "g": "ƃ",
     "h": "ɥ", "i": "ᴉ", "j": "ɾ", "k": "ʞ", "l": "l", "m": "ɯ", "n": "u",
     "o": "o", "p": "d", "q": "b", "r": "ɹ", "s": "s", "t": "ʇ", "u": "n",
     "v": "ʌ", "w": "ʍ", "x": "x", "y": "ʎ", "z": "z",
-    "а": "а", "б": "б", "в": "в", "г": "г", "д": "д", "е": "е", "ж": "ж",
-    "з": "з", "и": "и", "й": "й", "к": "к", "л": "л", "м": "м", "н": "н",
-    "о": "о", "п": "п", "р": "р", "с": "с", "т": "т", "у": "у", "ф": "ф",
-    "х": "х", "ц": "ц", "ч": "ч", "ш": "ш", "щ": "щ", "ъ": "ъ", "ы": "ы",
-    "ь": "ь", "э": "э", "ю": "ю", "я": "я",
 }
 
 
@@ -460,7 +461,6 @@ def reverseify(text: str) -> str:
 
 
 def apply_text_mode(text: str, mode: str) -> str:
-    """Применяет выбранный режим к тексту. Возвращает готовый HTML-текст."""
     if not text:
         return text
     if mode == "bold":
@@ -494,7 +494,41 @@ def apply_text_mode(text: str, mode: str) -> str:
     elif mode == "clap":
         return clapify(text)
     return text
-# ======================================
+
+
+# ============ ПЕРЕВОД ============
+async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
+    """
+    Переводит текст через Google Translate (client=gtx).
+    Возвращает (перевод, detected_lang).
+    """
+    try:
+        url = "https://translate.googleapis.com/translate_a/single"
+        params = {
+            "client": "gtx",
+            "sl": "auto",
+            "tl": target_lang,
+            "dt": "t",
+            "q": text,
+        }
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(url, params=params, timeout=8, verify=False, headers=headers)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data and isinstance(data, list):
+                detected = data[2] if len(data) > 2 and isinstance(data[2], str) else ""
+                if data[0]:
+                    parts = []
+                    for segment in data[0]:
+                        if isinstance(segment, list) and len(segment) > 0 and segment[0]:
+                            parts.append(segment[0])
+                    result = "".join(parts)
+                    if result:
+                        return result, detected
+    except Exception as e:
+        logger.debug(f"[TRANSLATE] Ошибка: {e}")
+    return text, ""
+# ===============================
 
 # ============ ТРОЛЛИНГ ============
 TROLL_MESSAGES = [
@@ -635,9 +669,12 @@ def settings_keyboard(user_id: int):
     status = "✅ Вкл" if enabled else "❌ Выкл"
     mode = db.get_text_mode(user_id)
     mode_name = MODE_NAMES.get(mode, "Выкл")
+    translate = db.get_translate_to(user_id)
+    translate_name = TRANSLATE_LANGS.get(translate, "Выкл")
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
         [InlineKeyboardButton(text=f"Режим текста: {mode_name}", callback_data="text_mode_menu", style="primary")],
+        [InlineKeyboardButton(text=f"Авто перевод: {translate_name}", callback_data="translate_menu", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
@@ -665,6 +702,15 @@ def text_mode_keyboard(user_id: int):
     for mode_id, mode_name in modes:
         marker = "✅ " if mode_id == current else ""
         buttons.append([InlineKeyboardButton(text=f"{marker}{mode_name}", callback_data=f"set_text_mode_{mode_id}", style="primary")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+def translate_keyboard(user_id: int):
+    current = db.get_translate_to(user_id)
+    buttons = []
+    for lang_code, lang_name in TRANSLATE_LANGS.items():
+        marker = "✅ " if lang_code == current else ""
+        buttons.append([InlineKeyboardButton(text=f"{marker}{lang_name}", callback_data=f"set_translate_{lang_code}", style="primary")])
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -1289,7 +1335,9 @@ async def show_settings(callback: types.CallbackQuery):
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
         "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.)."
+        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
+        "<b>Авто перевод</b>\n"
+        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык. Если собеседник пишет на том же языке — перевод не отправляется."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
     await callback.answer()
@@ -1308,7 +1356,9 @@ async def toggle_scam_check(callback: types.CallbackQuery):
         "• встроенные флаги Telegram (SCAM/FAKE)\n"
         "• базу SpamProtection API\n\n"
         "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.)."
+        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
+        "<b>Авто перевод</b>\n"
+        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык. Если собеседник пишет на том же языке — перевод не отправляется."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
 
@@ -1357,6 +1407,36 @@ async def set_text_mode(callback: types.CallbackQuery):
         "Команды (сообщения, начинающиеся с точки) не изменяются."
     )
     await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
+
+# ---- Авто перевод ----
+@dp.callback_query(lambda c: c.data == "translate_menu")
+async def translate_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    text = premium(
+        "<b>🌐 Авто перевод</b>\n\n"
+        "Выберите язык, на который бот будет переводить <b>входящие сообщения</b> от ваших собеседников.\n\n"
+        "Перевод приходит вам в <b>лс с ботом</b>, а не в сам чат.\n\n"
+        "Если собеседник пишет на языке, который уже выбран — перевод не отправляется."
+    )
+    await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
+    await callback.answer()
+
+@dp.callback_query(lambda c: c.data.startswith("set_translate_"))
+async def set_translate(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    lang = callback.data.replace("set_translate_", "")
+    if lang not in TRANSLATE_LANGS:
+        await callback.answer("❌ Неизвестный язык.", show_alert=True)
+        return
+    db.set_translate_to(user_id, lang)
+    await callback.answer(f"Авто перевод: {TRANSLATE_LANGS[lang]}", show_alert=True)
+    text = premium(
+        "<b>🌐 Авто перевод</b>\n\n"
+        "Выберите язык, на который бот будет переводить <b>входящие сообщения</b> от ваших собеседников.\n\n"
+        "Перевод приходит вам в <b>лс с ботом</b>, а не в сам чат.\n\n"
+        "Если собеседник пишет на языке, который уже выбран — перевод не отправляется."
+    )
+    await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
 # ==================================
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
@@ -1672,6 +1752,35 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[SCAM] Ошибка проверки: {e}")
     # ------------------------------
+
+    # ---- АВТО ПЕРЕВОД ВХОДЯЩИХ СООБЩЕНИЙ ----
+    if not is_owner and message.text:
+        try:
+            translate_to = db.get_translate_to(user_id)
+            if translate_to and translate_to != "off":
+                translated, detected = await translate_text(message.text, translate_to)
+
+                def _lang_base(code: str) -> str:
+                    return (code or "").split("-")[0].lower()
+
+                same_lang = _lang_base(detected) and _lang_base(detected) == _lang_base(translate_to)
+
+                if not same_lang and translated and translated != message.text:
+                    sender_info = format_user_info(message.from_user) if message.from_user else "Неизвестный"
+                    lang_name = TRANSLATE_LANGS.get(translate_to, translate_to)
+                    notif_text = (
+                        f"<b>🌐 Перевод сообщения</b>\n\n"
+                        f"👤 <b>От:</b> {sender_info}\n"
+                        f"🆔 <b>ID:</b> <code>{sender_id}</code>\n"
+                        f"🌍 <b>Перевод на:</b> {lang_name}\n\n"
+                        f"<b>Оригинал:</b>\n{html.escape(message.text)}\n\n"
+                        f"<b>Перевод:</b>\n{html.escape(translated)}"
+                    )
+                    await bot.send_message(user_id, notif_text, parse_mode="HTML")
+                    logger.info(f"[TRANSLATE] {sender_id}: {detected} → {translate_to}")
+        except Exception as e:
+            logger.error(f"[TRANSLATE] Ошибка: {e}")
+    # ----------------------------------------
 
     # ---- РЕЖИМ ТЕКСТА (только для сообщений владельца) ----
     if is_owner and message.text and not message.text.startswith('.'):
