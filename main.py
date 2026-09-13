@@ -278,6 +278,8 @@ PREMIUM_EMOJI = {
     "🗑": "5445267414562389170",
     "🔥": "5424972470023104089",
     "⭐": "5438496463044752972",
+    # премиум-ID для кнопок главного меню
+    "🔌": "5258093637450866522",
 }
 EMPTY = "ㅤ"
 
@@ -342,7 +344,6 @@ LANG_SCRIPTS = {
 
 
 def detect_scripts(text: str) -> set:
-    """Возвращает множество используемых письменностей в тексте."""
     scripts = set()
     for ch in text:
         if ch.isspace() or not ch.isalpha():
@@ -371,7 +372,6 @@ def detect_scripts(text: str) -> set:
 
 
 def text_matches_lang_script(text: str, lang: str) -> bool:
-    """True, если текст уже написан на письменности целевого языка."""
     target_script = LANG_SCRIPTS.get(lang)
     if not target_script:
         return False
@@ -588,10 +588,8 @@ def apply_text_mode(text: str, mode: str) -> str:
 
 # ============ ПЕРЕВОД ============
 async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
-    """Переводит текст. Возвращает (перевод, detected_lang)."""
     stripped = (text or "").strip()
 
-    # --- ФИЛЬТРЫ ДО ПЕРЕВОДА ---
     if len(stripped) < 3:
         return text, ""
     if not any(ch.isalpha() for ch in stripped):
@@ -600,19 +598,13 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
     if len(letters_only) < 3:
         return text, ""
 
-    # Если текст уже на письменности целевого языка — не переводим
     if text_matches_lang_script(stripped, target_lang):
-        logger.debug(f"[TRANSLATE] Скрипт совпадает с {target_lang} — пропуск")
         return text, ""
 
     try:
         url = "https://translate.googleapis.com/translate_a/single"
         params = {
-            "client": "gtx",
-            "sl": "auto",
-            "tl": target_lang,
-            "dt": "t",
-            "q": text,
+            "client": "gtx", "sl": "auto", "tl": target_lang, "dt": "t", "q": text,
         }
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -623,18 +615,13 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
         if resp.status_code == 200:
             data = resp.json()
             if isinstance(data, list):
-                detected = ""
-                if len(data) > 2 and isinstance(data[2], str):
-                    detected = data[2]
-
+                detected = data[2] if len(data) > 2 and isinstance(data[2], str) else ""
                 if data[0]:
                     parts = []
                     for segment in data[0]:
                         if isinstance(segment, list) and len(segment) > 0 and isinstance(segment[0], str):
                             parts.append(segment[0])
                     result = "".join(parts).strip()
-
-                    # --- ФИЛЬТРЫ РЕЗУЛЬТАТА ---
                     if not result:
                         return text, ""
                     if result.lower() == stripped.lower():
@@ -642,16 +629,8 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
                     if not any(ch.isalpha() for ch in result):
                         return text, ""
                     if len(stripped) >= 10 and len(result) < len(stripped) * 0.25:
-                        logger.warning(
-                            f"[TRANSLATE] Слишком короткий перевод: "
-                            f"'{stripped[:40]}' → '{result[:40]}'"
-                        )
                         return text, ""
                     if len(letters_only) > 20 and len([ch for ch in result if ch.isalpha()]) <= 3:
-                        logger.warning(
-                            f"[TRANSLATE] Однобуквенный перевод: "
-                            f"'{stripped[:40]}' → '{result}'"
-                        )
                         return text, ""
 
                     def _base(c): return (c or "").split("-")[0].lower()
@@ -757,13 +736,35 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction", style="primary")],
-        [InlineKeyboardButton(text="Команды", callback_data="show_commands", style="primary")],
-        [InlineKeyboardButton(text="Профиль", callback_data="profile", style="primary")],
-        [InlineKeyboardButton(text="Настройки", callback_data="settings", style="primary")],
+        [InlineKeyboardButton(
+            text='<tg-emoji emoji-id="5258093637450866522">🔌</tg-emoji> Подключить бота',
+            callback_data="show_instruction",
+            style="primary"
+        )],
+        [
+            InlineKeyboardButton(
+                text='<tg-emoji emoji-id="5258328383183396223">💬</tg-emoji> Команды',
+                callback_data="show_commands",
+                style="primary"
+            ),
+            InlineKeyboardButton(
+                text='<tg-emoji emoji-id="5258096772776991776">⚙️</tg-emoji> Настройки',
+                callback_data="settings",
+                style="primary"
+            ),
+        ],
+        [InlineKeyboardButton(
+            text='<tg-emoji emoji-id="5258011929993026890">👤</tg-emoji> Профиль',
+            callback_data="profile",
+            style="primary"
+        )],
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(text="Админ-панель", callback_data="admin_panel", style="primary")])
+        kb.append([InlineKeyboardButton(
+            text='<tg-emoji emoji-id="5257965174979042426">👑</tg-emoji> Админ панель',
+            callback_data="admin_panel",
+            style="primary"
+        )])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard(action: str = None):
@@ -783,7 +784,7 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="📢 Рассылка", callback_data="broadcast", style="primary")],
         [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt", style="primary")],
         [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")] 
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
 def cancel_keyboard():
