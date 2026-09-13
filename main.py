@@ -737,33 +737,38 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
         [InlineKeyboardButton(
-            text='<tg-emoji emoji-id="5258093637450866522">🔌</tg-emoji> Подключить бота',
+            text="Подключить бота",
             callback_data="show_instruction",
-            style="primary"
+            style="primary",
+            icon_custom_emoji_id="5258093637450866522"
         )],
         [
             InlineKeyboardButton(
-                text='<tg-emoji emoji-id="5258328383183396223">💬</tg-emoji> Команды',
+                text="Команды",
                 callback_data="show_commands",
-                style="primary"
+                style="primary",
+                icon_custom_emoji_id="5258328383183396223"
             ),
             InlineKeyboardButton(
-                text='<tg-emoji emoji-id="5258096772776991776">⚙️</tg-emoji> Настройки',
+                text="Настройки",
                 callback_data="settings",
-                style="primary"
+                style="primary",
+                icon_custom_emoji_id="5258096772776991776"
             ),
         ],
         [InlineKeyboardButton(
-            text='<tg-emoji emoji-id="5258011929993026890">👤</tg-emoji> Профиль',
+            text="Профиль",
             callback_data="profile",
-            style="primary"
+            style="primary",
+            icon_custom_emoji_id="5258011929993026890"
         )],
     ]
     if is_admin:
         kb.append([InlineKeyboardButton(
-            text='<tg-emoji emoji-id="5257965174979042426">👑</tg-emoji> Админ панель',
+            text="Админ панель",
             callback_data="admin_panel",
-            style="primary"
+            style="primary",
+            icon_custom_emoji_id="5257965174979042426"
         )])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
