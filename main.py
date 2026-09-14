@@ -232,7 +232,7 @@ PREMIUM_EMOJI = {
     "📄": "5877485980901971030",
     "✏️": "5925001822572908226",
     "🗑️": "6007942490076745785",
-    "📢": "5260268501515377807",
+    "📢": "5424818078833715060",
     "⬅️": "5877536313623711363",
     "⛔": "5354435465021373780",
     "🔗": "5271604874419647061",
@@ -662,108 +662,114 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}  # chat_id -> asyncio.Task
 
-# ============ ИГРА САПЁР ============
+# ============ ИГРА САПЁР (на основе Git-CmdServ/Mines) ============
 sapper_games = {}  # chat_id -> dict
 
 SAPPER_ROWS = 5
 SAPPER_COLS = 5
 SAPPER_MINES = 5
 
-def sapper_init_game(player1_id: int, player2_id: int):
-    total = SAPPER_ROWS * SAPPER_COLS
-    mines = set(random.sample(range(total), SAPPER_MINES))
-    opened = [[False]*SAPPER_COLS for _ in range(SAPPER_ROWS)]
-    flags = [[False]*SAPPER_COLS for _ in range(SAPPER_ROWS)]
-    return {
-        "board": opened,
-        "mines": mines,
-        "flags": flags,
-        "turn": player1_id,
-        "player1": player1_id,
-        "player2": player2_id,
-        "active": True,
-        "opened_count": 0,
-        "total_safe": total - SAPPER_MINES,
-        "message_id": None,
-    }
+class SapperGame:
+    def __init__(self, player1_id, player2_id, mines_count):
+        self.player1 = player1_id
+        self.player2 = player2_id
+        self.mines_count = mines_count
+        self.rows = SAPPER_ROWS
+        self.cols = SAPPER_COLS
+        self.total = self.rows * self.cols
+        self.safe_count = self.total - mines_count
+        self.opened = [[False for _ in range(self.cols)] for _ in range(self.rows)]
+        self.mines = [[False for _ in range(self.cols)] for _ in range(self.rows)]
+        mine_positions = random.sample(range(self.total), mines_count)
+        for pos in mine_positions:
+            r = pos // self.cols
+            c = pos % self.cols
+            self.mines[r][c] = True
+        self.lost = False
+        self.won = False
+        self.turn = player1_id  # чей ход
+        self.active = True
 
-def sapper_is_mine(game: dict, r: int, c: int) -> bool:
-    pos = r * SAPPER_COLS + c
-    return pos in game["mines"]
+    def count_adjacent_mines(self, r, c):
+        count = 0
+        for dr in (-1, 0, 1):
+            for dc in (-1, 0, 1):
+                if dr == 0 and dc == 0:
+                    continue
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < self.rows and 0 <= nc < self.cols:
+                    if self.mines[nr][nc]:
+                        count += 1
+        return count
 
-def sapper_count_adjacent_mines(game: dict, r: int, c: int) -> int:
-    count = 0
-    for dr in (-1, 0, 1):
-        for dc in (-1, 0, 1):
-            if dr == 0 and dc == 0:
+    def reveal_empty(self, r, c):
+        stack = [(r, c)]
+        while stack:
+            cr, cc = stack.pop()
+            if not (0 <= cr < self.rows and 0 <= cc < self.cols):
                 continue
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < SAPPER_ROWS and 0 <= nc < SAPPER_COLS:
-                if sapper_is_mine(game, nr, nc):
-                    count += 1
-    return count
+            if self.opened[cr][cc]:
+                continue
+            if self.mines[cr][cc]:
+                continue
+            self.opened[cr][cc] = True
+            if self.count_adjacent_mines(cr, cc) == 0:
+                for dr in (-1, 0, 1):
+                    for dc in (-1, 0, 1):
+                        if dr == 0 and dc == 0:
+                            continue
+                        stack.append((cr + dr, cc + dc))
 
-def sapper_reveal_empty(game: dict, r: int, c: int):
-    stack = [(r, c)]
-    while stack:
-        cr, cc = stack.pop()
-        if not (0 <= cr < SAPPER_ROWS and 0 <= cc < SAPPER_COLS):
-            continue
-        if game["board"][cr][cc]:
-            continue
-        if sapper_is_mine(game, cr, cc):
-            continue
-        game["board"][cr][cc] = True
-        game["opened_count"] += 1
-        if sapper_count_adjacent_mines(game, cr, cc) == 0:
-            for dr in (-1, 0, 1):
-                for dc in (-1, 0, 1):
-                    if dr == 0 and dc == 0:
-                        continue
-                    stack.append((cr + dr, cc + dc))
+    def open_cell(self, r, c):
+        if self.opened[r][c]:
+            return "already"
+        self.opened[r][c] = True
+        if self.mines[r][c]:
+            self.lost = True
+            return "mine"
+        else:
+            self.reveal_empty(r, c)
+            opened_safe = sum(
+                1 for i in range(self.rows) for j in range(self.cols)
+                if self.opened[i][j] and not self.mines[i][j]
+            )
+            if opened_safe >= self.safe_count:
+                self.won = True
+                return "win"
+            return "safe"
 
-def sapper_check_win(game: dict) -> bool:
-    return game["opened_count"] >= game["total_safe"]
-
-def sapper_board_keyboard(game: dict):
-    kb = []
-    for r in range(SAPPER_ROWS):
-        row = []
-        for c in range(SAPPER_COLS):
-            if game["board"][r][c]:
-                cnt = sapper_count_adjacent_mines(game, r, c)
-                if cnt == 0:
-                    text = "⬜"
+    def make_board(self, show_all=False):
+        buttons = []
+        for i in range(self.rows):
+            row = []
+            for j in range(self.cols):
+                if self.opened[i][j] or show_all:
+                    if self.mines[i][j]:
+                        text = "💥"
+                    else:
+                        cnt = self.count_adjacent_mines(i, j)
+                        text = str(cnt) if cnt > 0 else "⬜"
+                    cb = "sap_ignore"
                 else:
-                    text = str(cnt)
-                cb = f"sap_open_{r}_{c}"
-            else:
-                text = "🟦"
-                cb = f"sap_reveal_{r}_{c}"
-            row.append(InlineKeyboardButton(text=text, callback_data=cb))
-        kb.append(row)
-    kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data="sap_end", style="danger")])
-    return InlineKeyboardMarkup(inline_keyboard=kb)
+                    text = "🟦"
+                    cb = f"sap_{i}_{j}"
+                row.append(InlineKeyboardButton(text=text, callback_data=cb))
+            buttons.append(row)
+        buttons.append([InlineKeyboardButton(text="🔴 Завершить", callback_data="sap_end", style="danger")])
+        return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def sapper_game_text(game: dict, extra: str = "") -> str:
-    p1 = game["player1"]
-    p2 = game["player2"]
-    turn = game["turn"]
-    opened = game["opened_count"]
-    total = game["total_safe"]
-    if turn == p1:
-        turn_name = "Игрок 1"
-    else:
-        turn_name = "Игрок 2"
-    text = (
-        f"<b>💣 Сапёр</b>\n\n"
-        f"Поле: {SAPPER_ROWS}x{SAPPER_COLS} | Мин: {SAPPER_MINES}\n"
-        f"Открыто: {opened}/{total}\n"
-        f"Ход: <b>{turn_name}</b>\n"
-    )
-    if extra:
-        text += f"\n{extra}"
-    return premium(text)
+    def game_text(self, extra=""):
+        opened = sum(1 for i in range(self.rows) for j in range(self.cols) if self.opened[i][j] and not self.mines[i][j])
+        turn_name = "Игрок 1" if self.turn == self.player1 else "Игрок 2"
+        text = (
+            f"<b>💣 Сапёр</b>\n\n"
+            f"Поле: {self.rows}x{self.cols} | Мин: {self.mines_count}\n"
+            f"Открыто: {opened}/{self.safe_count}\n"
+            f"Ход: <b>{turn_name}</b>\n"
+        )
+        if extra:
+            text += f"\n{extra}"
+        return premium(text)
 
 # =====================================
 
@@ -872,7 +878,7 @@ def main_menu_keyboard(is_admin: bool = False):
             text="Канал",
             url="https://t.me/NovoeTelegram",
             style="primary",
-            icon_custom_emoji_id="5424818078833715060"
+            icon_custom_emoji_id="5260268501515377807"
         )],
     ]
     if is_admin:
@@ -2182,11 +2188,11 @@ async def handle_business_message(message: types.Message):
             if chat_id in sapper_games:
                 await bot.send_message(user_id, premium("<b>⚠️ Игра в сапёр уже идёт в этом чате!</b>"), parse_mode="HTML")
                 return
-            game = sapper_init_game(user_id, 0)
+            game = SapperGame(user_id, 0, SAPPER_MINES)
             sapper_games[chat_id] = game
-            text_game = sapper_game_text(game, "Ожидание второго игрока...\nНапишите что угодно, чтобы присоединиться.")
-            msg = await bot.send_message(chat_id, text_game, parse_mode="HTML", reply_markup=sapper_board_keyboard(game), business_connection_id=bc_id)
-            game["message_id"] = msg.message_id
+            text_game = game.game_text("Ожидание второго игрока...\nНапишите что угодно, чтобы присоединиться.")
+            msg = await bot.send_message(chat_id, text_game, parse_mode="HTML", reply_markup=game.make_board(), business_connection_id=bc_id)
+            game.message_id = msg.message_id
             logger.info(f"[SAPPER] Игра создана в чате {chat_id}, игрок 1 = {user_id}")
             return
 
@@ -2322,32 +2328,34 @@ async def sapper_callback(callback: types.CallbackQuery):
         await callback.answer("🔴 Игра завершена!", show_alert=True)
         return
 
-    if not game["active"]:
+    if not game.active:
         await callback.answer("❌ Игра уже завершена!", show_alert=True)
         return
 
-    if data.startswith("sap_reveal_"):
+    if data.startswith("sap_"):
         parts = data.split("_")
-        if len(parts) != 4:
+        if len(parts) != 3:
             await callback.answer("❌ Ошибка!", show_alert=True)
             return
         try:
-            r = int(parts[2])
-            c = int(parts[3])
+            r = int(parts[1])
+            c = int(parts[2])
         except:
             await callback.answer("❌ Ошибка!", show_alert=True)
             return
 
-        if user_id != game["turn"]:
+        if user_id != game.turn:
             await callback.answer("⏳ Сейчас не ваш ход!", show_alert=True)
             return
 
-        if game["board"][r][c]:
+        if game.opened[r][c]:
             await callback.answer("⏳ Клетка уже открыта!", show_alert=True)
             return
 
-        if sapper_is_mine(game, r, c):
-            game["active"] = False
+        result = game.open_cell(r, c)
+
+        if result == "mine":
+            game.active = False
             del sapper_games[chat_id]
             try:
                 await callback.message.edit_text(
@@ -2360,10 +2368,8 @@ async def sapper_callback(callback: types.CallbackQuery):
             await callback.answer("💥 Вы попали на мину!", show_alert=True)
             return
 
-        sapper_reveal_empty(game, r, c)
-
-        if sapper_check_win(game):
-            game["active"] = False
+        if result == "win":
+            game.active = False
             del sapper_games[chat_id]
             try:
                 await callback.message.edit_text(
@@ -2376,16 +2382,20 @@ async def sapper_callback(callback: types.CallbackQuery):
             await callback.answer("🏆 Вы победили!", show_alert=True)
             return
 
-        game["turn"] = game["player2"] if game["turn"] == game["player1"] else game["player1"]
+        # Переход хода
+        if game.turn == game.player1:
+            game.turn = game.player2
+        else:
+            game.turn = game.player1
 
-        if game["player2"] == 0:
-            game["player2"] = user_id
-            game["turn"] = game["player1"]
+        if game.player2 == 0:
+            game.player2 = user_id
+            game.turn = game.player1
             try:
                 await callback.message.edit_text(
-                    sapper_game_text(game, "Игрок 2 присоединился! Ход Игрока 1."),
+                    game.game_text("Игрок 2 присоединился! Ход Игрока 1."),
                     parse_mode="HTML",
-                    reply_markup=sapper_board_keyboard(game)
+                    reply_markup=game.make_board()
                 )
             except:
                 pass
@@ -2394,9 +2404,9 @@ async def sapper_callback(callback: types.CallbackQuery):
 
         try:
             await callback.message.edit_text(
-                sapper_game_text(game),
+                game.game_text(),
                 parse_mode="HTML",
-                reply_markup=sapper_board_keyboard(game)
+                reply_markup=game.make_board()
             )
         except:
             pass
