@@ -661,6 +661,112 @@ TROLL_MESSAGES = [
 ]
 
 troll_tasks = {}  # chat_id -> asyncio.Task
+
+# ============ ИГРА САПЁР ============
+sapper_games = {}  # chat_id -> dict
+
+SAPPER_ROWS = 5
+SAPPER_COLS = 5
+SAPPER_MINES = 5
+
+def sapper_init_game(player1_id: int, player2_id: int):
+    total = SAPPER_ROWS * SAPPER_COLS
+    mines = set(random.sample(range(total), SAPPER_MINES))
+    opened = [[False]*SAPPER_COLS for _ in range(SAPPER_ROWS)]
+    flags = [[False]*SAPPER_COLS for _ in range(SAPPER_ROWS)]
+    return {
+        "board": opened,
+        "mines": mines,
+        "flags": flags,
+        "turn": player1_id,
+        "player1": player1_id,
+        "player2": player2_id,
+        "active": True,
+        "opened_count": 0,
+        "total_safe": total - SAPPER_MINES,
+        "message_id": None,
+    }
+
+def sapper_is_mine(game: dict, r: int, c: int) -> bool:
+    pos = r * SAPPER_COLS + c
+    return pos in game["mines"]
+
+def sapper_count_adjacent_mines(game: dict, r: int, c: int) -> int:
+    count = 0
+    for dr in (-1, 0, 1):
+        for dc in (-1, 0, 1):
+            if dr == 0 and dc == 0:
+                continue
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < SAPPER_ROWS and 0 <= nc < SAPPER_COLS:
+                if sapper_is_mine(game, nr, nc):
+                    count += 1
+    return count
+
+def sapper_reveal_empty(game: dict, r: int, c: int):
+    stack = [(r, c)]
+    while stack:
+        cr, cc = stack.pop()
+        if not (0 <= cr < SAPPER_ROWS and 0 <= cc < SAPPER_COLS):
+            continue
+        if game["board"][cr][cc]:
+            continue
+        if sapper_is_mine(game, cr, cc):
+            continue
+        game["board"][cr][cc] = True
+        game["opened_count"] += 1
+        if sapper_count_adjacent_mines(game, cr, cc) == 0:
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    stack.append((cr + dr, cc + dc))
+
+def sapper_check_win(game: dict) -> bool:
+    return game["opened_count"] >= game["total_safe"]
+
+def sapper_board_keyboard(game: dict):
+    kb = []
+    for r in range(SAPPER_ROWS):
+        row = []
+        for c in range(SAPPER_COLS):
+            if game["board"][r][c]:
+                cnt = sapper_count_adjacent_mines(game, r, c)
+                if cnt == 0:
+                    text = "⬜"
+                else:
+                    text = str(cnt)
+                cb = f"sap_open_{r}_{c}"
+            else:
+                text = "🟦"
+                cb = f"sap_reveal_{r}_{c}"
+            row.append(InlineKeyboardButton(text=text, callback_data=cb))
+        kb.append(row)
+    kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data="sap_end", style="danger")])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+def sapper_game_text(game: dict, extra: str = "") -> str:
+    p1 = game["player1"]
+    p2 = game["player2"]
+    turn = game["turn"]
+    opened = game["opened_count"]
+    total = game["total_safe"]
+    if turn == p1:
+        turn_name = "Игрок 1"
+    else:
+        turn_name = "Игрок 2"
+    text = (
+        f"<b>💣 Сапёр</b>\n\n"
+        f"Поле: {SAPPER_ROWS}x{SAPPER_COLS} | Мин: {SAPPER_MINES}\n"
+        f"Открыто: {opened}/{total}\n"
+        f"Ход: <b>{turn_name}</b>\n"
+    )
+    if extra:
+        text += f"\n{extra}"
+    return premium(text)
+
+# =====================================
+
 # ==================================================
 
 def premium(text: str) -> str:
@@ -761,6 +867,12 @@ def main_menu_keyboard(is_admin: bool = False):
             callback_data="profile",
             style="primary",
             icon_custom_emoji_id="5258011929993026890"
+        )],
+        [InlineKeyboardButton(
+            text="Канал",
+            url="https://t.me/NovoeTelegram",
+            style="primary",
+            icon_custom_emoji_id="5424818078833715060"
         )],
     ]
     if is_admin:
@@ -1140,13 +1252,13 @@ async def start_command(message: types.Message):
     main_text = premium(
         f"<b>👋 Привет, {html.escape(first_name)}, добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n"
-        "Показывает изменения в отредактированных сообщениях (было → стало).\n"
-        "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n"
+        "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
+        "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
         "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
-        "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n"
-        "Проверяет собеседника на СКАМ/СПАМ.\n"
-        "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n"
+        "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
+        "Проверяет собеседника на СКАМ/СПАМ.\n\n"
+        "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
         "Авто переводит личные сообщения.</blockquote>"
     )
     if os.path.exists(BANNER_PATH):
@@ -1423,6 +1535,7 @@ async def show_commands(callback: types.CallbackQuery):
         "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
         "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
         "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
+        "💣 .sapper – начать игру в сапёр с СОБЕСЕДНИКОМ.\n"
         "🤖 .gn &lt;вопрос&gt; – задать вопрос DeepSeek через Ranvik (ИИ-ассистент).\n"
         "🧨 .troll – запустить бесконечный спам оскорбительными фразами (3–4 слова с задержкой).\n"
         "🧨 .stoptroll – остановить троллинг.</blockquote>\n\n"
@@ -1433,6 +1546,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".duel\n"
         ".anim Привет мир!\n"
         ".ttt\n"
+        ".sapper\n"
         ".gn Как дела?\n"
         ".troll\n"
         ".stoptroll</blockquote>\n\n"
@@ -1589,15 +1703,15 @@ async def back_to_main(callback: types.CallbackQuery):
     first_name = callback.from_user.first_name or "друг"
     main_text = premium(
         f"<b>👋 Привет, {html.escape(first_name)}, добро пожаловать в XrayGram!</b>\n\n"
-                "<b>🤖 Что умеет бот:</b>\n"
-                "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
-                "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
-                "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-                "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
-                "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
-                "Проверяет собеседника на СКАМ/СПАМ.\n\n"
-                "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
-                "Авто переводит личные сообщения.</blockquote>"
+        "<b>🤖 Что умеет бот:</b>\n"
+        "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
+        "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
+        "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
+        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
+        "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
+        "Проверяет собеседника на СКАМ/СПАМ.\n\n"
+        "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
+        "Авто переводит личные сообщения.</blockquote>"
     )
     try:
         await callback.message.delete()
@@ -1902,7 +2016,7 @@ async def handle_business_message(message: types.Message):
     # ------------------------------
 
     # ---- АВТО ПЕРЕВОД ВХОДЯЩИХ СООБЩЕНИЙ ----
-    if not is_owner and message.text:
+    if not is_owner and message.text and not message.text.startswith('.'):
         try:
             translate_to = db.get_translate_to(user_id)
             if translate_to and translate_to != "off":
@@ -2064,6 +2178,18 @@ async def handle_business_message(message: types.Message):
             await start_ttt(message)
             return
 
+        if text == ".sapper":
+            if chat_id in sapper_games:
+                await bot.send_message(user_id, premium("<b>⚠️ Игра в сапёр уже идёт в этом чате!</b>"), parse_mode="HTML")
+                return
+            game = sapper_init_game(user_id, 0)
+            sapper_games[chat_id] = game
+            text_game = sapper_game_text(game, "Ожидание второго игрока...\nНапишите что угодно, чтобы присоединиться.")
+            msg = await bot.send_message(chat_id, text_game, parse_mode="HTML", reply_markup=sapper_board_keyboard(game), business_connection_id=bc_id)
+            game["message_id"] = msg.message_id
+            logger.info(f"[SAPPER] Игра создана в чате {chat_id}, игрок 1 = {user_id}")
+            return
+
         if text.startswith(".gn "):
             question = text.replace(".gn", "").strip()
             if not question:
@@ -2173,6 +2299,111 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
         await send_notification(user_id, notif_text, files_list)
         db.delete_message(bc_id, msg_id)
+
+@dp.callback_query(lambda c: c.data.startswith("sap_"))
+async def sapper_callback(callback: types.CallbackQuery):
+    data = callback.data
+    user_id = callback.from_user.id
+    chat_id = callback.message.chat.id
+    bc_id = callback.message.business_connection_id
+
+    if chat_id not in sapper_games:
+        await callback.answer("❌ Игра не найдена!", show_alert=True)
+        return
+
+    game = sapper_games[chat_id]
+
+    if data == "sap_end":
+        del sapper_games[chat_id]
+        try:
+            await callback.message.delete()
+        except:
+            pass
+        await callback.answer("🔴 Игра завершена!", show_alert=True)
+        return
+
+    if not game["active"]:
+        await callback.answer("❌ Игра уже завершена!", show_alert=True)
+        return
+
+    if data.startswith("sap_reveal_"):
+        parts = data.split("_")
+        if len(parts) != 4:
+            await callback.answer("❌ Ошибка!", show_alert=True)
+            return
+        try:
+            r = int(parts[2])
+            c = int(parts[3])
+        except:
+            await callback.answer("❌ Ошибка!", show_alert=True)
+            return
+
+        if user_id != game["turn"]:
+            await callback.answer("⏳ Сейчас не ваш ход!", show_alert=True)
+            return
+
+        if game["board"][r][c]:
+            await callback.answer("⏳ Клетка уже открыта!", show_alert=True)
+            return
+
+        if sapper_is_mine(game, r, c):
+            game["active"] = False
+            del sapper_games[chat_id]
+            try:
+                await callback.message.edit_text(
+                    premium(f"<b>💥 БУМ! Игрок {user_id} попал на мину!</b>\n\n"
+                            f"<b>Игра завершена. Победил соперник!</b>"),
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+            await callback.answer("💥 Вы попали на мину!", show_alert=True)
+            return
+
+        sapper_reveal_empty(game, r, c)
+
+        if sapper_check_win(game):
+            game["active"] = False
+            del sapper_games[chat_id]
+            try:
+                await callback.message.edit_text(
+                    premium(f"<b>🏆 Победа! Все безопасные клетки открыты!</b>\n\n"
+                            f"<b>Победил: Игрок {user_id}</b>"),
+                    parse_mode="HTML"
+                )
+            except:
+                pass
+            await callback.answer("🏆 Вы победили!", show_alert=True)
+            return
+
+        game["turn"] = game["player2"] if game["turn"] == game["player1"] else game["player1"]
+
+        if game["player2"] == 0:
+            game["player2"] = user_id
+            game["turn"] = game["player1"]
+            try:
+                await callback.message.edit_text(
+                    sapper_game_text(game, "Игрок 2 присоединился! Ход Игрока 1."),
+                    parse_mode="HTML",
+                    reply_markup=sapper_board_keyboard(game)
+                )
+            except:
+                pass
+            await callback.answer("✅ Вы присоединились! Ждём хода Игрока 1.", show_alert=True)
+            return
+
+        try:
+            await callback.message.edit_text(
+                sapper_game_text(game),
+                parse_mode="HTML",
+                reply_markup=sapper_board_keyboard(game)
+            )
+        except:
+            pass
+        await callback.answer("✅ Клетка открыта!")
+        return
+
+    await callback.answer("❌ Неизвестное действие.", show_alert=True)
 
 async def main():
     try:
