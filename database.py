@@ -147,7 +147,6 @@ class Database:
         """)
 
         # ============ МИГРАЦИИ ============
-        # user_settings
         cursor.execute("PRAGMA table_info(user_settings)")
         cols = [row["name"] for row in cursor.fetchall()]
         if "scam_check" not in cols:
@@ -163,14 +162,12 @@ class Database:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
             logger.info("[DB] Миграция: добавлена колонка online_mode")
 
-        # messages: chat_id
         cursor.execute("PRAGMA table_info(messages)")
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
             logger.info("[DB] Миграция: добавлена колонка chat_id в messages")
 
-        # Индексы
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
@@ -342,46 +339,6 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
         return cursor.fetchall()
-
-    # ---- ДЛЯ АВТО-ЭКСПОРТА ----
-    def get_chat_id_for_message(self, bc_id, msg_id):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT chat_id FROM messages WHERE bc_id = ? AND msg_id = ?",
-            (bc_id, msg_id)
-        )
-        row = cursor.fetchone()
-        return row["chat_id"] if row and row["chat_id"] is not None else None
-
-    def get_all_msg_ids_by_chat(self, bc_id, chat_id):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT msg_id FROM messages WHERE bc_id = ? AND chat_id = ?",
-            (bc_id, chat_id)
-        )
-        return {row["msg_id"] for row in cursor.fetchall()}
-
-    def get_messages_by_chat_filtered(self, bc_id, chat_id, msg_ids):
-        if not msg_ids:
-            return []
-        cursor = self.conn.cursor()
-        placeholders = ",".join("?" for _ in msg_ids)
-        cursor.execute(
-            f"""SELECT msg_id, fullname, text, files, created_at
-                FROM messages
-                WHERE bc_id = ? AND chat_id = ? AND msg_id IN ({placeholders})
-                ORDER BY msg_id ASC""",
-            (bc_id, chat_id, *msg_ids)
-        )
-        return cursor.fetchall()
-
-    def get_distinct_chats(self, bc_id):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "SELECT DISTINCT chat_id FROM messages WHERE bc_id = ? AND chat_id IS NOT NULL",
-            (bc_id,)
-        )
-        return [row["chat_id"] for row in cursor.fetchall()]
 
     def get_last_chat_for_bc(self, bc_id):
         cursor = self.conn.cursor()
