@@ -280,7 +280,6 @@ PREMIUM_EMOJI = {
     "🗑": "5445267414562389170",
     "🔥": "5424972470023104089",
     "⭐": "5438496463044752972",
-    # премиум-ID для кнопок главного меню
     "🔌": "5258093637450866522",
 }
 EMPTY = "ㅤ"
@@ -662,29 +661,20 @@ TROLL_MESSAGES = [
     "твою мамашу ебал услышь меня уже позорище ебанное я тебе повторяюсь что ты лошара ебанная будешь тут ловить и сохранять на себе харчи на постоянной основе слышала меня телочка ебанная неспособная перебить меня даже когда я сижу на лайте я чисто кишки твоей мамаши ебал слышишь меня огузок ты ебучий сынуля шалавы ебанный я тебе говорю что ты ебанная натуральная терпила которая будет сохранять здесь каждый мой текст дабы потом показать своей мамаше шалаве ебанной которая мой хуй сосать не устанет вместе с тобой лошара ебанная бери себя в руки ты беспризорница ебанная понимаешь я твою мамашу ебал ничтожество понимаешь что тебе попросту тут в ебало будет прилетать огненные харчил рандомный"
 ]
 
-troll_tasks = {}  # chat_id -> asyncio.Task
+troll_tasks = {}
 
-# ============ МАППИНГ msg_id -> chat_id (в памяти) ============
-# Нужен, чтобы понять, что «все сообщения конкретного чата удалены».
-# Business API НЕ присылает chat_id в событиях удаления, а БД хранит только bc_id.
-message_chat_map = {}                 # msg_id -> chat_id
-chat_messages_map = defaultdict(set)  # chat_id -> {msg_id}
+# ============ АККУМУЛЯТОР УДАЛЕНИЙ ДЛЯ АВТО-ЭКСПОРТА ============
+# bc_id -> {chat_id: {"known": set(msg_ids), "deleted": set(msg_ids)}}
+chat_deletion_accumulator = {}
 # ============================================================
 
 # ============ АВТО-ЭКСПОРТ ЧАТА В HTML ============
 async def export_chat_to_html(bc_id: str, chat_id, msg_ids: set) -> str | None:
-    """Генерирует HTML-файл только по указанным msg_id (сообщения одного чата)."""
     try:
         if not msg_ids:
             return None
 
-        cursor = db.conn.cursor()
-        placeholders = ",".join("?" for _ in msg_ids)
-        cursor.execute(
-            f"SELECT msg_id, fullname, text, files FROM messages WHERE bc_id = ? AND msg_id IN ({placeholders}) ORDER BY msg_id ASC",
-            (bc_id, *msg_ids)
-        )
-        rows = cursor.fetchall()
+        rows = db.get_messages_by_chat_filtered(bc_id, chat_id, msg_ids)
         if not rows:
             return None
 
@@ -715,13 +705,11 @@ async def export_chat_to_html(bc_id: str, chat_id, msg_ids: set) -> str | None:
         ]
 
         for row in rows:
-            try:
-                msg_id = row["msg_id"]
-                fullname = row["fullname"]
-                text = row["text"]
-                files = row["files"]
-            except Exception:
-                continue
+            msg_id = row["msg_id"]
+            fullname = row["fullname"]
+            text = row["text"]
+            files = row["files"]
+            created_at = row["created_at"]
 
             safe_name = html.escape(str(fullname or "Неизвестный"))
             safe_text = html.escape(str(text or ""))
@@ -735,7 +723,7 @@ async def export_chat_to_html(bc_id: str, chat_id, msg_ids: set) -> str | None:
 
             parts.append("<div class='msg'>")
             parts.append(f"<div class='header'>{safe_name}</div>")
-            parts.append(f"<div class='meta'>msg_id: {msg_id}</div>")
+            parts.append(f"<div class='meta'>msg_id: {msg_id} | {created_at or ''}</div>")
             if safe_text:
                 parts.append(f"<div class='text'>{safe_text}</div>")
             if files_count:
@@ -763,6 +751,19 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+
+# ============ МИГРАЦИЯ online_mode ============
+try:
+    cursor = db.conn.cursor()
+    cursor.execute("PRAGMA table_info(user_settings)")
+    cols = [row["name"] for row in cursor.fetchall()]
+    if "online_mode" not in cols:
+        cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
+        db.conn.commit()
+        logger.info("[DB] Миграция: добавлена колонка online_mode")
+except Exception as e:
+    logger.error(f"[DB] Миграция online_mode: {e}")
+# ============================================
 
 if os.path.exists(INSTRUCTION_VIDEO_PATH):
     logger.info("✅ Видео инструкции найдено")
@@ -903,10 +904,13 @@ def settings_keyboard(user_id: int):
     mode_name = MODE_NAMES.get(mode, "Выкл")
     translate = db.get_translate_to(user_id)
     translate_name = TRANSLATE_LANGS.get(translate, "Выкл")
+    online = db.get_online_mode(user_id)
+    online_status = "✅ Вкл" if online else "❌ Выкл"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
         [InlineKeyboardButton(text=f"Режим текста: {mode_name}", callback_data="text_mode_menu", style="primary")],
         [InlineKeyboardButton(text=f"Авто перевод: {translate_name}", callback_data="translate_menu", style="primary")],
+        [InlineKeyboardButton(text=f"Онлайн мод: {online_status}", callback_data="toggle_online_mode", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
@@ -1578,7 +1582,9 @@ async def show_settings(callback: types.CallbackQuery):
         "<b>Режим текста</b>\n"
         "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
         "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык."
+        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
+        "<b>Онлайн мод</b>\n"
+        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
     await callback.answer()
@@ -1599,7 +1605,31 @@ async def toggle_scam_check(callback: types.CallbackQuery):
         "<b>Режим текста</b>\n"
         "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
         "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык."
+        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
+        "<b>Онлайн мод</b>\n"
+        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
+    )
+    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+
+@dp.callback_query(lambda c: c.data == "toggle_online_mode")
+async def toggle_online_mode(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_online_mode(user_id)
+    db.set_online_mode(user_id, new_state)
+    status = "включён" if new_state else "выключен"
+    await callback.answer(f"Онлайн мод {status}", show_alert=True)
+    text = premium(
+        "<b>⚙️ Настройки</b>\n\n"
+        "<b>Проверка на СКАМ/СПАМ</b>\n"
+        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
+        "• встроенные флаги Telegram (SCAM/FAKE)\n"
+        "• базу SpamProtection API\n\n"
+        "<b>Режим текста</b>\n"
+        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
+        "<b>Авто перевод</b>\n"
+        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
+        "<b>Онлайн мод</b>\n"
+        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
 
@@ -1753,7 +1783,7 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
-# ------- РАССЫЛКА С ОЧИСТКОЙ ЗАБЛОКИРОВАВШИХ -------
+# ------- РАССЫЛКА -------
 @dp.message(StateFilter(BroadcastStates.waiting_for_content))
 async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -1839,7 +1869,7 @@ async def users_txt(callback: types.CallbackQuery):
                                            caption=premium("<b>📄 Список всех пользователей (txt)</b>"), parse_mode="HTML")
     await callback.answer()
 
-# ------- АКТИВНЫЕ ПОДКЛЮЧЕНИЯ С ПРОВЕРКОЙ ЧЕРЕЗ API -------
+# ------- АКТИВНЫЕ ПОДКЛЮЧЕНИЯ -------
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -1993,7 +2023,7 @@ async def handle_business_message(message: types.Message):
             logger.error(f"[SCAM] Ошибка проверки: {e}")
     # ------------------------------
 
-    # ---- АВТО ПЕРЕВОД ВХОДЯЩИХ СООБЩЕНИЙ ----
+    # ---- АВТО ПЕРЕВОД ----
     if not is_owner and message.text and not message.text.startswith('.'):
         try:
             translate_to = db.get_translate_to(user_id)
@@ -2032,7 +2062,7 @@ async def handle_business_message(message: types.Message):
             logger.error(f"[TRANSLATE] Ошибка: {e}")
     # ----------------------------------------
 
-    # ---- РЕЖИМ ТЕКСТА (только для сообщений владельца) ----
+    # ---- РЕЖИМ ТЕКСТА ----
     if is_owner and message.text and not message.text.startswith('.'):
         try:
             mode = db.get_text_mode(user_id)
@@ -2211,12 +2241,9 @@ async def handle_business_message(message: types.Message):
     text = message.text or message.caption or ""
 
     files = await download_files(message, user_id)
-    db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
-    logger.info(f"[SAVE] Сохранено {msg_id} для {user_id}")
-
-    # Запоминаем привязку сообщения к чату (для авто-экспорта при полной очистке)
-    message_chat_map[msg_id] = chat_id
-    chat_messages_map[chat_id].add(msg_id)
+    db.save_message(bc_id, msg_id, user_id, fullname, text, files,
+                    is_temporary=message.has_media_spoiler, chat_id=chat_id)
+    logger.info(f"[SAVE] Сохранено {msg_id} для {user_id} (chat_id={chat_id})")
 
     if message.has_media_spoiler and files:
         notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
@@ -2261,22 +2288,34 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
     deleted_ids = set(event.message_ids)
 
-    # ---- Проверяем, не удалён ли какой-то чат ЦЕЛИКОМ ----
-    # Группируем удалённые msg_id по chat_id (из нашей мапы в памяти)
+    # Группируем удалённые msg_id по chat_id (из БД)
     chats_with_deleted = defaultdict(set)
     for msg_id in deleted_ids:
-        cid = message_chat_map.get(msg_id)
+        cid = db.get_chat_id_for_message(bc_id, msg_id)
         if cid is not None:
             chats_with_deleted[cid].add(msg_id)
 
+    # Инициализируем аккумулятор для bc_id
+    if bc_id not in chat_deletion_accumulator:
+        chat_deletion_accumulator[bc_id] = {}
+
+    # Проверяем каждый чат
     for cid, del_ids in chats_with_deleted.items():
-        known_ids = chat_messages_map.get(cid, set())
-        if not known_ids:
-            continue
-        # Все известные сообщения этого чата в списке удалённых → чат очищен
-        if known_ids.issubset(deleted_ids):
-            logger.info(f"[AUTO-EXPORT] Все сообщения чата {cid} удалены. Генерирую HTML-архив ({len(known_ids)} шт.)...")
-            html_content = await export_chat_to_html(bc_id, cid, set(known_ids))
+        # Первое удаление для этого чата — снимаем снимок «known»
+        if cid not in chat_deletion_accumulator[bc_id]:
+            known_ids = db.get_all_msg_ids_by_chat(bc_id, cid)
+            chat_deletion_accumulator[bc_id][cid] = {
+                "known": known_ids,
+                "deleted": set()
+            }
+
+        acc = chat_deletion_accumulator[bc_id][cid]
+        acc["deleted"].update(del_ids)
+
+        # Проверяем: все ли известные сообщения этого чата уже удалены?
+        if acc["known"] and acc["known"].issubset(acc["deleted"]):
+            logger.info(f"[AUTO-EXPORT] Чат {cid} полностью удалён. Сообщений: {len(acc['known'])}. Генерирую HTML...")
+            html_content = await export_chat_to_html(bc_id, cid, set(acc["known"]))
             if html_content:
                 try:
                     filename = f"chat_export_{cid}_{int(time.time())}.html"
@@ -2287,7 +2326,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
                             f"<b>📄 Авто-экспорт чата</b>\n\n"
                             f"Все сообщения этого чата были удалены.\n"
                             f"Chat ID: <code>{cid}</code>\n"
-                            f"Сообщений в архиве: <b>{len(known_ids)}</b>"
+                            f"Сообщений в архиве: <b>{len(acc['known'])}</b>"
                         ),
                         parse_mode="HTML"
                     )
@@ -2297,16 +2336,13 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
             else:
                 logger.warning(f"[AUTO-EXPORT] Не удалось сгенерировать HTML для чата {cid}")
 
-    # ---- Стандартная обработка удаления ----
+            # Чистим аккумулятор
+            chat_deletion_accumulator[bc_id].pop(cid, None)
+
+    # Стандартная обработка удаления
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
-            # Всё равно чистим мапу
-            cid = message_chat_map.pop(msg_id, None)
-            if cid is not None:
-                chat_messages_map[cid].discard(msg_id)
-                if not chat_messages_map[cid]:
-                    chat_messages_map.pop(cid, None)
             continue
         fullname = data["fullname"]
         text = data["text"] or ""
@@ -2316,12 +2352,49 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         await send_notification(user_id, notif_text, files_list)
         db.delete_message(bc_id, msg_id)
 
-        # Обновляем мапу: сообщения больше нет
-        cid = message_chat_map.pop(msg_id, None)
-        if cid is not None:
-            chat_messages_map[cid].discard(msg_id)
-            if not chat_messages_map[cid]:
-                chat_messages_map.pop(cid, None)
+# ============ ФОНОВАЯ ЗАДАЧА: ОНЛАЙН МОД ============
+async def online_mode_loop():
+    """Периодически пингует бизнес-аккаунты, чтобы они отображались онлайн."""
+    logger.info("[ONLINE] Фоновая задача запущена")
+    while True:
+        try:
+            cursor = db.conn.cursor()
+            cursor.execute("""
+                SELECT c.bc_id, c.user_id
+                FROM connections c
+                JOIN user_settings s ON s.user_id = c.user_id
+                WHERE s.online_mode = 1
+            """)
+            rows = cursor.fetchall()
+
+            for row in rows:
+                bc_id = row["bc_id"]
+                user_id = row["user_id"]
+
+                cursor.execute(
+                    "SELECT chat_id FROM messages WHERE bc_id = ? AND chat_id IS NOT NULL ORDER BY msg_id DESC LIMIT 1",
+                    (bc_id,)
+                )
+                chat_row = cursor.fetchone()
+                if not chat_row:
+                    continue
+                chat_id = chat_row["chat_id"]
+
+                try:
+                    await bot.send_chat_action(
+                        chat_id=chat_id,
+                        action="typing",
+                        business_connection_id=bc_id
+                    )
+                    logger.debug(f"[ONLINE] Пинг для {bc_id} → chat {chat_id}")
+                except Exception as e:
+                    logger.debug(f"[ONLINE] Ошибка пинга {bc_id}: {e}")
+
+        except Exception as e:
+            logger.error(f"[ONLINE] Ошибка цикла: {e}")
+
+        await asyncio.sleep(10)
+# ====================================================
 
 async def main():
     try:
@@ -2330,6 +2403,9 @@ async def main():
     except Exception as e:
         logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
         raise
+
+    asyncio.create_task(online_mode_loop())
+
     await bot.set_my_commands([types.BotCommand(command="start", description=premium("Главное меню"))])
     await dp.start_polling(bot)
 
