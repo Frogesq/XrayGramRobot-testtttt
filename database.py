@@ -141,11 +141,13 @@ class Database:
                 user_id INTEGER PRIMARY KEY,
                 scam_check BOOLEAN DEFAULT 0,
                 text_mode TEXT DEFAULT 'off',
-                translate_to TEXT DEFAULT 'off'
+                translate_to TEXT DEFAULT 'off',
+                online_mode BOOLEAN DEFAULT 0
             )
         """)
 
         # ============ МИГРАЦИИ ============
+        # user_settings
         cursor.execute("PRAGMA table_info(user_settings)")
         cols = [row["name"] for row in cursor.fetchall()]
         if "scam_check" not in cols:
@@ -157,13 +159,18 @@ class Database:
         if "translate_to" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN translate_to TEXT DEFAULT 'off'")
             logger.info("[DB] Миграция: добавлена колонка translate_to")
+        if "online_mode" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
+            logger.info("[DB] Миграция: добавлена колонка online_mode")
 
+        # messages: chat_id
         cursor.execute("PRAGMA table_info(messages)")
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
             logger.info("[DB] Миграция: добавлена колонка chat_id в messages")
 
+        # Индексы
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
@@ -245,6 +252,23 @@ class Database:
         """, (user_id, lang))
         self.conn.commit()
 
+    def get_online_mode(self, user_id: int) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT online_mode FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return bool(row["online_mode"]) if row and row["online_mode"] is not None else False
+        except Exception:
+            return False
+
+    def set_online_mode(self, user_id: int, enabled: bool):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, online_mode) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET online_mode = excluded.online_mode
+        """, (user_id, 1 if enabled else 0))
+        self.conn.commit()
+
     # ============ ПОДКЛЮЧЕНИЯ ============
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
@@ -265,6 +289,16 @@ class Database:
     def get_all_connections(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT bc_id, user_id FROM connections")
+        return cursor.fetchall()
+
+    def get_online_connections(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT c.bc_id, c.user_id
+            FROM connections c
+            JOIN user_settings s ON s.user_id = c.user_id
+            WHERE s.online_mode = 1
+        """)
         return cursor.fetchall()
 
     # ============ СООБЩЕНИЯ ============
@@ -348,6 +382,15 @@ class Database:
             (bc_id,)
         )
         return [row["chat_id"] for row in cursor.fetchall()]
+
+    def get_last_chat_for_bc(self, bc_id):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT chat_id FROM messages WHERE bc_id = ? AND chat_id IS NOT NULL ORDER BY msg_id DESC LIMIT 1",
+            (bc_id,)
+        )
+        row = cursor.fetchone()
+        return row["chat_id"] if row else None
 
     # ============ MUTE ============
     def add_muted_chat(self, user_id: int, chat_id: int):
