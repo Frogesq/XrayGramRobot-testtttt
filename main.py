@@ -9,6 +9,8 @@ import html
 import unicodedata
 import requests
 import urllib3
+from collections import defaultdict
+from datetime import datetime
 from io import BytesIO
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher, types
@@ -661,7 +663,91 @@ TROLL_MESSAGES = [
 ]
 
 troll_tasks = {}  # chat_id -> asyncio.Task
-# ==================================================
+
+# ============ МАППИНГ msg_id -> chat_id (в памяти) ============
+# Нужен, чтобы понять, что «все сообщения конкретного чата удалены».
+# Business API НЕ присылает chat_id в событиях удаления, а БД хранит только bc_id.
+message_chat_map = {}                 # msg_id -> chat_id
+chat_messages_map = defaultdict(set)  # chat_id -> {msg_id}
+# ============================================================
+
+# ============ АВТО-ЭКСПОРТ ЧАТА В HTML ============
+async def export_chat_to_html(bc_id: str, chat_id, msg_ids: set) -> str | None:
+    """Генерирует HTML-файл только по указанным msg_id (сообщения одного чата)."""
+    try:
+        if not msg_ids:
+            return None
+
+        cursor = db.conn.cursor()
+        placeholders = ",".join("?" for _ in msg_ids)
+        cursor.execute(
+            f"SELECT msg_id, fullname, text, files FROM messages WHERE bc_id = ? AND msg_id IN ({placeholders}) ORDER BY msg_id ASC",
+            (bc_id, *msg_ids)
+        )
+        rows = cursor.fetchall()
+        if not rows:
+            return None
+
+        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
+        parts = [
+            "<!DOCTYPE html>",
+            "<html lang='ru'><head><meta charset='utf-8'>",
+            f"<title>Экспорт чата {chat_id}</title>",
+            "<style>",
+            "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#0e1621;color:#fff;padding:20px;max-width:900px;margin:0 auto}",
+            ".msg{background:#182533;padding:12px;margin:8px 0;border-radius:8px}",
+            ".header{color:#6ab2f2;font-weight:bold;margin-bottom:4px}",
+            ".meta{color:#8b8b8b;font-size:12px}",
+            ".text{margin-top:6px;white-space:pre-wrap;word-wrap:break-word;line-height:1.5}",
+            "h1{color:#6ab2f2}",
+            ".info{background:#1e2c3a;padding:14px;border-radius:8px;margin-bottom:16px;line-height:1.7}",
+            "code{background:#2b3a4a;padding:2px 6px;border-radius:4px;font-size:13px}",
+            ".warn{background:#3a1e1e;border-left:4px solid #d33;padding:12px;border-radius:6px;margin-bottom:16px}",
+            "</style></head><body>",
+            "<h1>📄 Экспорт переписки XrayGram</h1>",
+            "<div class='warn'>⚠️ <b>Все сообщения этого чата были удалены.</b> Сохранён ниже автоматически.</div>",
+            "<div class='info'>",
+            f"<div>Chat ID: <code>{html.escape(str(chat_id))}</code></div>",
+            f"<div>bc_id: <code>{html.escape(str(bc_id))}</code></div>",
+            f"<div>Всего сообщений: <b>{len(rows)}</b></div>",
+            f"<div>Дата экспорта: {now_str}</div>",
+            "</div>"
+        ]
+
+        for row in rows:
+            try:
+                msg_id = row["msg_id"]
+                fullname = row["fullname"]
+                text = row["text"]
+                files = row["files"]
+            except Exception:
+                continue
+
+            safe_name = html.escape(str(fullname or "Неизвестный"))
+            safe_text = html.escape(str(text or ""))
+            files_count = 0
+            if files:
+                try:
+                    files_list = json.loads(files)
+                    files_count = len(files_list)
+                except Exception:
+                    files_count = 0
+
+            parts.append("<div class='msg'>")
+            parts.append(f"<div class='header'>{safe_name}</div>")
+            parts.append(f"<div class='meta'>msg_id: {msg_id}</div>")
+            if safe_text:
+                parts.append(f"<div class='text'>{safe_text}</div>")
+            if files_count:
+                parts.append(f"<div class='meta'>📎 Вложений: {files_count}</div>")
+            parts.append("</div>")
+
+        parts.append("</body></html>")
+        return "\n".join(parts)
+    except Exception as e:
+        logger.error(f"[EXPORT] Ошибка генерации HTML: {e}")
+        return None
+# =====================================================
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
@@ -2128,6 +2214,10 @@ async def handle_business_message(message: types.Message):
     db.save_message(bc_id, msg_id, user_id, fullname, text, files, is_temporary=message.has_media_spoiler)
     logger.info(f"[SAVE] Сохранено {msg_id} для {user_id}")
 
+    # Запоминаем привязку сообщения к чату (для авто-экспорта при полной очистке)
+    message_chat_map[msg_id] = chat_id
+    chat_messages_map[chat_id].add(msg_id)
+
     if message.has_media_spoiler and files:
         notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
         await send_notification(user_id, notif_text, files)
@@ -2168,9 +2258,55 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
+
+    deleted_ids = set(event.message_ids)
+
+    # ---- Проверяем, не удалён ли какой-то чат ЦЕЛИКОМ ----
+    # Группируем удалённые msg_id по chat_id (из нашей мапы в памяти)
+    chats_with_deleted = defaultdict(set)
+    for msg_id in deleted_ids:
+        cid = message_chat_map.get(msg_id)
+        if cid is not None:
+            chats_with_deleted[cid].add(msg_id)
+
+    for cid, del_ids in chats_with_deleted.items():
+        known_ids = chat_messages_map.get(cid, set())
+        if not known_ids:
+            continue
+        # Все известные сообщения этого чата в списке удалённых → чат очищен
+        if known_ids.issubset(deleted_ids):
+            logger.info(f"[AUTO-EXPORT] Все сообщения чата {cid} удалены. Генерирую HTML-архив ({len(known_ids)} шт.)...")
+            html_content = await export_chat_to_html(bc_id, cid, set(known_ids))
+            if html_content:
+                try:
+                    filename = f"chat_export_{cid}_{int(time.time())}.html"
+                    await bot.send_document(
+                        user_id,
+                        BufferedInputFile(html_content.encode("utf-8"), filename=filename),
+                        caption=premium(
+                            f"<b>📄 Авто-экспорт чата</b>\n\n"
+                            f"Все сообщения этого чата были удалены.\n"
+                            f"Chat ID: <code>{cid}</code>\n"
+                            f"Сообщений в архиве: <b>{len(known_ids)}</b>"
+                        ),
+                        parse_mode="HTML"
+                    )
+                    logger.info(f"[AUTO-EXPORT] HTML отправлен пользователю {user_id}")
+                except Exception as e:
+                    logger.error(f"[AUTO-EXPORT] Ошибка отправки HTML: {e}")
+            else:
+                logger.warning(f"[AUTO-EXPORT] Не удалось сгенерировать HTML для чата {cid}")
+
+    # ---- Стандартная обработка удаления ----
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
+            # Всё равно чистим мапу
+            cid = message_chat_map.pop(msg_id, None)
+            if cid is not None:
+                chat_messages_map[cid].discard(msg_id)
+                if not chat_messages_map[cid]:
+                    chat_messages_map.pop(cid, None)
             continue
         fullname = data["fullname"]
         text = data["text"] or ""
@@ -2179,6 +2315,13 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
         await send_notification(user_id, notif_text, files_list)
         db.delete_message(bc_id, msg_id)
+
+        # Обновляем мапу: сообщения больше нет
+        cid = message_chat_map.pop(msg_id, None)
+        if cid is not None:
+            chat_messages_map[cid].discard(msg_id)
+            if not chat_messages_map[cid]:
+                chat_messages_map.pop(cid, None)
 
 async def main():
     try:
