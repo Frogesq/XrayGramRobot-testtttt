@@ -664,7 +664,6 @@ TROLL_MESSAGES = [
 troll_tasks = {}
 
 # ============ АККУМУЛЯТОР УДАЛЕНИЙ ДЛЯ АВТО-ЭКСПОРТА ============
-# bc_id -> {chat_id: {"known": set(msg_ids), "deleted": set(msg_ids)}}
 chat_deletion_accumulator = {}
 # ============================================================
 
@@ -751,19 +750,6 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
-
-# ============ МИГРАЦИЯ online_mode ============
-try:
-    cursor = db.conn.cursor()
-    cursor.execute("PRAGMA table_info(user_settings)")
-    cols = [row["name"] for row in cursor.fetchall()]
-    if "online_mode" not in cols:
-        cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
-        db.conn.commit()
-        logger.info("[DB] Миграция: добавлена колонка online_mode")
-except Exception as e:
-    logger.error(f"[DB] Миграция online_mode: {e}")
-# ============================================
 
 if os.path.exists(INSTRUCTION_VIDEO_PATH):
     logger.info("✅ Видео инструкции найдено")
@@ -2288,20 +2274,19 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
     deleted_ids = set(event.message_ids)
 
-    # Группируем удалённые msg_id по chat_id (из БД)
+    # Группируем удалённые msg_id по chat_id
     chats_with_deleted = defaultdict(set)
     for msg_id in deleted_ids:
         cid = db.get_chat_id_for_message(bc_id, msg_id)
         if cid is not None:
             chats_with_deleted[cid].add(msg_id)
 
-    # Инициализируем аккумулятор для bc_id
     if bc_id not in chat_deletion_accumulator:
         chat_deletion_accumulator[bc_id] = {}
 
-    # Проверяем каждый чат
+    # Проверяем каждый чат на полное удаление
     for cid, del_ids in chats_with_deleted.items():
-        # Первое удаление для этого чата — снимаем снимок «known»
+        # Снимок известных сообщений делаем ОДИН раз
         if cid not in chat_deletion_accumulator[bc_id]:
             known_ids = db.get_all_msg_ids_by_chat(bc_id, cid)
             chat_deletion_accumulator[bc_id][cid] = {
@@ -2312,7 +2297,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         acc = chat_deletion_accumulator[bc_id][cid]
         acc["deleted"].update(del_ids)
 
-        # Проверяем: все ли известные сообщения этого чата уже удалены?
+        # Все известные сообщения этого чата уже удалены → экспорт
         if acc["known"] and acc["known"].issubset(acc["deleted"]):
             logger.info(f"[AUTO-EXPORT] Чат {cid} полностью удалён. Сообщений: {len(acc['known'])}. Генерирую HTML...")
             html_content = await export_chat_to_html(bc_id, cid, set(acc["known"]))
@@ -2336,10 +2321,9 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
             else:
                 logger.warning(f"[AUTO-EXPORT] Не удалось сгенерировать HTML для чата {cid}")
 
-            # Чистим аккумулятор
             chat_deletion_accumulator[bc_id].pop(cid, None)
 
-    # Стандартная обработка удаления
+    # Только ПОСЛЕ проверки чистим БД
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
@@ -2354,31 +2338,21 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
 # ============ ФОНОВАЯ ЗАДАЧА: ОНЛАЙН МОД ============
 async def online_mode_loop():
-    """Периодически пингует бизнес-аккаунты, чтобы они отображались онлайн."""
+    """Каждые 8 секунд пингует бизнес-аккаунты через send_chat_action."""
     logger.info("[ONLINE] Фоновая задача запущена")
     while True:
         try:
-            cursor = db.conn.cursor()
-            cursor.execute("""
-                SELECT c.bc_id, c.user_id
-                FROM connections c
-                JOIN user_settings s ON s.user_id = c.user_id
-                WHERE s.online_mode = 1
-            """)
-            rows = cursor.fetchall()
-
-            for row in rows:
-                bc_id = row["bc_id"]
-                user_id = row["user_id"]
-
-                cursor.execute(
-                    "SELECT chat_id FROM messages WHERE bc_id = ? AND chat_id IS NOT NULL ORDER BY msg_id DESC LIMIT 1",
-                    (bc_id,)
-                )
-                chat_row = cursor.fetchone()
-                if not chat_row:
+            connections = db.get_online_connections()
+            for conn in connections:
+                try:
+                    bc_id = conn["bc_id"]
+                    user_id = conn["user_id"]
+                except Exception:
                     continue
-                chat_id = chat_row["chat_id"]
+
+                chat_id = db.get_last_chat_for_bc(bc_id)
+                if not chat_id:
+                    continue
 
                 try:
                     await bot.send_chat_action(
@@ -2386,14 +2360,14 @@ async def online_mode_loop():
                         action="typing",
                         business_connection_id=bc_id
                     )
-                    logger.debug(f"[ONLINE] Пинг для {bc_id} → chat {chat_id}")
+                    logger.debug(f"[ONLINE] Пинг {bc_id} → chat {chat_id}")
                 except Exception as e:
                     logger.debug(f"[ONLINE] Ошибка пинга {bc_id}: {e}")
 
         except Exception as e:
             logger.error(f"[ONLINE] Ошибка цикла: {e}")
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(8)
 # ====================================================
 
 async def main():
