@@ -9,7 +9,6 @@ import html
 import unicodedata
 import requests
 import urllib3
-from collections import defaultdict
 from datetime import datetime
 from io import BytesIO
 from dotenv import load_dotenv
@@ -663,79 +662,6 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}
 
-# ============ АККУМУЛЯТОР УДАЛЕНИЙ ДЛЯ АВТО-ЭКСПОРТА ============
-chat_deletion_accumulator = {}
-# ============================================================
-
-# ============ АВТО-ЭКСПОРТ ЧАТА В HTML ============
-async def export_chat_to_html(bc_id: str, chat_id, msg_ids: set) -> str | None:
-    try:
-        if not msg_ids:
-            return None
-
-        rows = db.get_messages_by_chat_filtered(bc_id, chat_id, msg_ids)
-        if not rows:
-            return None
-
-        now_str = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-        parts = [
-            "<!DOCTYPE html>",
-            "<html lang='ru'><head><meta charset='utf-8'>",
-            f"<title>Экспорт чата {chat_id}</title>",
-            "<style>",
-            "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#0e1621;color:#fff;padding:20px;max-width:900px;margin:0 auto}",
-            ".msg{background:#182533;padding:12px;margin:8px 0;border-radius:8px}",
-            ".header{color:#6ab2f2;font-weight:bold;margin-bottom:4px}",
-            ".meta{color:#8b8b8b;font-size:12px}",
-            ".text{margin-top:6px;white-space:pre-wrap;word-wrap:break-word;line-height:1.5}",
-            "h1{color:#6ab2f2}",
-            ".info{background:#1e2c3a;padding:14px;border-radius:8px;margin-bottom:16px;line-height:1.7}",
-            "code{background:#2b3a4a;padding:2px 6px;border-radius:4px;font-size:13px}",
-            ".warn{background:#3a1e1e;border-left:4px solid #d33;padding:12px;border-radius:6px;margin-bottom:16px}",
-            "</style></head><body>",
-            "<h1>📄 Экспорт переписки XrayGram</h1>",
-            "<div class='warn'>⚠️ <b>Все сообщения этого чата были удалены.</b> Сохранён ниже автоматически.</div>",
-            "<div class='info'>",
-            f"<div>Chat ID: <code>{html.escape(str(chat_id))}</code></div>",
-            f"<div>bc_id: <code>{html.escape(str(bc_id))}</code></div>",
-            f"<div>Всего сообщений: <b>{len(rows)}</b></div>",
-            f"<div>Дата экспорта: {now_str}</div>",
-            "</div>"
-        ]
-
-        for row in rows:
-            msg_id = row["msg_id"]
-            fullname = row["fullname"]
-            text = row["text"]
-            files = row["files"]
-            created_at = row["created_at"]
-
-            safe_name = html.escape(str(fullname or "Неизвестный"))
-            safe_text = html.escape(str(text or ""))
-            files_count = 0
-            if files:
-                try:
-                    files_list = json.loads(files)
-                    files_count = len(files_list)
-                except Exception:
-                    files_count = 0
-
-            parts.append("<div class='msg'>")
-            parts.append(f"<div class='header'>{safe_name}</div>")
-            parts.append(f"<div class='meta'>msg_id: {msg_id} | {created_at or ''}</div>")
-            if safe_text:
-                parts.append(f"<div class='text'>{safe_text}</div>")
-            if files_count:
-                parts.append(f"<div class='meta'>📎 Вложений: {files_count}</div>")
-            parts.append("</div>")
-
-        parts.append("</body></html>")
-        return "\n".join(parts)
-    except Exception as e:
-        logger.error(f"[EXPORT] Ошибка генерации HTML: {e}")
-        return None
-# =====================================================
-
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
         if emoji in text and emoji_id and str(emoji_id).isdigit():
@@ -834,6 +760,12 @@ def main_menu_keyboard(is_admin: bool = False):
             callback_data="profile",
             style="primary",
             icon_custom_emoji_id="5258011929993026890"
+        )],
+        [InlineKeyboardButton(
+            text="Mini App",
+            callback_data="mini_app",
+            style="primary",
+            icon_custom_emoji_id="5280867942056108177"
         )],
         [InlineKeyboardButton(
             text="Канал",
@@ -1225,7 +1157,7 @@ async def start_command(message: types.Message):
         "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
         "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
+        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n\n"
         "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
         "Проверяет собеседника на СКАМ/СПАМ.\n\n"
         "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
@@ -1422,7 +1354,7 @@ async def check_subscription(callback: types.CallbackQuery):
                 "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
                 "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
                 "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-                "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
+                "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n\n"
                 "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
                 "Проверяет собеседника на СКАМ/СПАМ.\n\n"
                 "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
@@ -1495,19 +1427,21 @@ async def show_instruction(callback: types.CallbackQuery):
     await show_instruction_logic(user_id)
     await callback.answer()
 
+@dp.callback_query(lambda c: c.data == "mini_app")
+async def mini_app_callback(callback: types.CallbackQuery):
+    await callback.answer("soon", show_alert=True)
+
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
         "<b>📋 Список доступных команд</b>\n\n"
-        "<blockquote>🔇 .mute – заглушить чат (собеседник получит уведомление, его сообщения будут удаляться).\n"
-        "🔊 .unmute – размутить чат (сообщения снова сохраняются).\n"
-        "💬 .spam &lt;число&gt; &lt;текст&gt; – отправить несколько одинаковых сообщений в чат.\n"
-        "⚔️ .duel – начать дуэль с собеседником (случайный победитель).\n"
-        "🔄 .anim &lt;текст&gt; – анимация текста (появление по буквам).\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики с СОБЕСЕДНИКОМ.\n"
-        "🤖 .gn &lt;вопрос&gt; – задать вопрос DeepSeek через Ranvik (ИИ-ассистент).\n"
-        "🧨 .troll – запустить бесконечный спам оскорбительными фразами (3–4 слова с задержкой).\n"
-        "🧨 .stoptroll – остановить троллинг.</blockquote>\n\n"
+        "<blockquote>🔇 .mute – заглушить чат. (.unmute чтобы размутить) \n"
+        "💬 .spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
+        "⚔️ .duel – начать дуэль с собеседником.\n"
+        "🔄 .anim &lt;текст&gt; – анимация текста.\n"
+        "❌⭕ .ttt – начать игру в крестики-нолики.\n"
+        "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
+        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы оставноить.) \n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
@@ -1570,7 +1504,7 @@ async def show_settings(callback: types.CallbackQuery):
         "<b>Авто перевод</b>\n"
         "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
         "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
+        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
     await callback.answer()
@@ -1593,7 +1527,7 @@ async def toggle_scam_check(callback: types.CallbackQuery):
         "<b>Авто перевод</b>\n"
         "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
         "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
+        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
 
@@ -1615,7 +1549,7 @@ async def toggle_online_mode(callback: types.CallbackQuery):
         "<b>Авто перевод</b>\n"
         "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
         "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт (к которому подключён бот) постоянно находится в статусе «в сети»."
+        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
 
@@ -1625,7 +1559,7 @@ async def text_mode_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     text = premium(
         "<b>✏️ Режим текста</b>\n\n"
-        "Выберите стиль, который бот будет применять к вашим сообщениям в бизнес-чатах.\n\n"
+        "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
         "<b>HTML-стили:</b>\n"
         "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
         "<b>Специальные стили:</b>\n"
@@ -1650,7 +1584,7 @@ async def set_text_mode(callback: types.CallbackQuery):
     await callback.answer(f"Режим: {MODE_NAMES[mode]}", show_alert=True)
     text = premium(
         "<b>✏️ Режим текста</b>\n\n"
-        "Выберите стиль, который бот будет применять к вашим сообщениям в бизнес-чатах.\n\n"
+        "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
         "<b>HTML-стили:</b>\n"
         "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
         "<b>Специальные стили:</b>\n"
@@ -1701,7 +1635,7 @@ async def back_to_main(callback: types.CallbackQuery):
         "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
         "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
         "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n"
+        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n\n"
         "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
         "Проверяет собеседника на СКАМ/СПАМ.\n\n"
         "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
@@ -2271,59 +2205,6 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
-
-    deleted_ids = set(event.message_ids)
-
-    # Группируем удалённые msg_id по chat_id
-    chats_with_deleted = defaultdict(set)
-    for msg_id in deleted_ids:
-        cid = db.get_chat_id_for_message(bc_id, msg_id)
-        if cid is not None:
-            chats_with_deleted[cid].add(msg_id)
-
-    if bc_id not in chat_deletion_accumulator:
-        chat_deletion_accumulator[bc_id] = {}
-
-    # Проверяем каждый чат на полное удаление
-    for cid, del_ids in chats_with_deleted.items():
-        # Снимок известных сообщений делаем ОДИН раз
-        if cid not in chat_deletion_accumulator[bc_id]:
-            known_ids = db.get_all_msg_ids_by_chat(bc_id, cid)
-            chat_deletion_accumulator[bc_id][cid] = {
-                "known": known_ids,
-                "deleted": set()
-            }
-
-        acc = chat_deletion_accumulator[bc_id][cid]
-        acc["deleted"].update(del_ids)
-
-        # Все известные сообщения этого чата уже удалены → экспорт
-        if acc["known"] and acc["known"].issubset(acc["deleted"]):
-            logger.info(f"[AUTO-EXPORT] Чат {cid} полностью удалён. Сообщений: {len(acc['known'])}. Генерирую HTML...")
-            html_content = await export_chat_to_html(bc_id, cid, set(acc["known"]))
-            if html_content:
-                try:
-                    filename = f"chat_export_{cid}_{int(time.time())}.html"
-                    await bot.send_document(
-                        user_id,
-                        BufferedInputFile(html_content.encode("utf-8"), filename=filename),
-                        caption=premium(
-                            f"<b>📄 Авто-экспорт чата</b>\n\n"
-                            f"Все сообщения этого чата были удалены.\n"
-                            f"Chat ID: <code>{cid}</code>\n"
-                            f"Сообщений в архиве: <b>{len(acc['known'])}</b>"
-                        ),
-                        parse_mode="HTML"
-                    )
-                    logger.info(f"[AUTO-EXPORT] HTML отправлен пользователю {user_id}")
-                except Exception as e:
-                    logger.error(f"[AUTO-EXPORT] Ошибка отправки HTML: {e}")
-            else:
-                logger.warning(f"[AUTO-EXPORT] Не удалось сгенерировать HTML для чата {cid}")
-
-            chat_deletion_accumulator[bc_id].pop(cid, None)
-
-    # Только ПОСЛЕ проверки чистим БД
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
@@ -2338,7 +2219,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
 # ============ ФОНОВАЯ ЗАДАЧА: ОНЛАЙН МОД ============
 async def online_mode_loop():
-    """Каждые 8 секунд пингует бизнес-аккаунты через send_chat_action."""
+    """Пингует бизнес-аккаунт через send_chat_action, чтобы он отображался в сети."""
     logger.info("[ONLINE] Фоновая задача запущена")
     while True:
         try:
@@ -2355,6 +2236,9 @@ async def online_mode_loop():
                     continue
 
                 try:
+                    # ВАЖНО: Bot API не имеет метода «просто online».
+                    # send_chat_action — единственный способ обновить статус активности.
+                    # Любое действие (typing и т.д.) показывается собеседнику.
                     await bot.send_chat_action(
                         chat_id=chat_id,
                         action="typing",
@@ -2367,7 +2251,7 @@ async def online_mode_loop():
         except Exception as e:
             logger.error(f"[ONLINE] Ошибка цикла: {e}")
 
-        await asyncio.sleep(8)
+        await asyncio.sleep(20)
 # ====================================================
 
 async def main():
