@@ -2245,7 +2245,9 @@ async def online_mode_loop():
 
                 chat_id = db.get_last_chat_for_bc(bc_id)
                 if not chat_id:
-                    continue                try:
+                    continue
+
+                try:
                     # ВАЖНО: Bot API не имеет метода «просто online».
                     # send_chat_action — единственный способ обновить статус активности.
                     # Любое действие (typing и т.д.) показывается собеседнику.
