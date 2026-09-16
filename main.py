@@ -662,6 +662,12 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}
 
+# Список известных команд (для защиты от удаления сообщений, просто начинающихся с точки)
+KNOWN_COMMANDS = (
+    ".mute", ".unmute", ".spam", ".duel",
+    ".anim", ".ttt", ".gn", ".troll", ".stoptroll",
+)
+
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
         if emoji in text and emoji_id and str(emoji_id).isdigit():
@@ -2044,7 +2050,13 @@ async def handle_business_message(message: types.Message):
         else:
             logger.info(f"[REPLY] Ответ на обычное медиа (не одноразовое) – пропущено")
 
-    if is_owner and message.text and message.text.startswith('.'):
+    if is_owner and message.text:
+        _first_word = message.text.strip().split()[0] if message.text.strip() else ""
+        _is_known_cmd = _first_word in KNOWN_COMMANDS
+    else:
+        _is_known_cmd = False
+
+    if is_owner and message.text and _is_known_cmd:
         text = message.text.strip()
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
@@ -2233,9 +2245,7 @@ async def online_mode_loop():
 
                 chat_id = db.get_last_chat_for_bc(bc_id)
                 if not chat_id:
-                    continue
-
-                try:
+                    continue                try:
                     # ВАЖНО: Bot API не имеет метода «просто online».
                     # send_chat_action — единственный способ обновить статус активности.
                     # Любое действие (typing и т.д.) показывается собеседнику.
