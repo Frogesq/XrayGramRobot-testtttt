@@ -922,6 +922,42 @@ async def ensure_subscription(user_id: int, notify: bool = True, force_notify: b
     except Exception as e:
         logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
     return False
+
+# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ ============
+_pending_sub_tasks = {}
+
+
+def _spawn_sub_watcher(user_id: int):
+    old = _pending_sub_tasks.pop(user_id, None)
+    if old and not old.done():
+        old.cancel()
+    task = asyncio.create_task(_wait_for_subscription_and_send_instruction(user_id))
+    _pending_sub_tasks[user_id] = task
+
+
+async def _wait_for_subscription_and_send_instruction(user_id: int):
+    """
+    Каждые 5 секунд проверяет подписку.
+    Как только подписался — сразу присылает инструкцию (без промежуточных сообщений).
+    Работает максимум 10 минут.
+    """
+    try:
+        for _ in range(120):  # 120 * 5s = 10 минут
+            await asyncio.sleep(5)
+            _sub_cache.pop(user_id, None)
+            if await is_subscribed(user_id):
+                _sub_notified.pop(user_id, None)
+                _sub_cache[user_id] = (True, time.time())
+                try:
+                    await show_instruction_logic(user_id)
+                    logger.info(f"[SUB_WATCH] Инструкция отправлена {user_id} после подписки")
+                except Exception as e:
+                    logger.error(f"[SUB_WATCH] Ошибка отправки инструкции {user_id}: {e}")
+                return
+    except asyncio.CancelledError:
+        return
+    finally:
+        _pending_sub_tasks.pop(user_id, None)
 # ==============================================================
 
 def get_user_download_dir(user_id: int) -> str:
@@ -1474,7 +1510,7 @@ async def show_instruction(callback: types.CallbackQuery):
         text = premium(
             "<b>📢 Для доступа к инструкции необходима подписка на канал!</b>\n\n"
             "Подпишитесь на @NovoeTelegram.\n\n"
-            "<i>После подписки функции включатся автоматически — просто нажмите «Подключить бота» ещё раз.</i>"
+            "<i>После подписки инструкция придёт сюда автоматически в течение 5 секунд.</i>"
         )
         try:
             await callback.message.edit_text(
@@ -1488,6 +1524,10 @@ async def show_instruction(callback: types.CallbackQuery):
             except Exception:
                 pass
             await bot.send_message(user_id, text, parse_mode="HTML", reply_markup=subscription_keyboard())
+
+        # Запускаем авто-ожидание подписки
+        _spawn_sub_watcher(user_id)
+
         await callback.answer()
         return
     _sub_notified.pop(user_id, None)
@@ -2005,8 +2045,9 @@ async def handle_business_connection(connection: BusinessConnection):
         except Exception as e:
             logger.error(f"[CONN] Не удалось отправить инструкцию {user_id}: {e}")
     else:
-        # Пользователь не подписан — сразу требуем подписку (без троттлинга)
+        # Пользователь не подписан — требуем подписку и запускаем авто-ожидание
         await ensure_subscription(user_id, notify=True, force_notify=True)
+        _spawn_sub_watcher(user_id)
     # -----------------------------------------------
 
     try:
