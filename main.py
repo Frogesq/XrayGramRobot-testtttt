@@ -2118,29 +2118,31 @@ async def handle_business_message(message: types.Message):
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
 
+            unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(
+                    text="🔊 Анмут",
+                    callback_data=f"unmute_{user_id}_{chat_id}",
+                    style="success"
+                )]
+            ])
+
             try:
                 await bot.send_message(
                     chat_id,
                     premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
                     business_connection_id=bc_id,
-                    parse_mode="HTML"
+                    parse_mode="HTML",
+                    reply_markup=unmute_kb
                 )
+                logger.info(f"[MUTE] Уведомление с кнопкой Анмут отправлено в чат {chat_id}")
             except Exception as e:
                 logger.error(f"[MUTE] Ошибка отправки в чат {chat_id}: {e}")
 
             try:
-                unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
-                    [InlineKeyboardButton(
-                        text="🔊 Анмут",
-                        callback_data=f"unmute_{user_id}_{chat_id}",
-                        style="success"
-                    )]
-                ])
                 await bot.send_message(
                     user_id,
-                    premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
-                    parse_mode="HTML",
-                    reply_markup=unmute_kb
+                    premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
+                    parse_mode="HTML"
                 )
             except Exception as e:
                 logger.error(f"[MUTE] Ошибка отправки уведомления пользователю {user_id}: {e}")
