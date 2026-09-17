@@ -662,7 +662,6 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}
 
-# Список известных команд (для защиты от удаления сообщений, просто начинающихся с точки)
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
     ".anim", ".ttt", ".gn", ".troll", ".stoptroll",
@@ -790,7 +789,6 @@ def main_menu_keyboard(is_admin: bool = False):
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard():
-    # Кнопка "Проверить подписку" убрана — подписка проверяется автоматически.
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")]
     ])
@@ -880,15 +878,10 @@ async def is_subscribed(user_id: int) -> bool:
         return True
 
 # ============ ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ============
-# Кэш проверки подписки: user_id -> (is_subscribed, timestamp)
 _sub_cache = {}
-# Время последнего уведомления: user_id -> timestamp
 _sub_notified = {}
 
-# TTL кэша проверки подписки (сек). После подписки функции включатся
-# автоматически в течение этого времени.
 SUB_CACHE_TTL = 60
-# Минимальный интервал между уведомлениями о подписке (сек)
 SUB_NOTIFY_COOLDOWN = 300
 
 
@@ -903,17 +896,6 @@ async def _check_subscription_cached(user_id: int, ttl: int = SUB_CACHE_TTL) -> 
 
 
 async def ensure_subscription(user_id: int, notify: bool = True, force_notify: bool = False) -> bool:
-    """
-    Проверяет подписку пользователя на канал.
-    Возвращает True, если подписан. Если нет:
-      - при notify=True отправляет уведомление (не чаще раза в
-        SUB_NOTIFY_COOLDOWN секунд, если force_notify=False)
-      - возвращает False
-
-    Проверка полностью автоматическая: кэш устаревает через
-    SUB_CACHE_TTL секунд, поэтому после подписки функции включатся
-    сами без дополнительных кнопок.
-    """
     if await _check_subscription_cached(user_id):
         return True
 
@@ -1407,7 +1389,6 @@ async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("|")
     action = parts[1] if len(parts) > 1 else None
-    # Сбрасываем кэш — чтобы проверка была свежей
     _sub_cache.pop(user_id, None)
     if await is_subscribed(user_id):
         _sub_notified.pop(user_id, None)
@@ -1487,10 +1468,8 @@ async def show_instruction_logic(user_id: int):
 @dp.callback_query(lambda c: c.data == "show_instruction")
 async def show_instruction(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    # Сбрасываем кэш, чтобы проверка была свежей (авто-проверка).
     _sub_cache.pop(user_id, None)
     if not await is_subscribed(user_id):
-        # Помечаем, что уведомляли — чтобы не спамить
         _sub_notified[user_id] = time.time()
         text = premium(
             "<b>📢 Для доступа к инструкции необходима подписка на канал!</b>\n\n"
@@ -2018,6 +1997,13 @@ async def handle_business_connection(connection: BusinessConnection):
                 parse_mode="HTML")
         except Exception as e:
             logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+
+        # Автоматически присылаем инструкцию после подключения
+        try:
+            await show_instruction_logic(user_id)
+            logger.info(f"[CONN] Инструкция автоматически отправлена {user_id}")
+        except Exception as e:
+            logger.error(f"[CONN] Не удалось отправить инструкцию {user_id}: {e}")
     else:
         # Пользователь не подписан — сразу требуем подписку (без троттлинга)
         await ensure_subscription(user_id, notify=True, force_notify=True)
