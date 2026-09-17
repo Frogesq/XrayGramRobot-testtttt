@@ -1492,13 +1492,13 @@ async def unmute_callback(callback: types.CallbackQuery):
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
         "<b>📋 Список доступных команд</b>\n\n"
-        "<blockquote>🔇 .mute – заглушить чат. (.unmute чтобы размутить) \n"
+        "<blockquote>🔇 .mute – заглушить чат. (.unmute чтобы размутить)\n"
         "💬 .spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
         "⚔️ .duel – начать дуэль с собеседником.\n"
         "🔄 .anim &lt;текст&gt; – анимация текста.\n"
         "❌⭕ .ttt – начать игру в крестики-нолики.\n"
         "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
-        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы оставноить.) \n"
+        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
@@ -2325,9 +2325,6 @@ async def online_mode_loop():
                     continue
 
                 try:
-                    # ВАЖНО: Bot API не имеет метода «просто online».
-                    # send_chat_action — единственный способ обновить статус активности.
-                    # Любое действие (typing и т.д.) показывается собеседнику.
                     await bot.send_chat_action(
                         chat_id=chat_id,
                         action="typing",
