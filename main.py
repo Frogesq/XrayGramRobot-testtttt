@@ -1437,6 +1437,57 @@ async def show_instruction(callback: types.CallbackQuery):
 async def mini_app_callback(callback: types.CallbackQuery):
     await callback.answer("soon", show_alert=True)
 
+# ============ КНОПКА АНМУТ ============
+@dp.callback_query(lambda c: c.data.startswith("unmute_"))
+async def unmute_callback(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    if len(parts) != 3:
+        await callback.answer("❌ Ошибка!", show_alert=True)
+        return
+    try:
+        target_user_id = int(parts[1])
+        target_chat_id = int(parts[2])
+    except:
+        await callback.answer("❌ Ошибка!", show_alert=True)
+        return
+
+    if callback.from_user.id != target_user_id:
+        await callback.answer("⛔ Это не ваша кнопка.", show_alert=True)
+        return
+
+    db.remove_muted_chat(target_user_id, target_chat_id)
+
+    cursor = db.conn.cursor()
+    cursor.execute("SELECT bc_id FROM connections WHERE user_id = ?", (target_user_id,))
+    row = cursor.fetchone()
+    bc_id = row["bc_id"] if row else None
+
+    if bc_id:
+        try:
+            await bot.send_message(
+                target_chat_id,
+                premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
+                business_connection_id=bc_id, parse_mode="HTML"
+            )
+        except Exception as e:
+            logger.error(f"[UNMUTE] Не удалось отправить в чат {target_chat_id}: {e}")
+
+    try:
+        await callback.message.edit_text(
+            premium(f"<b>🔊 Чат {target_chat_id} размучен.\nСообщения снова сохраняются.</b>"),
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.error(f"[UNMUTE] Не удалось изменить сообщение: {e}")
+        try:
+            await callback.message.edit_reply_markup(reply_markup=None)
+        except:
+            pass
+
+    logger.info(f"[CMD] Мут снят через кнопку для чата {target_chat_id}")
+    await callback.answer("✅ Мут снят")
+# ==================================
+
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
@@ -2066,10 +2117,34 @@ async def handle_business_message(message: types.Message):
 
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
-            await bot.send_message(chat_id, premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
-                                   business_connection_id=bc_id, parse_mode="HTML")
-            await bot.send_message(user_id, premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
-                                   parse_mode="HTML")
+
+            try:
+                await bot.send_message(
+                    chat_id,
+                    premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                    business_connection_id=bc_id,
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"[MUTE] Ошибка отправки в чат {chat_id}: {e}")
+
+            try:
+                unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
+                    [InlineKeyboardButton(
+                        text="🔊 Анмут",
+                        callback_data=f"unmute_{user_id}_{chat_id}",
+                        style="success"
+                    )]
+                ])
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                    parse_mode="HTML",
+                    reply_markup=unmute_kb
+                )
+            except Exception as e:
+                logger.error(f"[MUTE] Ошибка отправки уведомления пользователю {user_id}: {e}")
+
             logger.info(f"[CMD] .mute выполнен для чата {chat_id}")
             return
 
