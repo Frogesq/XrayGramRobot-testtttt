@@ -789,13 +789,10 @@ def main_menu_keyboard(is_admin: bool = False):
         )])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
-def subscription_keyboard(action: str = None):
-    cb = "check_subscription"
-    if action:
-        cb += f"|{action}"
+def subscription_keyboard():
+    # Кнопка "Проверить подписку" убрана — подписка проверяется автоматически.
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")],
-        [InlineKeyboardButton(text="✅ Проверить подписку", callback_data=cb, style="success")]
+        [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")]
     ])
 
 def instruction_keyboard():
@@ -881,6 +878,69 @@ async def is_subscribed(user_id: int) -> bool:
         return member.status in ["member", "administrator", "creator"]
     except:
         return True
+
+# ============ ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ============
+# Кэш проверки подписки: user_id -> (is_subscribed, timestamp)
+_sub_cache = {}
+# Время последнего уведомления: user_id -> timestamp
+_sub_notified = {}
+
+# TTL кэша проверки подписки (сек). После подписки функции включатся
+# автоматически в течение этого времени.
+SUB_CACHE_TTL = 60
+# Минимальный интервал между уведомлениями о подписке (сек)
+SUB_NOTIFY_COOLDOWN = 300
+
+
+async def _check_subscription_cached(user_id: int, ttl: int = SUB_CACHE_TTL) -> bool:
+    now = time.time()
+    cached = _sub_cache.get(user_id)
+    if cached and ttl > 0 and now - cached[1] < ttl:
+        return cached[0]
+    result = await is_subscribed(user_id)
+    _sub_cache[user_id] = (result, now)
+    return result
+
+
+async def ensure_subscription(user_id: int, notify: bool = True, force_notify: bool = False) -> bool:
+    """
+    Проверяет подписку пользователя на канал.
+    Возвращает True, если подписан. Если нет:
+      - при notify=True отправляет уведомление (не чаще раза в
+        SUB_NOTIFY_COOLDOWN секунд, если force_notify=False)
+      - возвращает False
+
+    Проверка полностью автоматическая: кэш устаревает через
+    SUB_CACHE_TTL секунд, поэтому после подписки функции включатся
+    сами без дополнительных кнопок.
+    """
+    if await _check_subscription_cached(user_id):
+        return True
+
+    if not notify:
+        return False
+
+    now = time.time()
+    last = _sub_notified.get(user_id, 0)
+    if not force_notify and now - last < SUB_NOTIFY_COOLDOWN:
+        return False
+    _sub_notified[user_id] = now
+
+    try:
+        await bot.send_message(
+            user_id,
+            premium(
+                "<b>📢 Для использования функций бота необходима подписка на наш канал!</b>\n\n"
+                "Подпишитесь на @NovoeTelegram, чтобы пользоваться всеми возможностями XrayGram.\n\n"
+                "<i>После подписки функции включатся автоматически.</i>"
+            ),
+            parse_mode="HTML",
+            reply_markup=subscription_keyboard()
+        )
+    except Exception as e:
+        logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
+    return False
+# ==============================================================
 
 def get_user_download_dir(user_id: int) -> str:
     d = os.path.join(DOWNLOADS_DIR, f"user_{user_id}")
@@ -1347,7 +1407,10 @@ async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     parts = callback.data.split("|")
     action = parts[1] if len(parts) > 1 else None
+    # Сбрасываем кэш — чтобы проверка была свежей
+    _sub_cache.pop(user_id, None)
     if await is_subscribed(user_id):
+        _sub_notified.pop(user_id, None)
         await callback.message.delete()
         if action == "show_instruction":
             await show_instruction_logic(user_id)
@@ -1384,7 +1447,7 @@ async def check_subscription(callback: types.CallbackQuery):
                 )
         await callback.answer("✅ Подписка подтверждена!", show_alert=True)
     else:
-        await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и нажмите снова.", show_alert=True)
+        await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и попробуйте снова.", show_alert=True)
 
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
@@ -1424,11 +1487,31 @@ async def show_instruction_logic(user_id: int):
 @dp.callback_query(lambda c: c.data == "show_instruction")
 async def show_instruction(callback: types.CallbackQuery):
     user_id = callback.from_user.id
+    # Сбрасываем кэш, чтобы проверка была свежей (авто-проверка).
+    _sub_cache.pop(user_id, None)
     if not await is_subscribed(user_id):
-        text = premium("<b>📢 Для доступа к инструкции необходимо подписаться на канал!\n\nПодпишитесь на @NovoeTelegram и нажмите «Проверить подписку».</b>")
-        await callback.message.edit_text(text, reply_markup=subscription_keyboard("show_instruction"), parse_mode="HTML")
+        # Помечаем, что уведомляли — чтобы не спамить
+        _sub_notified[user_id] = time.time()
+        text = premium(
+            "<b>📢 Для доступа к инструкции необходима подписка на канал!</b>\n\n"
+            "Подпишитесь на @NovoeTelegram.\n\n"
+            "<i>После подписки функции включатся автоматически — просто нажмите «Подключить бота» ещё раз.</i>"
+        )
+        try:
+            await callback.message.edit_text(
+                text,
+                reply_markup=subscription_keyboard(),
+                parse_mode="HTML"
+            )
+        except Exception:
+            try:
+                await callback.message.delete()
+            except Exception:
+                pass
+            await bot.send_message(user_id, text, parse_mode="HTML", reply_markup=subscription_keyboard())
         await callback.answer()
         return
+    _sub_notified.pop(user_id, None)
     await callback.message.delete()
     await show_instruction_logic(user_id)
     await callback.answer()
@@ -1921,14 +2004,25 @@ async def handle_business_connection(connection: BusinessConnection):
     if not db.is_user_registered(user_id):
         user = connection.user
         db.register_user(user_id, user.username, user.first_name, user.last_name)
-    try:
-        await bot.send_message(user_id,
-            premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
-                    "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
-                    "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
-            parse_mode="HTML")
-    except Exception as e:
-        logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+
+    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
+    _sub_cache.pop(user_id, None)
+    subscribed = await is_subscribed(user_id)
+    if subscribed:
+        _sub_notified.pop(user_id, None)
+        try:
+            await bot.send_message(user_id,
+                premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
+                        "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
+                        "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
+                parse_mode="HTML")
+        except Exception as e:
+            logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+    else:
+        # Пользователь не подписан — сразу требуем подписку (без троттлинга)
+        await ensure_subscription(user_id, notify=True, force_notify=True)
+    # -----------------------------------------------
+
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
@@ -1975,6 +2069,12 @@ async def handle_business_message(message: types.Message):
             db.register_user(user_id, message.from_user.username or "", message.from_user.first_name or "", message.from_user.last_name or "")
         else:
             db.register_user(user_id, "", "Unknown", "")
+
+    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
+    if not await ensure_subscription(user_id, notify=True):
+        logger.info(f"[SUB] {user_id} не подписан — сообщение не обрабатывается")
+        return
+    # -----------------------------------------------
 
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
@@ -2264,6 +2364,10 @@ async def handle_edited_business_message(message: types.Message):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
+    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
+    if not await ensure_subscription(user_id, notify=False):
+        return
+    # -----------------------------------------------
     chat_id = message.chat.id
     if db.is_chat_muted(user_id, chat_id):
         return
@@ -2294,6 +2398,10 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
+    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
+    if not await ensure_subscription(user_id, notify=False):
+        return
+    # -----------------------------------------------
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
