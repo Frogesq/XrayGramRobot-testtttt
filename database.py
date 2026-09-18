@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "messages.db")
+REFERRAL_DB_PATH = os.path.join(DATA_DIR, "referrals.db")
 
 
 def _is_valid_sqlite(path):
@@ -78,10 +79,22 @@ def _ensure_valid_db(path):
 class Database:
     def __init__(self):
         _ensure_valid_db(DB_PATH)
+        _ensure_valid_db(REFERRAL_DB_PATH)
+
+        # Основное соединение (сообщения, пользователи, настройки и т.д.)
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self._init_tables()
 
+        # Отдельное соединение для рефералов — в своём файле /app/data/referrals.db
+        self.ref_conn = sqlite3.connect(REFERRAL_DB_PATH, check_same_thread=False)
+        self.ref_conn.row_factory = sqlite3.Row
+
+        self._init_tables()
+        self._init_referral_tables()
+
+    # ================================================================
+    # ОСНОВНАЯ БД (messages.db)
+    # ================================================================
     def _init_tables(self):
         cursor = self.conn.cursor()
 
@@ -168,21 +181,17 @@ class Database:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
             logger.info("[DB] Миграция: добавлена колонка chat_id в messages")
 
-        # ============ МИГРАЦИИ: РЕФЕРАЛЬНАЯ СИСТЕМА ============
+        # Оставляем старые колонки в users для совместимости (не используются)
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
         if "referrer_id" not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER DEFAULT NULL")
-            logger.info("[DB] Миграция: добавлена колонка referrer_id в users")
         if "referral_credited" not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN referral_credited INTEGER DEFAULT 0")
-            logger.info("[DB] Миграция: добавлена колонка referral_credited в users")
         if "pending_stars" not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN pending_stars REAL DEFAULT 0")
-            logger.info("[DB] Миграция: добавлена колонка pending_stars в users")
         if "awarded_stars" not in user_cols:
             cursor.execute("ALTER TABLE users ADD COLUMN awarded_stars REAL DEFAULT 0")
-            logger.info("[DB] Миграция: добавлена колонка awarded_stars в users")
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
@@ -190,9 +199,72 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_referrer_id ON users(referrer_id)")
 
         self.conn.commit()
+
+    # ================================================================
+    # РЕФЕРАЛЬНАЯ БД (referrals.db)
+    # ================================================================
+    def _init_referral_tables(self):
+        cur = self.ref_conn.cursor()
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS referral_relations (
+                user_id INTEGER PRIMARY KEY,
+                referrer_id INTEGER NOT NULL,
+                credited INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS referral_balances (
+                user_id INTEGER PRIMARY KEY,
+                pending_stars REAL DEFAULT 0,
+                awarded_stars REAL DEFAULT 0
+            )
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
+
+        self.ref_conn.commit()
+
+        # Одноразовая миграция из основной БД (users.referrer_id / pending_stars / awarded_stars),
+        # если в referrals.db ещё пусто
+        try:
+            cur.execute("SELECT COUNT(*) AS c FROM referral_relations")
+            rel_count = cur.fetchone()["c"]
+            cur.execute("SELECT COUNT(*) AS c FROM referral_balances")
+            bal_count = cur.fetchone()["c"]
+            if rel_count == 0 and bal_count == 0:
+                main_cur = self.conn.cursor()
+                main_cur.execute("""
+                    SELECT user_id, referrer_id, referral_credited,
+                           COALESCE(pending_stars,0) AS ps, COALESCE(awarded_stars,0) AS as_
+                    FROM users
+                    WHERE referrer_id IS NOT NULL
+                       OR COALESCE(pending_stars,0) > 0
+                       OR COALESCE(awarded_stars,0) > 0
+                """)
+                migrated_rel = 0
+                migrated_bal = 0
+                for row in main_cur.fetchall():
+                    uid = row["user_id"]
+                    if row["referrer_id"] is not None:
+                        cur.execute(
+                            "INSERT OR IGNORE INTO referral_relations (user_id, referrer_id, credited) VALUES (?, ?, ?)",
+                            (uid, row["referrer_id"], row["referral_credited"] or 0)
+                        )
+                        migrated_rel += 1
+                    if row["ps"] > 0 or row["as_"] > 0:
+                        cur.execute(
+                            "INSERT OR IGNORE INTO referral_balances (user_id, pending_stars, awarded_stars) VALUES (?, ?, ?)",
+                            (uid, row["ps"], row["as_"])
+                        )
+                        migrated_bal += 1
+                if migrated_rel or migrated_bal:
+                    logger.info(f"[DB] Миграция рефералов в referrals.db: связей {migrated_rel}, балансов {migrated_bal}")
+                self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] Ошибка миграции рефералов: {e}")
 
     # ============ ПОЛЬЗОВАТЕЛИ ============
     def register_user(self, user_id, username, first_name, last_name=""):
@@ -215,6 +287,10 @@ class Database:
         return cursor.fetchone()
 
     def delete_user_completely(self, user_id):
+        """
+        Удаляет пользователя из основной БД (messages.db).
+        Реферальные данные в referrals.db НЕ трогаются — они лежат в отдельном файле.
+        """
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
@@ -223,21 +299,20 @@ class Database:
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
-    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
+    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА (referrals.db) ============
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
-        """Устанавливает referrer_id, только если он ещё не установлен."""
         if user_id == referrer_id:
             return False
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT referrer_id FROM users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
-            if row is None:
+            cur = self.ref_conn.cursor()
+            cur.execute("SELECT 1 FROM referral_relations WHERE user_id = ?", (user_id,))
+            if cur.fetchone() is not None:
                 return False
-            if row["referrer_id"] is not None:
-                return False
-            cursor.execute("UPDATE users SET referrer_id = ? WHERE user_id = ?", (referrer_id, user_id))
-            self.conn.commit()
+            cur.execute(
+                "INSERT INTO referral_relations (user_id, referrer_id, credited) VALUES (?, ?, 0)",
+                (user_id, referrer_id)
+            )
+            self.ref_conn.commit()
             return True
         except Exception as e:
             logger.error(f"[DB] set_referrer_if_empty: {e}")
@@ -245,53 +320,53 @@ class Database:
 
     def get_referrer(self, user_id: int):
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT referrer_id FROM users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
-            if row is None:
-                return None
-            return row["referrer_id"]
+            cur = self.ref_conn.cursor()
+            cur.execute("SELECT referrer_id FROM referral_relations WHERE user_id = ?", (user_id,))
+            row = cur.fetchone()
+            return row["referrer_id"] if row else None
         except Exception:
             return None
 
     def is_referral_credited(self, user_id: int) -> bool:
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT referral_credited FROM users WHERE user_id = ?", (user_id,))
-            row = cursor.fetchone()
+            cur = self.ref_conn.cursor()
+            cur.execute("SELECT credited FROM referral_relations WHERE user_id = ?", (user_id,))
+            row = cur.fetchone()
             if row is None:
-                return True
-            return bool(row["referral_credited"])
+                return True  # связи нет — начислять нечего
+            return bool(row["credited"])
         except Exception:
             return True
 
     def mark_referral_credited(self, user_id: int):
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("UPDATE users SET referral_credited = 1 WHERE user_id = ?", (user_id,))
-            self.conn.commit()
+            cur = self.ref_conn.cursor()
+            cur.execute("UPDATE referral_relations SET credited = 1 WHERE user_id = ?", (user_id,))
+            self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] mark_referral_credited: {e}")
 
     def add_pending_stars(self, user_id: int, amount: float):
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "UPDATE users SET pending_stars = COALESCE(pending_stars, 0) + ? WHERE user_id = ?",
-                (float(amount), user_id)
-            )
-            self.conn.commit()
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                INSERT INTO referral_balances (user_id, pending_stars) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    pending_stars = COALESCE(referral_balances.pending_stars, 0) + ?
+            """, (user_id, float(amount), float(amount)))
+            self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] add_pending_stars: {e}")
 
     def get_user_stars(self, user_id: int) -> dict:
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "SELECT COALESCE(pending_stars,0) AS p, COALESCE(awarded_stars,0) AS a FROM users WHERE user_id = ?",
+            cur = self.ref_conn.cursor()
+            cur.execute(
+                "SELECT COALESCE(pending_stars,0) AS p, COALESCE(awarded_stars,0) AS a "
+                "FROM referral_balances WHERE user_id = ?",
                 (user_id,)
             )
-            row = cursor.fetchone()
+            row = cur.fetchone()
             if row is None:
                 return {"pending": 0.0, "awarded": 0.0}
             return {"pending": float(row["p"] or 0), "awarded": float(row["a"] or 0)}
@@ -299,75 +374,93 @@ class Database:
             return {"pending": 0.0, "awarded": 0.0}
 
     def count_referrals(self, user_id: int) -> int:
-        """Сколько пользователей подключились по ссылке (credited)."""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute(
-                "SELECT COUNT(*) AS c FROM users WHERE referrer_id = ? AND referral_credited = 1",
+            cur = self.ref_conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM referral_relations WHERE referrer_id = ? AND credited = 1",
                 (user_id,)
             )
-            row = cursor.fetchone()
-            return int(row["c"]) if row else 0
+            return int(cur.fetchone()["c"] or 0)
         except Exception:
             return 0
 
     def count_referrals_invited(self, user_id: int) -> int:
-        """Сколько всего пользователей зашли по ссылке (даже если не подключились)."""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("SELECT COUNT(*) AS c FROM users WHERE referrer_id = ?", (user_id,))
-            row = cursor.fetchone()
-            return int(row["c"]) if row else 0
+            cur = self.ref_conn.cursor()
+            cur.execute("SELECT COUNT(*) AS c FROM referral_relations WHERE referrer_id = ?", (user_id,))
+            return int(cur.fetchone()["c"] or 0)
         except Exception:
             return 0
 
     def get_all_referrers(self) -> list:
-        """Возвращает список всех, у кого есть приглашённые, со статистикой."""
+        """
+        Все, у кого есть приглашённые и/или накопленные звёзды.
+        Имена берём из основной БД (users), реферальные данные — из referrals.db.
+        """
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("""
+            cur = self.ref_conn.cursor()
+            cur.execute("""
                 SELECT
-                    u.user_id AS user_id,
-                    u.username AS username,
-                    u.first_name AS first_name,
-                    u.last_name AS last_name,
-                    COALESCE(u.pending_stars, 0) AS pending_stars,
-                    COALESCE(u.awarded_stars, 0) AS awarded_stars,
-                    (SELECT COUNT(*) FROM users r WHERE r.referrer_id = u.user_id) AS invited_total,
-                    (SELECT COUNT(*) FROM users r WHERE r.referrer_id = u.user_id AND r.referral_credited = 1) AS invited_credited
-                FROM users u
-                WHERE invited_total > 0
-                ORDER BY pending_stars DESC, invited_credited DESC
+                    t.user_id AS user_id,
+                    COALESCE(rb.pending_stars, 0) AS pending_stars,
+                    COALESCE(rb.awarded_stars, 0) AS awarded_stars,
+                    (SELECT COUNT(*) FROM referral_relations r WHERE r.referrer_id = t.user_id) AS invited_total,
+                    (SELECT COUNT(*) FROM referral_relations r
+                     WHERE r.referrer_id = t.user_id AND r.credited = 1) AS invited_credited
+                FROM (
+                    SELECT DISTINCT referrer_id AS user_id FROM referral_relations
+                    UNION
+                    SELECT user_id FROM referral_balances
+                ) t
+                LEFT JOIN referral_balances rb ON rb.user_id = t.user_id
             """)
-            rows = cursor.fetchall()
+            ref_rows = cur.fetchall()
+
             result = []
-            for r in rows:
+            main_cur = self.conn.cursor()
+            for r in ref_rows:
+                uid = r["user_id"]
+                pending = float(r["pending_stars"] or 0)
+                awarded = float(r["awarded_stars"] or 0)
+                invited_total = int(r["invited_total"] or 0)
+                invited_credited = int(r["invited_credited"] or 0)
+
+                if invited_total == 0 and pending == 0 and awarded == 0:
+                    continue
+
+                # Данные о пользователе из основной БД (может отсутствовать — тогда пусто)
+                main_cur.execute(
+                    "SELECT username, first_name, last_name FROM users WHERE user_id = ?",
+                    (uid,)
+                )
+                u = main_cur.fetchone()
                 result.append({
-                    "user_id": r["user_id"],
-                    "username": r["username"],
-                    "first_name": r["first_name"],
-                    "last_name": r["last_name"],
-                    "pending_stars": float(r["pending_stars"] or 0),
-                    "awarded_stars": float(r["awarded_stars"] or 0),
-                    "invited_total": int(r["invited_total"] or 0),
-                    "invited_credited": int(r["invited_credited"] or 0),
+                    "user_id": uid,
+                    "username": u["username"] if u else None,
+                    "first_name": u["first_name"] if u else None,
+                    "last_name": u["last_name"] if u else None,
+                    "pending_stars": pending,
+                    "awarded_stars": awarded,
+                    "invited_total": invited_total,
+                    "invited_credited": invited_credited,
                 })
+
+            result.sort(key=lambda x: (x["pending_stars"], x["invited_credited"]), reverse=True)
             return result
         except Exception as e:
             logger.error(f"[DB] get_all_referrers: {e}")
             return []
 
     def mark_stars_awarded(self, user_id: int):
-        """Перемещает pending_stars в awarded_stars (вызывать после ручной выдачи звёзд)."""
         try:
-            cursor = self.conn.cursor()
-            cursor.execute("""
-                UPDATE users
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                UPDATE referral_balances
                 SET awarded_stars = COALESCE(awarded_stars, 0) + COALESCE(pending_stars, 0),
                     pending_stars = 0
                 WHERE user_id = ?
             """, (user_id,))
-            self.conn.commit()
+            self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] mark_stars_awarded: {e}")
 
@@ -611,4 +704,11 @@ class Database:
         return cursor.fetchone()[0]
 
     def close(self):
-        self.conn.close()
+        try:
+            self.conn.close()
+        except Exception:
+            pass
+        try:
+            self.ref_conn.close()
+        except Exception:
+            pass
