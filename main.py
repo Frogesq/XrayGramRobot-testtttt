@@ -45,7 +45,7 @@ DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_VIDEO_PATH = os.path.join(BASE_DIR, "instruction.mp4")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
-BOT_USERNAME = "XrayGramRobot"  # без @ (для реферальных ссылок)
+BOT_USERNAME = "XrayGramRobot"
 
 # ============================================================
 # СИСТЕМНЫЙ ПРОМПТ (XrayGramGPT 1.0 / 04.09.2026)
@@ -934,11 +934,12 @@ async def ensure_subscription(user_id: int, notify: bool = True, force_notify: b
         logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
     return False
 
-# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ ============
+# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ (только после кнопки «Подключить бота») ============
 _pending_sub_tasks = {}
 
 
 def _spawn_sub_watcher(user_id: int):
+    """Запускает фоновую задачу, которая ждёт подписки и присылает инструкцию."""
     old = _pending_sub_tasks.pop(user_id, None)
     if old and not old.done():
         old.cancel()
@@ -948,8 +949,8 @@ def _spawn_sub_watcher(user_id: int):
 
 async def _wait_for_subscription_and_send_instruction(user_id: int):
     """
-    Каждые 5 секунд проверяет подписку.
-    Как только подписался — сразу присылает инструкцию.
+    Каждые 5 секунд проверяет подписку пользователя.
+    Как только подписался — присылает инструкцию автоматически.
     Работает максимум 10 минут.
     """
     try:
@@ -1245,7 +1246,6 @@ async def start_command(message: types.Message):
     user = message.from_user
     db.register_user(user.id, user.username or "", user.first_name or "", user.last_name or "")
 
-    # ---- РЕФЕРАЛЬНАЯ ССЫЛКА ----
     try:
         parts = (message.text or "").split()
         if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -1255,7 +1255,6 @@ async def start_command(message: types.Message):
                     logger.info(f"[REF] {user.id} пришёл по ссылке от {referrer_id}")
     except (ValueError, IndexError):
         pass
-    # ---------------------------
 
     is_admin = (user.id == ADMIN_ID)
     first_name = user.first_name or "друг"
@@ -1549,7 +1548,6 @@ async def show_instruction(callback: types.CallbackQuery):
                 pass
             await bot.send_message(user_id, text, parse_mode="HTML", reply_markup=subscription_keyboard())
 
-        # Запускаем авто-ожидание подписки
         _spawn_sub_watcher(user_id)
 
         await callback.answer()
@@ -1697,7 +1695,8 @@ async def referral_menu(callback: types.CallbackQuery):
         f"• Зашли по ссылке: <b>{invited_total}</b>\n"
         f"• Подключили бота: <b>{invited_credited}</b>\n"
         f"• Ожидают выдачи: <b>{stars['pending']:.1f} ⭐</b>\n"
-        f"• Уже выдано: <b>{stars['awarded']:.1f} ⭐</b>"
+        f"• Уже выдано: <b>{stars['awarded']:.1f} ⭐</b>\n\n"
+        "<b>⚠️ Минимальная сумма вывода: 15 ⭐</b>"
     )
 
     try:
@@ -2153,31 +2152,17 @@ async def handle_business_connection(connection: BusinessConnection):
         logger.error(f"[REF] Ошибка начисления: {e}")
     # -------------------------------
 
-    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
-    _sub_cache.pop(user_id, None)
-    subscribed = await is_subscribed(user_id)
-    if subscribed:
-        _sub_notified.pop(user_id, None)
-        try:
-            await bot.send_message(user_id,
-                premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
-                        "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
-                        "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
-                parse_mode="HTML")
-        except Exception as e:
-            logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
-
-        # Автоматически присылаем инструкцию после подключения
-        try:
-            await show_instruction_logic(user_id)
-            logger.info(f"[CONN] Инструкция автоматически отправлена {user_id}")
-        except Exception as e:
-            logger.error(f"[CONN] Не удалось отправить инструкцию {user_id}: {e}")
-    else:
-        # Пользователь не подписан — требуем подписку и запускаем авто-ожидание
-        await ensure_subscription(user_id, notify=True, force_notify=True)
-        _spawn_sub_watcher(user_id)
-    # -----------------------------------------------
+    # ---- ПРИВЕТСТВИЕ О ПОДКЛЮЧЕНИИ ----
+    # Инструкция тут НЕ отправляется — она приходит ТОЛЬКО через кнопку «Подключить бота».
+    try:
+        await bot.send_message(user_id,
+            premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
+                    "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
+                    "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
+            parse_mode="HTML")
+    except Exception as e:
+        logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+    # ---------------------------------
 
     try:
         user = connection.user
@@ -2520,10 +2505,8 @@ async def handle_edited_business_message(message: types.Message):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
-    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
     if not await ensure_subscription(user_id, notify=False):
         return
-    # -----------------------------------------------
     chat_id = message.chat.id
     if db.is_chat_muted(user_id, chat_id):
         return
@@ -2554,10 +2537,8 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
-    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
     if not await ensure_subscription(user_id, notify=False):
         return
-    # -----------------------------------------------
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
@@ -2572,7 +2553,6 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
 # ============ ФОНОВАЯ ЗАДАЧА: ОНЛАЙН МОД ============
 async def online_mode_loop():
-    """Пингует бизнес-аккаунт через send_chat_action, чтобы он отображался в сети."""
     logger.info("[ONLINE] Фоновая задача запущена")
     while True:
         try:
