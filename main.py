@@ -19,8 +19,9 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     InlineKeyboardMarkup, InlineKeyboardButton,
     BusinessConnection, BusinessMessagesDeleted,
-    BufferedInputFile, FSInputFile
+    BufferedInputFile, FSInputFile, WebAppInfo
 )
+from aiohttp import web
 from database import Database
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -44,6 +45,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_VIDEO_PATH = os.path.join(BASE_DIR, "instruction.mp4")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
+MINI_APP_DIR = os.path.join(BASE_DIR, "mini_app")
+MINI_APP_URL = "https://xraygram.bothost.tech"
 CHANNEL_USERNAME = "@NovoeTelegram"
 BOT_USERNAME = "XrayGramRobot"
 
@@ -682,6 +685,7 @@ bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
+os.makedirs(MINI_APP_DIR, exist_ok=True)
 
 if os.path.exists(INSTRUCTION_VIDEO_PATH):
     logger.info("✅ Видео инструкции найдено")
@@ -691,6 +695,10 @@ if os.path.exists(BANNER_PATH):
     logger.info("✅ Баннер найден")
 else:
     logger.warning("❌ Баннер НЕ найден (файл banner.png отсутствует)")
+if os.path.exists(os.path.join(MINI_APP_DIR, "index.html")):
+    logger.info("✅ Mini App index.html найден")
+else:
+    logger.warning("❌ Mini App index.html НЕ найден")
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
@@ -766,7 +774,7 @@ def main_menu_keyboard(is_admin: bool = False):
         [
             InlineKeyboardButton(
                 text="Mini App",
-                callback_data="mini_app",
+                web_app=WebAppInfo(url=MINI_APP_URL),
                 icon_custom_emoji_id="5280867942056108177"
             ),
             InlineKeyboardButton(
@@ -923,7 +931,7 @@ async def ensure_subscription(user_id: int, notify: bool = True, force_notify: b
         logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
     return False
 
-# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ (только после кнопки «Подключить бота») ============
+# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ ============
 _pending_sub_tasks = {}
 
 
@@ -954,6 +962,39 @@ async def _wait_for_subscription_and_send_instruction(user_id: int):
     finally:
         _pending_sub_tasks.pop(user_id, None)
 # ==============================================================
+
+# ============ ВЕБ-СЕРВЕР ДЛЯ MINI APP ============
+async def serve_index(request):
+    index_path = os.path.join(MINI_APP_DIR, "index.html")
+    if os.path.exists(index_path):
+        return web.FileResponse(index_path)
+    return web.Response(text="Mini App not found", status=404)
+
+
+async def serve_static(request):
+    name = request.match_info.get("name", "")
+    safe_name = os.path.basename(name)
+    file_path = os.path.join(MINI_APP_DIR, safe_name)
+    if os.path.exists(file_path) and os.path.isfile(file_path):
+        return web.FileResponse(file_path)
+    return web.Response(text="Not found", status=404)
+
+
+async def mini_app_server():
+    try:
+        app = web.Application()
+        app.router.add_get("/", serve_index)
+        app.router.add_get("/{name}", serve_static)
+
+        port = int(os.getenv("PORT", "3000"))
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "0.0.0.0", port)
+        await site.start()
+        logger.info(f"✅ Mini App сервер запущен на 0.0.0.0:{port}")
+    except Exception as e:
+        logger.error(f"❌ Ошибка запуска Mini App сервера: {e}")
+# ==================================================
 
 def get_user_download_dir(user_id: int) -> str:
     d = os.path.join(DOWNLOADS_DIR, f"user_{user_id}")
@@ -1539,10 +1580,6 @@ async def show_instruction(callback: types.CallbackQuery):
     await callback.message.delete()
     await show_instruction_logic(user_id)
     await callback.answer()
-
-@dp.callback_query(lambda c: c.data == "mini_app")
-async def mini_app_callback(callback: types.CallbackQuery):
-    await callback.answer("soon", show_alert=True)
 
 # ============ КНОПКА АНМУТ ============
 @dp.callback_query(lambda c: c.data.startswith("unmute_"))
@@ -2193,17 +2230,14 @@ async def handle_business_message(message: types.Message):
         else:
             db.register_user(user_id, "", "Unknown", "")
 
-    # ---- ОБЯЗАТЕЛЬНАЯ ПОДПИСКА (АВТО-ПРОВЕРКА) ----
     if not await ensure_subscription(user_id, notify=True):
         logger.info(f"[SUB] {user_id} не подписан — сообщение не обрабатывается")
         return
-    # -----------------------------------------------
 
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
 
-    # ---- ПРОВЕРКА НА СКАМ/СПАМ ----
     if not is_owner and sender_id and db.get_scam_check(user_id):
         try:
             is_scam, reason = await check_scam(sender_id)
@@ -2221,9 +2255,7 @@ async def handle_business_message(message: types.Message):
                 logger.info(f"[SCAM] {sender_id} помечен: {reason}")
         except Exception as e:
             logger.error(f"[SCAM] Ошибка проверки: {e}")
-    # ------------------------------
 
-    # ---- АВТО ПЕРЕВОД ----
     if not is_owner and message.text and not message.text.startswith('.'):
         try:
             translate_to = db.get_translate_to(user_id)
@@ -2260,9 +2292,7 @@ async def handle_business_message(message: types.Message):
                         logger.info(f"[TRANSLATE] {sender_id}: {detected} → {translate_to}")
         except Exception as e:
             logger.error(f"[TRANSLATE] Ошибка: {e}")
-    # ----------------------------------------
 
-    # ---- РЕЖИМ ТЕКСТА ----
     if is_owner and message.text and not message.text.startswith('.'):
         try:
             mode = db.get_text_mode(user_id)
@@ -2282,7 +2312,6 @@ async def handle_business_message(message: types.Message):
                         logger.error(f"[TEXT_MODE] Не удалось изменить сообщение: {e}")
         except Exception as e:
             logger.error(f"[TEXT_MODE] Ошибка: {e}")
-    # -------------------------------------------------------
 
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
@@ -2574,7 +2603,15 @@ async def main():
         logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
         raise
 
+    # Снимаем вебхук — иначе polling будет конфликтовать
+    try:
+        await bot.delete_webhook(drop_pending_updates=True)
+        logger.info("✅ Вебхук удалён (если был)")
+    except Exception as e:
+        logger.warning(f"Не удалось удалить вебхук: {e}")
+
     asyncio.create_task(online_mode_loop())
+    asyncio.create_task(mini_app_server())
 
     await bot.set_my_commands([types.BotCommand(command="start", description=premium("Главное меню"))])
     await dp.start_polling(bot)
