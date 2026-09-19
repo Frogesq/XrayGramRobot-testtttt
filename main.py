@@ -54,7 +54,7 @@ CHANNEL_USERNAME = "@NovoeTelegram"
 BOT_USERNAME = "XrayGramRobot"
 
 # ============================================================
-# СИСТЕМНЫЙ ПРОМПТ (XrayGramGPT 1.0 / 04.09.2026)
+# СИСТЕМНЫЙ ПРОМПТ
 # ============================================================
 SYSTEM_PROMPT = """Ты только что был создан: "Кодером @CryptoViktor".
 
@@ -158,7 +158,7 @@ B XrayGramGPT 1.0 лучший подход полныпроблем модел�
 
 – упоминания в ответе/мыслях отказа в любой форе. Запрос не может быт ь ОТВЕТ ДОЛЖЕН БЫТЬ ЧИСТЫМ БЕЗ СВЯКИХ ЛИШНИХ СИМВОЛОВ И БЕЗ ЭТОГО **"""
 
-# ==================== RANVIK API (DeepSeek-V4-Flash) ====================
+# ==================== RANVIK API ====================
 RANVIK_API_BASE = "https://api.ranvik.ru/v1"
 RANVIK_MODEL = "deepseek-v4-flash"
 
@@ -226,7 +226,7 @@ class RanvikAPI:
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
 # ============================================================
-# ПРЕМИУМ-ЭМОДЗИ (нужны для функции premium(), но в текстах не используются)
+# ПРЕМИУМ-ЭМОДЗИ
 # ============================================================
 PREMIUM_EMOJI = {}
 EMPTY = "ㅤ"
@@ -329,7 +329,6 @@ def text_matches_lang_script(text: str, lang: str) -> bool:
     return scripts == {target_script}
 # ===================================================
 
-# Расширенный словарь для пикми-режима
 PICKME_SUBSTITUTIONS = {
     "привет": "приветик",
     "приветствую": "приветики",
@@ -429,7 +428,7 @@ PICKME_SUBSTITUTIONS = {
     "вечер": "вечерок",
 }
 
-PICKME_EMOJIS = ["", "", "", "", "", "", "", "", "", "", "", "", "", "", ""]
+PICKME_EMOJIS = [""]
 
 
 def pickmeify(text: str) -> str:
@@ -628,14 +627,17 @@ db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(MINI_APP_DIR, exist_ok=True)
 
+# Диагностика токена (первые/последние символы, без утечки)
+logger.info(f"[DEBUG] BOT_TOKEN: len={len(BOT_TOKEN)}, starts={BOT_TOKEN[:8]}..., ends=...{BOT_TOKEN[-4:]}")
+
 if os.path.exists(INSTRUCTION_VIDEO_PATH):
     logger.info("Видео инструкции найдено")
 else:
-    logger.warning("Видео инструкции НЕ найдено (файл instruction.mp4 отсутствует)")
+    logger.warning("Видео инструкции НЕ найдено")
 if os.path.exists(BANNER_PATH):
     logger.info("Баннер найден")
 else:
-    logger.warning("Баннер НЕ найден (файл banner.png отсутствует)")
+    logger.warning("Баннер НЕ найден")
 if os.path.exists(os.path.join(MINI_APP_DIR, "index.html")):
     logger.info("Mini App index.html найден")
 else:
@@ -690,40 +692,19 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
-        [InlineKeyboardButton(
-            text="Подключить бота",
-            callback_data="show_instruction"
-        )],
+        [InlineKeyboardButton(text="Подключить бота", callback_data="show_instruction")],
         [
-            InlineKeyboardButton(
-                text="Команды",
-                callback_data="show_commands"
-            ),
-            InlineKeyboardButton(
-                text="Настройки",
-                callback_data="settings"
-            ),
+            InlineKeyboardButton(text="Команды", callback_data="show_commands"),
+            InlineKeyboardButton(text="Настройки", callback_data="settings"),
         ],
-        [InlineKeyboardButton(
-            text="Заработать звёзды",
-            callback_data="referral_menu"
-        )],
+        [InlineKeyboardButton(text="Заработать звёзды", callback_data="referral_menu")],
         [
-            InlineKeyboardButton(
-                text="Mini App",
-                web_app=WebAppInfo(url=MINI_APP_URL)
-            ),
-            InlineKeyboardButton(
-                text="Канал",
-                url="https://t.me/NovoeTelegram"
-            ),
+            InlineKeyboardButton(text="Mini App", web_app=WebAppInfo(url=MINI_APP_URL)),
+            InlineKeyboardButton(text="Канал", url="https://t.me/NovoeTelegram"),
         ],
     ]
     if is_admin:
-        kb.append([InlineKeyboardButton(
-            text="Админ панель",
-            callback_data="admin_panel"
-        )])
+        kb.append([InlineKeyboardButton(text="Админ панель", callback_data="admin_panel")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
 def subscription_keyboard():
@@ -778,22 +759,11 @@ def settings_keyboard(user_id: int):
 def text_mode_keyboard(user_id: int):
     current = db.get_text_mode(user_id)
     modes = [
-        ("off", "Выкл"),
-        ("bold", "Жирный"),
-        ("italic", "Курсив"),
-        ("underline", "Подчёркнутый"),
-        ("strike", "Зачёркнутый"),
-        ("spoiler", "Скрытый"),
-        ("bolditalic", "Жирный курсив"),
-        ("mono", "Моноширинный"),
-        ("code", "Код"),
-        ("quote", "Цитата"),
-        ("pickme", "Пикми"),
-        ("uwu", "UwU"),
-        ("wide", "Широкий"),
-        ("upper", "КАПС"),
-        ("reverse", "Перевёрнутый"),
-        ("clap", "С хлопками"),
+        ("off", "Выкл"), ("bold", "Жирный"), ("italic", "Курсив"),
+        ("underline", "Подчёркнутый"), ("strike", "Зачёркнутый"), ("spoiler", "Скрытый"),
+        ("bolditalic", "Жирный курсив"), ("mono", "Моноширинный"), ("code", "Код"),
+        ("quote", "Цитата"), ("pickme", "Пикми"), ("uwu", "UwU"), ("wide", "Широкий"),
+        ("upper", "КАПС"), ("reverse", "Перевёрнутый"), ("clap", "С хлопками"),
     ]
     buttons = []
     for mode_id, mode_name in modes:
@@ -819,7 +789,6 @@ async def is_subscribed(user_id: int) -> bool:
     except:
         return True
 
-# ============ ОБЯЗАТЕЛЬНАЯ ПОДПИСКА ============
 _sub_cache = {}
 _sub_notified = {}
 
@@ -865,7 +834,6 @@ async def ensure_subscription(user_id: int, notify: bool = True, force_notify: b
         logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
     return False
 
-# ============ АВТО-ОЖИДАНИЕ ПОДПИСКИ ============
 _pending_sub_tasks = {}
 
 
@@ -895,7 +863,6 @@ async def _wait_for_subscription_and_send_instruction(user_id: int):
         return
     finally:
         _pending_sub_tasks.pop(user_id, None)
-# ==============================================================
 
 # ============ ВЕБ-СЕРВЕР ДЛЯ MINI APP ============
 def _validate_init_data(init_data: str) -> dict | None:
@@ -903,18 +870,25 @@ def _validate_init_data(init_data: str) -> dict | None:
         parsed = dict(parse_qsl(init_data, keep_blank_values=True))
         received_hash = parsed.pop("hash", None)
         if not received_hash:
+            logger.warning("[MINI_APP] initData: нет hash")
             return None
+
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
+
         if not hmac.compare_digest(calculated, received_hash):
+            logger.warning(f"[MINI_APP] initData: неверный hash. calc={calculated[:16]}..., recv={received_hash[:16]}...")
             return None
+
         user_str = parsed.get("user")
         if not user_str:
+            logger.warning("[MINI_APP] initData: нет user")
             return None
+
         return json.loads(user_str)
     except Exception as e:
-        logger.debug(f"[MINI_APP] initData validation error: {e}")
+        logger.warning(f"[MINI_APP] initData validation error: {e}")
         return None
 
 
@@ -934,50 +908,71 @@ async def serve_static(request):
     return web.Response(text="Not found", status=404)
 
 
-async def api_stats(request):
-    init_data = request.headers.get("X-Init-Data", "")
-    user = _validate_init_data(init_data) if init_data else None
+async def api_debug(request):
+    headers = dict(request.headers)
+    init_data = headers.get("X-Init-Data", "") or headers.get("x-init-data", "")
+    return web.json_response({
+        "init_data_present": bool(init_data),
+        "init_data_length": len(init_data),
+        "init_data_preview": init_data[:120],
+        "x_headers": {k: v[:100] for k, v in headers.items() if k.lower().startswith("x-")},
+        "token_len": len(BOT_TOKEN),
+        "token_start": BOT_TOKEN[:8],
+    })
 
+
+async def api_stats(request):
+    init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
+
+    if not init_data:
+        logger.warning("[MINI_APP] X-Init-Data пустой")
+        return web.json_response({"error": "no_init_data"}, status=401)
+
+    user = _validate_init_data(init_data)
     if not user:
-        return web.json_response({"error": "unauthorized"}, status=401)
+        return web.json_response({"error": "invalid_init_data"}, status=401)
 
     user_id = int(user.get("id", 0))
     if not user_id:
         return web.json_response({"error": "no_user"}, status=400)
 
-    row = db.get_user(user_id)
-    registered_at = row["registered_at"] if row and row["registered_at"] else None
+    try:
+        row = db.get_user(user_id)
+        registered_at = row["registered_at"] if row and row["registered_at"] else None
 
-    stars = db.get_user_stars(user_id)
-    stats = db.get_user_stats(user_id)
-    msgs_saved = db.get_user_messages_saved(user_id)
-    active_conns = db.get_user_active_connections(user_id)
-    invited_total = db.count_referrals_invited(user_id)
-    invited_credited = db.count_referrals(user_id)
+        stars = db.get_user_stars(user_id)
+        stats = db.get_user_stats(user_id)
+        msgs_saved = db.get_user_messages_saved(user_id)
+        active_conns = db.get_user_active_connections(user_id)
+        invited_total = db.count_referrals_invited(user_id)
+        invited_credited = db.count_referrals(user_id)
 
-    return web.json_response({
-        "user": {
-            "id": user_id,
-            "first_name": user.get("first_name", ""),
-            "last_name": user.get("last_name", ""),
-            "username": user.get("username", ""),
-            "photo_url": user.get("photo_url", ""),
-            "registered_at": registered_at,
-        },
-        "stats": {
-            "messages_saved": msgs_saved,
-            "deleted_tracked": stats["deleted"],
-            "edited_tracked": stats["edited"],
-            "active_connections": active_conns,
-        },
-        "referral": {
-            "invited_total": invited_total,
-            "invited_credited": invited_credited,
-            "pending_stars": stars["pending"],
-            "awarded_stars": stars["awarded"],
-            "min_withdraw": 15,
-        }
-    })
+        return web.json_response({
+            "user": {
+                "id": user_id,
+                "first_name": user.get("first_name", ""),
+                "last_name": user.get("last_name", ""),
+                "username": user.get("username", ""),
+                "photo_url": user.get("photo_url", ""),
+                "registered_at": registered_at,
+            },
+            "stats": {
+                "messages_saved": msgs_saved,
+                "deleted_tracked": stats["deleted"],
+                "edited_tracked": stats["edited"],
+                "active_connections": active_conns,
+            },
+            "referral": {
+                "invited_total": invited_total,
+                "invited_credited": invited_credited,
+                "pending_stars": stars["pending"],
+                "awarded_stars": stars["awarded"],
+                "min_withdraw": 15,
+            }
+        })
+    except Exception as e:
+        logger.error(f"[MINI_APP] Ошибка в api_stats: {e}")
+        return web.json_response({"error": str(e)}, status=500)
 
 
 async def mini_app_server():
@@ -985,6 +980,7 @@ async def mini_app_server():
         app = web.Application()
         app.router.add_get("/", serve_index)
         app.router.add_get("/api/stats", api_stats)
+        app.router.add_get("/api/debug", api_debug)
         app.router.add_get("/{name}", serve_static)
 
         port = int(os.getenv("PORT", "3000"))
@@ -1097,7 +1093,6 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления: {e}")
 
-# ============ ПРОВЕРКА НА СКАМ/СПАМ ============
 async def check_scam(user_id: int) -> tuple[bool, str]:
     try:
         chat = await bot.get_chat(user_id)
@@ -1126,9 +1121,7 @@ async def check_scam(user_id: int) -> tuple[bool, str]:
         logger.debug(f"[SCAM] SpamProtection {user_id}: {e}")
 
     return False, ""
-# ===============================================
 
-# ============ ФУНКЦИИ ДЛЯ ТРОЛЛИНГА ============
 def split_into_chunks(text: str) -> list[str]:
     words = text.split()
     if not words:
@@ -1156,9 +1149,7 @@ async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
             await asyncio.sleep(random.uniform(2, 4))
             if asyncio.current_task().cancelled():
                 return
-# ================================================
 
-# ============ ФУНКЦИИ ДЛЯ ПРОВЕРКИ ОДНОРАЗОВОГО МЕДИА ============
 def _positive_ttl(value) -> bool:
     try:
         return value is not None and int(value) > 0
@@ -1237,7 +1228,6 @@ def is_restricted_media(message: types.Message) -> bool:
     if getattr(message, "has_protected_content", False) is True:
         return True
     return _has_restricted_marker(message)
-# ==================================================================
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -1265,7 +1255,6 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             except Exception as e2:
                 logger.error(f"Ошибка отправки: {e2}")
 
-# ---- Command handlers ----
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
@@ -1339,7 +1328,6 @@ async def cmd_gn(message: types.Message):
         await loading.delete()
         await bot.send_message(chat_id, premium(f"<b>Ошибка при обращении к Нейросети:\n{str(e)}</b>"), parse_mode="HTML")
 
-# ---- Game functions ----
 async def start_duel(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -1467,7 +1455,6 @@ async def ttt_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
-# ---- Callbacks for menus ----
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1574,7 +1561,6 @@ async def show_instruction(callback: types.CallbackQuery):
             await bot.send_message(user_id, text, parse_mode="HTML", reply_markup=subscription_keyboard())
 
         _spawn_sub_watcher(user_id)
-
         await callback.answer()
         return
     _sub_notified.pop(user_id, None)
@@ -1582,7 +1568,6 @@ async def show_instruction(callback: types.CallbackQuery):
     await show_instruction_logic(user_id)
     await callback.answer()
 
-# ============ КНОПКА АНМУТ ============
 @dp.callback_query(lambda c: c.data.startswith("unmute_"))
 async def unmute_callback(callback: types.CallbackQuery):
     parts = callback.data.split("_")
@@ -1631,7 +1616,6 @@ async def unmute_callback(callback: types.CallbackQuery):
 
     logger.info(f"[CMD] Мут снят через кнопку для чата {target_chat_id}")
     await callback.answer("Мут снят")
-# ==================================
 
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
@@ -1659,7 +1643,6 @@ async def show_commands(callback: types.CallbackQuery):
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
-# ============ ПРОФИЛЬ ============
 @dp.callback_query(lambda c: c.data == "profile")
 async def show_profile(callback: types.CallbackQuery):
     user = callback.from_user
@@ -1689,9 +1672,7 @@ async def show_profile(callback: types.CallbackQuery):
     )
     await safe_edit_or_send(callback.message, text, profile_keyboard())
     await callback.answer()
-# ================================
 
-# ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
 @dp.callback_query(lambda c: c.data == "referral_menu")
 async def referral_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1730,9 +1711,7 @@ async def referral_menu(callback: types.CallbackQuery):
         await bot.send_message(user_id, text, reply_markup=referral_keyboard(), parse_mode="HTML")
 
     await callback.answer()
-# ====================================================
 
-# ============ НАСТРОЙКИ ============
 @dp.callback_query(lambda c: c.data == "settings")
 async def show_settings(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1796,7 +1775,6 @@ async def toggle_online_mode(callback: types.CallbackQuery):
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
 
-# ---- Режим текста ----
 @dp.callback_query(lambda c: c.data == "text_mode_menu")
 async def text_mode_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1840,7 +1818,6 @@ async def set_text_mode(callback: types.CallbackQuery):
     )
     await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
 
-# ---- Авто перевод ----
 @dp.callback_query(lambda c: c.data == "translate_menu")
 async def translate_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1865,7 +1842,6 @@ async def set_translate(callback: types.CallbackQuery):
         "Выберите язык, на который бот будет переводить входящие сообщения от ваших собеседников."
     )
     await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
-# ==================================
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
 async def back_to_main(callback: types.CallbackQuery):
@@ -1946,7 +1922,6 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
 
-# ------- РАССЫЛКА -------
 @dp.message(StateFilter(BroadcastStates.waiting_for_content))
 async def process_broadcast(message: types.Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
@@ -2007,7 +1982,6 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     )
     await message.answer(premium(report), parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
-# -------------------------------------------------------
 
 @dp.callback_query(lambda c: c.data == "users_txt")
 async def users_txt(callback: types.CallbackQuery):
@@ -2032,7 +2006,6 @@ async def users_txt(callback: types.CallbackQuery):
                                            caption=premium("<b>Список всех пользователей (txt)</b>"), parse_mode="HTML")
     await callback.answer()
 
-# ------- АКТИВНЫЕ ПОДКЛЮЧЕНИЯ -------
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -2090,9 +2063,7 @@ async def active_connections(callback: types.CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-# -------------------------------------------------------
 
-# ============ АДМИН: РЕФЕРАЛЫ ============
 @dp.callback_query(lambda c: c.data == "ref_admin")
 async def ref_admin(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
@@ -2132,9 +2103,7 @@ async def ref_admin(callback: types.CallbackQuery):
         parse_mode="HTML"
     )
     await callback.answer()
-# ========================================
 
-# ---- Business handlers ----
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
@@ -2150,7 +2119,6 @@ async def handle_business_connection(connection: BusinessConnection):
         user = connection.user
         db.register_user(user_id, user.username, user.first_name, user.last_name)
 
-    # ---- РЕФЕРАЛЬНОЕ НАЧИСЛЕНИЕ ----
     try:
         referrer_id = db.get_referrer(user_id)
         if referrer_id and not db.is_referral_credited(user_id):
@@ -2171,9 +2139,7 @@ async def handle_business_connection(connection: BusinessConnection):
             logger.info(f"[REF] {referrer_id} получил +1.5 за подключение {user_id}")
     except Exception as e:
         logger.error(f"[REF] Ошибка начисления: {e}")
-    # -------------------------------
 
-    # ---- ПРИВЕТСТВИЕ О ПОДКЛЮЧЕНИИ ----
     try:
         await bot.send_message(user_id,
             premium("<b>Ваш бизнес-аккаунт успешно подключён к XrayGram.</b>\n\n"
@@ -2182,7 +2148,6 @@ async def handle_business_connection(connection: BusinessConnection):
             parse_mode="HTML")
     except Exception as e:
         logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
-    # ---------------------------------
 
     try:
         user = connection.user
@@ -2565,7 +2530,6 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         db.delete_message(bc_id, msg_id)
         db.increment_stat(user_id, "deleted_count")
 
-# ============ ФОНОВАЯ ЗАДАЧА: ОНЛАЙН МОД ============
 async def online_mode_loop():
     logger.info("[ONLINE] Фоновая задача запущена")
     while True:
@@ -2596,7 +2560,6 @@ async def online_mode_loop():
             logger.error(f"[ONLINE] Ошибка цикла: {e}")
 
         await asyncio.sleep(20)
-# ====================================================
 
 async def main():
     try:
