@@ -32,6 +32,55 @@
 
         .container { max-width: 480px; margin: 0 auto; }
 
+        /* ============ АНИМАЦИИ ============ */
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(14px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+        @keyframes scaleIn {
+            from { opacity: 0; transform: scale(0.94); }
+            to   { opacity: 1; transform: scale(1); }
+        }
+        @keyframes slideInLeft {
+            from { opacity: 0; transform: translateX(-16px); }
+            to   { opacity: 1; transform: translateX(0); }
+        }
+        @keyframes fillProgress {
+            from { width: 0%; }
+        }
+        @keyframes pulseAvatar {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0.3); }
+            50%      { box-shadow: 0 0 0 8px rgba(58, 122, 254, 0); }
+        }
+        @keyframes shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        .animate {
+            opacity: 0;
+            animation: fadeInUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .animate-scale {
+            opacity: 0;
+            animation: scaleIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+        }
+        .animate-fade {
+            opacity: 0;
+            animation: fadeIn 0.6s ease forwards;
+        }
+        .delay-1 { animation-delay: 0.05s; }
+        .delay-2 { animation-delay: 0.12s; }
+        .delay-3 { animation-delay: 0.20s; }
+        .delay-4 { animation-delay: 0.28s; }
+        .delay-5 { animation-delay: 0.36s; }
+        .delay-6 { animation-delay: 0.44s; }
+
+        /* ============ ПРОФИЛЬ ============ */
         .profile { display: flex; align-items: center; gap: 14px; padding: 20px 0 24px; }
 
         .avatar {
@@ -40,6 +89,7 @@
             display: flex; align-items: center; justify-content: center;
             font-size: 22px; font-weight: 600; color: var(--hint);
             flex-shrink: 0; overflow: hidden;
+            animation: pulseAvatar 2.4s ease-in-out infinite;
         }
         .avatar img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -47,6 +97,7 @@
         .profile-name { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .profile-meta { font-size: 13px; color: var(--hint); margin-top: 2px; }
 
+        /* ============ СЕКЦИИ ============ */
         .section-title {
             font-size: 12px; font-weight: 500; color: var(--hint);
             text-transform: uppercase; letter-spacing: 0.08em;
@@ -58,21 +109,46 @@
         .card {
             background: var(--bg-secondary); border-radius: 16px;
             padding: 16px; display: flex; flex-direction: column; gap: 6px;
+            transition: transform 0.2s ease, background 0.2s ease;
         }
-        .card-value { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+        .card:active {
+            transform: scale(0.97);
+            background: rgba(255, 255, 255, 0.05);
+        }
+        .card-value {
+            font-size: 26px; font-weight: 600; letter-spacing: -0.03em;
+            font-variant-numeric: tabular-nums;
+            animation: scaleIn 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+            opacity: 0;
+        }
         .card-label { font-size: 12px; color: var(--hint); font-weight: 400; }
 
+        /* ============ РЕФЕРАЛЫ ============ */
         .referral-card { background: var(--bg-secondary); border-radius: 16px; padding: 18px; }
 
-        .ref-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; font-size: 14px; }
+        .ref-row {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 8px 0; font-size: 14px;
+        }
         .ref-row + .ref-row { border-top: 1px solid var(--divider); }
         .ref-label { color: var(--hint); }
         .ref-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 
         .progress-wrap { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--divider); }
         .progress-info { display: flex; justify-content: space-between; font-size: 12px; color: var(--hint); margin-bottom: 8px; }
-        .progress-bar { height: 6px; background: rgba(255, 255, 255, 0.06); border-radius: 3px; overflow: hidden; }
-        .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.4s ease; width: 0%; }
+        .progress-bar {
+            height: 6px; background: rgba(255, 255, 255, 0.06);
+            border-radius: 3px; overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #5c9bff, var(--accent));
+            background-size: 200% 100%;
+            border-radius: 3px;
+            transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+            width: 0%;
+            animation: shimmer 3s linear infinite;
+        }
 
         .ref-link-block { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--divider); }
         .ref-link-label { font-size: 12px; color: var(--hint); margin-bottom: 8px; }
@@ -95,13 +171,27 @@
             border: none; border-radius: 8px;
             padding: 6px 10px; font-size: 11px; font-weight: 600;
             cursor: pointer; flex-shrink: 0;
+            transition: transform 0.15s ease, opacity 0.15s ease;
         }
-        .copy-btn:active { opacity: 0.7; }
+        .copy-btn:active { transform: scale(0.9); opacity: 0.8; }
 
+        /* ============ СКЕЛЕТОН / ЗАГРУЗКА ============ */
         .loader {
             display: flex; align-items: center; justify-content: center;
             padding: 60px 0; color: var(--hint); font-size: 14px;
+            animation: fadeIn 0.4s ease;
         }
+
+        .skeleton {
+            background: linear-gradient(90deg,
+                var(--bg-secondary) 0%,
+                rgba(255, 255, 255, 0.06) 50%,
+                var(--bg-secondary) 100%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s linear infinite;
+            border-radius: 16px;
+        }
+        .skeleton-line { height: 60px; margin-bottom: 10px; }
 
         .error {
             padding: 40px 20px;
@@ -113,6 +203,7 @@
             line-height: 1.5;
             background: var(--bg-secondary);
             border-radius: 16px;
+            animation: fadeInUp 0.4s ease;
         }
         .error-title { color: #ff6b6b; font-weight: 600; margin-bottom: 12px; }
     </style>
@@ -151,7 +242,7 @@
             if (user.username) meta = `@${escapeHtml(user.username)} · ${meta}`;
 
             return `
-                <div class="profile">
+                <div class="profile animate">
                     <div class="avatar">${avatar}</div>
                     <div class="profile-info">
                         <div class="profile-name">${escapeHtml(fullName)}</div>
@@ -162,26 +253,22 @@
         }
 
         function renderStats(stats) {
-            return `
-                <div class="section-title">Статистика</div>
-                <div class="grid">
-                    <div class="card">
-                        <div class="card-value">${formatNumber(stats.messages_saved)}</div>
-                        <div class="card-label">Сообщений сохранено</div>
-                    </div>
-                    <div class="card">
-                        <div class="card-value">${formatNumber(stats.deleted_tracked)}</div>
-                        <div class="card-label">Удалёнок отслежено</div>
-                    </div>
-                    <div class="card">
-                        <div class="card-value">${formatNumber(stats.edited_tracked)}</div>
-                        <div class="card-label">Изменений отслежено</div>
-                    </div>
-                    <div class="card">
-                        <div class="card-value">${formatNumber(stats.active_connections)}</div>
-                        <div class="card-label">Активных чатов</div>
-                    </div>
+            const cards = [
+                { value: stats.messages_saved, label: "Сообщений сохранено" },
+                { value: stats.deleted_tracked, label: "Удалёнок отслежено" },
+                { value: stats.edited_tracked, label: "Изменений отслежено" },
+                { value: stats.active_connections, label: "Активных чатов" },
+            ];
+            const cardsHtml = cards.map((c, i) => `
+                <div class="card animate-scale delay-${i + 2}" style="animation-delay: ${0.1 + i * 0.08}s">
+                    <div class="card-value" style="animation-delay: ${0.3 + i * 0.08}s">${formatNumber(c.value)}</div>
+                    <div class="card-label">${c.label}</div>
                 </div>
+            `).join("");
+
+            return `
+                <div class="section-title animate-fade delay-2">Статистика</div>
+                <div class="grid">${cardsHtml}</div>
             `;
         }
 
@@ -193,8 +280,8 @@
             const refLink = `https://t.me/XrayGramRobot?start=ref_${tg?.initDataUnsafe?.user?.id || ""}`;
 
             return `
-                <div class="section-title">Рефералы</div>
-                <div class="referral-card">
+                <div class="section-title animate-fade delay-5">Рефералы</div>
+                <div class="referral-card animate delay-6">
                     <div class="ref-row">
                         <span class="ref-label">Зашли по ссылке</span>
                         <span class="ref-value">${formatNumber(ref.invited_total)}</span>
@@ -214,7 +301,7 @@
                             <span>${pending.toFixed(1)} / ${minWithdraw}</span>
                         </div>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: ${progress}%"></div>
+                            <div class="progress-fill" id="progressFill" data-progress="${progress}"></div>
                         </div>
                     </div>
 
@@ -261,15 +348,31 @@
                     ${renderReferral(data.referral)}
                 `;
 
+                // Запускаем заливку прогресс-бара с анимацией
+                requestAnimationFrame(() => {
+                    setTimeout(() => {
+                        const pf = document.getElementById("progressFill");
+                        if (pf) {
+                            const target = pf.getAttribute("data-progress");
+                            pf.style.width = target + "%";
+                        }
+                    }, 300);
+                });
+
                 const copyBtn = document.getElementById("copyBtn");
                 if (copyBtn) {
                     copyBtn.addEventListener("click", () => {
                         const link = document.getElementById("refLink").textContent;
+                        const done = () => {
+                            copyBtn.textContent = "Готово";
+                            copyBtn.style.background = "#22c55e";
+                            setTimeout(() => {
+                                copyBtn.textContent = "Копировать";
+                                copyBtn.style.background = "";
+                            }, 1200);
+                        };
                         if (navigator.clipboard) {
-                            navigator.clipboard.writeText(link).then(() => {
-                                copyBtn.textContent = "Готово";
-                                setTimeout(() => copyBtn.textContent = "Копировать", 1200);
-                            });
+                            navigator.clipboard.writeText(link).then(done);
                         } else {
                             const ta = document.createElement("textarea");
                             ta.value = link;
@@ -277,8 +380,7 @@
                             ta.select();
                             document.execCommand("copy");
                             document.body.removeChild(ta);
-                            copyBtn.textContent = "Готово";
-                            setTimeout(() => copyBtn.textContent = "Копировать", 1200);
+                            done();
                         }
                     });
                 }
