@@ -765,7 +765,7 @@ def main_menu_keyboard(is_admin: bool = False):
         )],
         [
             InlineKeyboardButton(
-                text="Мини апп",
+                text="Mini App",
                 callback_data="mini_app",
                 icon_custom_emoji_id="5280867942056108177"
             ),
