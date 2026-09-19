@@ -225,9 +225,6 @@ class RanvikAPI:
 
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
-# ============================================================
-# ПРЕМИУМ-ЭМОДЗИ
-# ============================================================
 PREMIUM_EMOJI = {}
 EMPTY = "ㅤ"
 
@@ -251,7 +248,6 @@ MODE_NAMES = {
     "clap": "С хлопками",
 }
 
-# ============ ЯЗЫКИ ПЕРЕВОДА ============
 TRANSLATE_LANGS = {
     "off": "Выкл",
     "en": "English",
@@ -271,7 +267,6 @@ TRANSLATE_LANGS = {
     "hi": "हिन्दी",
 }
 
-# ============ ОПРЕДЕЛЕНИЕ ПИСЬМЕННОСТИ ============
 LANG_SCRIPTS = {
     "ru": "cyrillic",
     "uk": "cyrillic",
@@ -327,7 +322,7 @@ def text_matches_lang_script(text: str, lang: str) -> bool:
     if not scripts:
         return False
     return scripts == {target_script}
-# ===================================================
+
 
 PICKME_SUBSTITUTIONS = {
     "привет": "приветик",
@@ -454,8 +449,7 @@ def pickmeify(text: str) -> str:
             else:
                 result.append(w)
 
-    out = " ".join(result)
-    return out
+    return " ".join(result)
 
 
 def uwuify(text: str) -> str:
@@ -530,7 +524,6 @@ def apply_text_mode(text: str, mode: str) -> str:
     return text
 
 
-# ============ ПЕРЕВОД ============
 async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
     stripped = (text or "").strip()
 
@@ -585,9 +578,8 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
     except Exception as e:
         logger.debug(f"[TRANSLATE] Ошибка: {e}")
     return text, ""
-# ===============================
 
-# ============ ТРОЛЛИНГ ============
+
 TROLL_MESSAGES = [
     "копрофильный сынуля выблядка никому неизвестный гномоподобный хуесос которого я буду ебашить на постоянной основе чисто тебе харчей на ебло налеплю заусенец глупообразный хачеблок тупочайщий терпилойдный огузок направленный на полировки богоподобного фаллоса уничтоженный маслянистами жирными кислотными оксидами туша ебаная не способная для развития личности дегроподобный образ для удовлетворения потребностей богофаллосов жировой своей складкой задуши свою мертвую вонючую матушку изгнаная из общества нормаподобных персон",
     "тухлятина ебаная просто живущая проституцией дегенеративный уебак которого я буду ебашить как ебаную суку которая решила напасть на мой легендарный агрегат ты же максимально униженный сынок агрегатной выблядочной дуры эрудированный под мой богохуй твоя изгибная рожица которая скоро начнет отпадать от нападков моей залупы задумайся как ты будешь проживать остаток своей ебаной опечаленной жизни в кругу своих страданий которые ежедневно будут приносить тебе боль я же тебя тут заставлю наяривать хуец абсолютно каждого который чисто тут находится в конференции на ротан надавать и уйти в закат ты сынуля захуяренной шлюхи чуркобес ебаный проститутка тайская на хуе тя чисто вертел как отшельницу ебаную",
@@ -626,9 +618,6 @@ dp = Dispatcher()
 db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(MINI_APP_DIR, exist_ok=True)
-
-# Диагностика токена (первые/последние символы, без утечки)
-logger.info(f"[DEBUG] BOT_TOKEN: len={len(BOT_TOKEN)}, starts={BOT_TOKEN[:8]}..., ends=...{BOT_TOKEN[-4:]}")
 
 if os.path.exists(INSTRUCTION_VIDEO_PATH):
     logger.info("Видео инструкции найдено")
@@ -870,25 +859,18 @@ def _validate_init_data(init_data: str) -> dict | None:
         parsed = dict(parse_qsl(init_data, keep_blank_values=True))
         received_hash = parsed.pop("hash", None)
         if not received_hash:
-            logger.warning("[MINI_APP] initData: нет hash")
             return None
-
         data_check_string = "\n".join(f"{k}={v}" for k, v in sorted(parsed.items()))
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
         calculated = hmac.new(secret_key, data_check_string.encode(), hashlib.sha256).hexdigest()
-
         if not hmac.compare_digest(calculated, received_hash):
-            logger.warning(f"[MINI_APP] initData: неверный hash. calc={calculated[:16]}..., recv={received_hash[:16]}...")
             return None
-
         user_str = parsed.get("user")
         if not user_str:
-            logger.warning("[MINI_APP] initData: нет user")
             return None
-
         return json.loads(user_str)
     except Exception as e:
-        logger.warning(f"[MINI_APP] initData validation error: {e}")
+        logger.debug(f"[MINI_APP] initData validation error: {e}")
         return None
 
 
@@ -908,24 +890,10 @@ async def serve_static(request):
     return web.Response(text="Not found", status=404)
 
 
-async def api_debug(request):
-    headers = dict(request.headers)
-    init_data = headers.get("X-Init-Data", "") or headers.get("x-init-data", "")
-    return web.json_response({
-        "init_data_present": bool(init_data),
-        "init_data_length": len(init_data),
-        "init_data_preview": init_data[:120],
-        "x_headers": {k: v[:100] for k, v in headers.items() if k.lower().startswith("x-")},
-        "token_len": len(BOT_TOKEN),
-        "token_start": BOT_TOKEN[:8],
-    })
-
-
 async def api_stats(request):
     init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
 
     if not init_data:
-        logger.warning("[MINI_APP] X-Init-Data пустой")
         return web.json_response({"error": "no_init_data"}, status=401)
 
     user = _validate_init_data(init_data)
@@ -966,7 +934,6 @@ async def api_stats(request):
                 "invited_total": invited_total,
                 "invited_credited": invited_credited,
                 "pending_stars": stars["pending"],
-                "awarded_stars": stars["awarded"],
                 "min_withdraw": 15,
             }
         })
@@ -980,7 +947,6 @@ async def mini_app_server():
         app = web.Application()
         app.router.add_get("/", serve_index)
         app.router.add_get("/api/stats", api_stats)
-        app.router.add_get("/api/debug", api_debug)
         app.router.add_get("/{name}", serve_static)
 
         port = int(os.getenv("PORT", "3000"))
@@ -1696,8 +1662,7 @@ async def referral_menu(callback: types.CallbackQuery):
         f"<b>Статистика:</b>\n"
         f"Зашли по ссылке: <b>{invited_total}</b>\n"
         f"Подключили бота: <b>{invited_credited}</b>\n"
-        f"Ожидают выдачи: <b>{stars['pending']:.1f}</b>\n"
-        f"Уже выдано: <b>{stars['awarded']:.1f}</b>\n\n"
+        f"Ожидают выдачи: <b>{stars['pending']:.1f}</b>\n\n"
         "<b>Минимальная сумма вывода: 15 звёзд</b>"
     )
 
@@ -2093,7 +2058,6 @@ async def ref_admin(callback: types.CallbackQuery):
             f"Зашли по ссылке: {r['invited_total']}\n"
             f"Подключили бота: {r['invited_credited']}\n"
             f"Ожидает выдачи: {r['pending_stars']:.1f} звёзд\n"
-            f"Уже выдано: {r['awarded_stars']:.1f} звёзд\n"
             + "-" * 40 + "\n"
         )
 
