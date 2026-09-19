@@ -11,6 +11,12 @@ DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "messages.db")
 REFERRAL_DB_PATH = os.path.join(DATA_DIR, "referrals.db")
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
+
+REFERRAL_DAILY_LIMIT = 20
+REFERRAL_MIN_INTERVAL = 60
+BACKUP_KEEP = 5
 
 
 def _is_valid_sqlite(path):
@@ -76,18 +82,27 @@ def _ensure_valid_db(path):
         pass
 
 
+def _enable_wal(conn):
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.commit()
+    except Exception as e:
+        logger.warning(f"[DB] Не удалось включить WAL: {e}")
+
+
 class Database:
     def __init__(self):
         _ensure_valid_db(DB_PATH)
         _ensure_valid_db(REFERRAL_DB_PATH)
 
-        # Основное соединение (сообщения, пользователи, настройки и т.д.)
         self.conn = sqlite3.connect(DB_PATH, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        _enable_wal(self.conn)
 
-        # Отдельное соединение для рефералов — в своём файле /app/data/referrals.db
         self.ref_conn = sqlite3.connect(REFERRAL_DB_PATH, check_same_thread=False)
         self.ref_conn.row_factory = sqlite3.Row
+        _enable_wal(self.ref_conn)
 
         self._init_tables()
         self._init_referral_tables()
@@ -107,14 +122,12 @@ class Database:
                 registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS connections (
                 bc_id TEXT PRIMARY KEY,
                 user_id INTEGER NOT NULL
             )
         """)
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS messages (
                 bc_id TEXT,
@@ -129,7 +142,6 @@ class Database:
                 PRIMARY KEY (bc_id, msg_id)
             )
         """)
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS muted_chats (
                 user_id INTEGER,
@@ -137,7 +149,6 @@ class Database:
                 PRIMARY KEY (user_id, chat_id)
             )
         """)
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS ttt_games (
                 chat_id INTEGER PRIMARY KEY,
@@ -148,7 +159,6 @@ class Database:
                 game_id TEXT
             )
         """)
-
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 user_id INTEGER PRIMARY KEY,
@@ -159,29 +169,25 @@ class Database:
             )
         """)
 
-        # ============ МИГРАЦИИ ============
+        # Миграции user_settings
         cursor.execute("PRAGMA table_info(user_settings)")
         cols = [row["name"] for row in cursor.fetchall()]
         if "scam_check" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN scam_check BOOLEAN DEFAULT 0")
-            logger.info("[DB] Миграция: добавлена колонка scam_check")
         if "text_mode" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN text_mode TEXT DEFAULT 'off'")
-            logger.info("[DB] Миграция: добавлена колонка text_mode")
         if "translate_to" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN translate_to TEXT DEFAULT 'off'")
-            logger.info("[DB] Миграция: добавлена колонка translate_to")
         if "online_mode" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
-            logger.info("[DB] Миграция: добавлена колонка online_mode")
 
+        # Миграция messages
         cursor.execute("PRAGMA table_info(messages)")
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
-            logger.info("[DB] Миграция: добавлена колонка chat_id в messages")
 
-        # Оставляем старые колонки в users для совместимости (не используются)
+        # Legacy-колонки в users (оставлены для совместимости, не используются)
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
         if "referrer_id" not in user_cols:
@@ -199,7 +205,6 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
-
         self.conn.commit()
 
     # ================================================================
@@ -223,12 +228,30 @@ class Database:
                 awarded_stars REAL DEFAULT 0
             )
         """)
-        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS referral_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                referrer_id INTEGER NOT NULL,
+                invited_id INTEGER NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(invited_id)
+            )
+        """)
+        # ---- Статистика пользователя ----
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_stats (
+                user_id INTEGER PRIMARY KEY,
+                deleted_count INTEGER DEFAULT 0,
+                edited_count INTEGER DEFAULT 0
+            )
+        """)
 
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_referrer ON referral_events(referrer_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
         self.ref_conn.commit()
 
-        # Одноразовая миграция из основной БД (users.referrer_id / pending_stars / awarded_stars),
-        # если в referrals.db ещё пусто
+        # Одноразовая миграция из старой схемы users
         try:
             cur.execute("SELECT COUNT(*) AS c FROM referral_relations")
             rel_count = cur.fetchone()["c"]
@@ -261,10 +284,50 @@ class Database:
                         )
                         migrated_bal += 1
                 if migrated_rel or migrated_bal:
-                    logger.info(f"[DB] Миграция рефералов в referrals.db: связей {migrated_rel}, балансов {migrated_bal}")
+                    logger.info(f"[DB] Миграция рефералов: связей {migrated_rel}, балансов {migrated_bal}")
                 self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] Ошибка миграции рефералов: {e}")
+
+    # ============ БЭКАПЫ ============
+    def auto_backup(self) -> str:
+        try:
+            if not os.path.exists(REFERRAL_DB_PATH):
+                return ""
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(BACKUP_DIR, f"referrals_{ts}.db")
+
+            src = sqlite3.connect(REFERRAL_DB_PATH)
+            dst = sqlite3.connect(backup_path)
+            with dst:
+                src.backup(dst)
+            src.close()
+            dst.close()
+
+            backups = sorted(
+                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")]
+            )
+            while len(backups) > BACKUP_KEEP:
+                old = backups.pop(0)
+                try:
+                    os.remove(os.path.join(BACKUP_DIR, old))
+                except Exception:
+                    pass
+
+            logger.info(f"[BACKUP] Создан бэкап: {backup_path}")
+            return backup_path
+        except Exception as e:
+            logger.error(f"[BACKUP] Ошибка: {e}")
+            return ""
+
+    def list_backups(self) -> list:
+        try:
+            return sorted(
+                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")],
+                reverse=True
+            )
+        except Exception:
+            return []
 
     # ============ ПОЛЬЗОВАТЕЛИ ============
     def register_user(self, user_id, username, first_name, last_name=""):
@@ -287,10 +350,6 @@ class Database:
         return cursor.fetchone()
 
     def delete_user_completely(self, user_id):
-        """
-        Удаляет пользователя из основной БД (messages.db).
-        Реферальные данные в referrals.db НЕ трогаются — они лежат в отдельном файле.
-        """
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM messages WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
@@ -299,7 +358,55 @@ class Database:
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
-    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА (referrals.db) ============
+    # ============ СТАТИСТИКА ПОЛЬЗОВАТЕЛЯ ============
+    def increment_stat(self, user_id: int, field: str):
+        if field not in ("deleted_count", "edited_count"):
+            return
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute(f"""
+                INSERT INTO user_stats (user_id, {field}) VALUES (?, 1)
+                ON CONFLICT(user_id) DO UPDATE SET {field} = COALESCE(user_stats.{field}, 0) + 1
+            """, (user_id,))
+            self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] increment_stat: {e}")
+
+    def get_user_stats(self, user_id: int) -> dict:
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute(
+                "SELECT COALESCE(deleted_count,0) AS d, COALESCE(edited_count,0) AS e "
+                "FROM user_stats WHERE user_id = ?",
+                (user_id,)
+            )
+            row = cur.fetchone()
+            if row is None:
+                return {"deleted": 0, "edited": 0}
+            return {"deleted": int(row["d"] or 0), "edited": int(row["e"] or 0)}
+        except Exception as e:
+            logger.error(f"[DB] get_user_stats: {e}")
+            return {"deleted": 0, "edited": 0}
+
+    def get_user_messages_saved(self, user_id: int) -> int:
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) AS c FROM messages WHERE user_id = ?", (user_id,))
+            row = cur.fetchone()
+            return int(row["c"] or 0)
+        except Exception:
+            return 0
+
+    def get_user_active_connections(self, user_id: int) -> int:
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT COUNT(*) AS c FROM connections WHERE user_id = ?", (user_id,))
+            row = cur.fetchone()
+            return int(row["c"] or 0)
+        except Exception:
+            return 0
+
+    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -333,7 +440,7 @@ class Database:
             cur.execute("SELECT credited FROM referral_relations WHERE user_id = ?", (user_id,))
             row = cur.fetchone()
             if row is None:
-                return True  # связи нет — начислять нечего
+                return True
             return bool(row["credited"])
         except Exception:
             return True
@@ -345,6 +452,45 @@ class Database:
             self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] mark_referral_credited: {e}")
+
+    def count_referrals_today(self, referrer_id: int) -> int:
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) AS c FROM referral_events
+                WHERE referrer_id = ?
+                  AND created_at >= datetime('now', '-1 day')
+            """, (referrer_id,))
+            return int(cur.fetchone()["c"] or 0)
+        except Exception:
+            return 0
+
+    def seconds_since_last_referral(self, referrer_id: int) -> float:
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                SELECT created_at FROM referral_events
+                WHERE referrer_id = ?
+                ORDER BY created_at DESC LIMIT 1
+            """, (referrer_id,))
+            row = cur.fetchone()
+            if row is None:
+                return 1e9
+            cur.execute("SELECT (julianday('now') - julianday(?)) * 86400.0 AS s", (row["created_at"],))
+            return float(cur.fetchone()["s"] or 0)
+        except Exception:
+            return 1e9
+
+    def log_referral_event(self, referrer_id: int, invited_id: int):
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute(
+                "INSERT OR IGNORE INTO referral_events (referrer_id, invited_id) VALUES (?, ?)",
+                (referrer_id, invited_id)
+            )
+            self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] log_referral_event: {e}")
 
     def add_pending_stars(self, user_id: int, amount: float):
         try:
@@ -393,10 +539,6 @@ class Database:
             return 0
 
     def get_all_referrers(self) -> list:
-        """
-        Все, у кого есть приглашённые и/или накопленные звёзды.
-        Имена берём из основной БД (users), реферальные данные — из referrals.db.
-        """
         try:
             cur = self.ref_conn.cursor()
             cur.execute("""
@@ -428,7 +570,6 @@ class Database:
                 if invited_total == 0 and pending == 0 and awarded == 0:
                     continue
 
-                # Данные о пользователе из основной БД (может отсутствовать — тогда пусто)
                 main_cur.execute(
                     "SELECT username, first_name, last_name FROM users WHERE user_id = ?",
                     (uid,)
@@ -682,7 +823,7 @@ class Database:
             }
         return None
 
-    # ============ СТАТИСТИКА ============
+    # ============ СТАТИСТИКА ОБЩАЯ ============
     def get_users_count(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM users")
