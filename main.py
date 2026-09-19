@@ -43,7 +43,7 @@ if not RANVIK_API_KEY:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_VIDEO_PATH = os.path.join(BASE_DIR, "instruction.mp4")
-BANNER_PATH = os.path.join(BASE_DIR, "banner.gif")
+BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 CHANNEL_USERNAME = "@NovoeTelegram"
 BOT_USERNAME = "XrayGramRobot"
 
@@ -690,7 +690,7 @@ else:
 if os.path.exists(BANNER_PATH):
     logger.info("✅ Баннер найден")
 else:
-    logger.warning("❌ Баннер НЕ найден (файл banner.gif отсутствует)")
+    logger.warning("❌ Баннер НЕ найден (файл banner.png отсутствует)")
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
@@ -765,7 +765,7 @@ def main_menu_keyboard(is_admin: bool = False):
         )],
         [
             InlineKeyboardButton(
-                text="Мини апп",
+                text="Mini App",
                 callback_data="mini_app",
                 icon_custom_emoji_id="5280867942056108177"
             ),
@@ -1255,7 +1255,7 @@ async def start_command(message: types.Message):
     )
     if os.path.exists(BANNER_PATH):
         banner = FSInputFile(BANNER_PATH)
-        await message.answer_animation(animation=banner, caption=main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
+        await message.answer_photo(photo=banner, caption=main_text, parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
     else:
         await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
@@ -1454,9 +1454,9 @@ async def check_subscription(callback: types.CallbackQuery):
             )
             if os.path.exists(BANNER_PATH):
                 banner = FSInputFile(BANNER_PATH)
-                await bot.send_animation(
+                await bot.send_photo(
                     chat_id=user_id,
-                    animation=banner,
+                    photo=banner,
                     caption=main_text,
                     parse_mode="HTML",
                     reply_markup=main_menu_keyboard(is_admin)
@@ -1852,9 +1852,9 @@ async def back_to_main(callback: types.CallbackQuery):
         pass
     if os.path.exists(BANNER_PATH):
         banner = FSInputFile(BANNER_PATH)
-        await bot.send_animation(
+        await bot.send_photo(
             chat_id=user_id,
-            animation=banner,
+            photo=banner,
             caption=main_text,
             parse_mode="HTML",
             reply_markup=main_menu_keyboard(is_admin)
