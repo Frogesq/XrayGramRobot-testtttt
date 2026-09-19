@@ -207,10 +207,6 @@
                         <span class="ref-label">Ожидают выдачи</span>
                         <span class="ref-value">${pending.toFixed(1)} звёзд</span>
                     </div>
-                    <div class="ref-row">
-                        <span class="ref-label">Уже выдано</span>
-                        <span class="ref-value">${(ref.awarded_stars || 0).toFixed(1)} звёзд</span>
-                    </div>
 
                     <div class="progress-wrap">
                         <div class="progress-info">
@@ -245,21 +241,6 @@
         async function loadStats() {
             try {
                 const initData = tg?.initData || "";
-                const hasTg = !!window.Telegram?.WebApp;
-                const hasInitData = !!initData;
-
-                // Диагностика: запрос к /api/debug
-                let debugStr = "";
-                try {
-                    const dbg = await fetch("/api/debug", {
-                        headers: { "X-Init-Data": initData }
-                    });
-                    const dbgData = await dbg.json();
-                    console.log("DEBUG:", dbgData);
-                    debugStr = `tg=${hasTg}, initData_len=${dbgData.init_data_length}, present=${dbgData.init_data_present}, token_len=${dbgData.token_len}`;
-                } catch (e) {
-                    debugStr = `debug ошибка: ${e.message}`;
-                }
 
                 const resp = await fetch("/api/stats", {
                     headers: { "X-Init-Data": initData }
@@ -268,10 +249,7 @@
                 if (!resp.ok) {
                     let errText = "";
                     try { errText = await resp.text(); } catch (e) {}
-                    renderError(
-                        `Не удалось загрузить статистику`,
-                        `Статус: ${resp.status}\nОтвет: ${errText}\n\n${debugStr}`
-                    );
+                    renderError("Не удалось загрузить статистику", `Статус: ${resp.status}\n${errText}`);
                     return;
                 }
 
