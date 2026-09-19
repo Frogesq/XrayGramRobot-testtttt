@@ -2,42 +2,423 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>XrayGram</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --bg: var(--tg-theme-bg-color, #0f0f0f);
+            --bg-secondary: var(--tg-theme-secondary-bg-color, #1a1a1a);
+            --text: var(--tg-theme-text-color, #ffffff);
+            --hint: var(--tg-theme-hint-color, #8b8b8b);
+            --accent: var(--tg-theme-button-color, #3a7afe);
+            --divider: rgba(255, 255, 255, 0.06);
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: var(--tg-theme-bg-color, #ffffff);
-            color: var(--tg-theme-text-color, #000000);
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            padding: 16px;
+            padding-top: calc(16px + env(safe-area-inset-top));
+            padding-bottom: calc(16px + env(safe-area-inset-bottom));
+            font-size: 15px;
+            line-height: 1.5;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        .container {
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        .profile {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 20px 0 24px;
+        }
+
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-secondary);
             display: flex;
             align-items: center;
             justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
+            font-size: 22px;
+            font-weight: 600;
+            color: var(--hint);
+            flex-shrink: 0;
+            overflow: hidden;
         }
-        .card {
-            text-align: center;
-            padding: 40px 30px;
-            border-radius: 20px;
-            background: var(--tg-theme-secondary-bg-color, #f4f4f5);
-            max-width: 400px;
+
+        .avatar img {
             width: 100%;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+            height: 100%;
+            object-fit: cover;
         }
-        h1 { font-size: 42px; margin-bottom: 12px; }
-        p { font-size: 16px; opacity: 0.7; }
+
+        .profile-info {
+            min-width: 0;
+            flex: 1;
+        }
+
+        .profile-name {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .profile-meta {
+            font-size: 13px;
+            color: var(--hint);
+            margin-top: 2px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--hint);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin: 24px 0 10px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .card-value {
+            font-size: 26px;
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .card-label {
+            font-size: 12px;
+            color: var(--hint);
+            font-weight: 400;
+        }
+
+        .referral-card {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            padding: 18px;
+        }
+
+        .ref-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            font-size: 14px;
+        }
+
+        .ref-row + .ref-row {
+            border-top: 1px solid var(--divider);
+        }
+
+        .ref-label {
+            color: var(--hint);
+        }
+
+        .ref-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-wrap {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--divider);
+        }
+
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--hint);
+            margin-bottom: 8px;
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+            transition: width 0.4s ease;
+            width: 0%;
+        }
+
+        .ref-link-block {
+            margin-top: 14px;
+            padding-top: 14px;
+            border-top: 1px solid var(--divider);
+        }
+
+        .ref-link-label {
+            font-size: 12px;
+            color: var(--hint);
+            margin-bottom: 8px;
+        }
+
+        .ref-link {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.04);
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 12px;
+            color: var(--text);
+            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            overflow: hidden;
+        }
+
+        .ref-link code {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: none;
+            padding: 0;
+            font-size: 12px;
+        }
+
+        .copy-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+
+        .copy-btn:active {
+            opacity: 0.7;
+        }
+
+        .loader {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 0;
+            color: var(--hint);
+            font-size: 14px;
+        }
+
+        .error {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--hint);
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
-    <div class="card">
-        <h1>Привет</h1>
-        <p>XrayGram работает</p>
+    <div class="container" id="app">
+        <div class="loader">Загрузка…</div>
     </div>
+
     <script>
         const tg = window.Telegram?.WebApp;
-        if (tg) { tg.ready(); tg.expand(); }
+        if (tg) {
+            tg.ready();
+            tg.expand();
+        }
+
+        function escapeHtml(s) {
+            if (s == null) return "";
+            return String(s)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;");
+        }
+
+        function formatNumber(n) {
+            return (n ?? 0).toLocaleString("ru-RU");
+        }
+
+        function renderProfile(user) {
+            const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Пользователь";
+            const initial = (user.first_name || "?").charAt(0).toUpperCase();
+            const avatar = user.photo_url
+                ? `<img src="${escapeHtml(user.photo_url)}" alt="">`
+                : escapeHtml(initial);
+
+            let meta = `ID: ${user.id}`;
+            if (user.username) meta = `@${escapeHtml(user.username)} · ${meta}`;
+
+            return `
+                <div class="profile">
+                    <div class="avatar">${avatar}</div>
+                    <div class="profile-info">
+                        <div class="profile-name">${escapeHtml(fullName)}</div>
+                        <div class="profile-meta">${meta}</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderStats(stats) {
+            return `
+                <div class="section-title">Статистика</div>
+                <div class="grid">
+                    <div class="card">
+                        <div class="card-value">${formatNumber(stats.messages_saved)}</div>
+                        <div class="card-label">Сообщений сохранено</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-value">${formatNumber(stats.deleted_tracked)}</div>
+                        <div class="card-label">Удалёнок отслежено</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-value">${formatNumber(stats.edited_tracked)}</div>
+                        <div class="card-label">Изменений отслежено</div>
+                    </div>
+                    <div class="card">
+                        <div class="card-value">${formatNumber(stats.active_connections)}</div>
+                        <div class="card-label">Активных чатов</div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderReferral(ref) {
+            const pending = ref.pending_stars || 0;
+            const minWithdraw = ref.min_withdraw || 15;
+            const progress = Math.min(100, (pending / minWithdraw) * 100);
+
+            const refLink = `https://t.me/XrayGramRobot?start=ref_${tg?.initDataUnsafe?.user?.id || ""}`;
+
+            return `
+                <div class="section-title">Рефералы</div>
+                <div class="referral-card">
+                    <div class="ref-row">
+                        <span class="ref-label">Зашли по ссылке</span>
+                        <span class="ref-value">${formatNumber(ref.invited_total)}</span>
+                    </div>
+                    <div class="ref-row">
+                        <span class="ref-label">Подключили бота</span>
+                        <span class="ref-value">${formatNumber(ref.invited_credited)}</span>
+                    </div>
+                    <div class="ref-row">
+                        <span class="ref-label">Ожидают выдачи</span>
+                        <span class="ref-value">${pending.toFixed(1)} звёзд</span>
+                    </div>
+                    <div class="ref-row">
+                        <span class="ref-label">Уже выдано</span>
+                        <span class="ref-value">${(ref.awarded_stars || 0).toFixed(1)} звёзд</span>
+                    </div>
+
+                    <div class="progress-wrap">
+                        <div class="progress-info">
+                            <span>До вывода минимум ${minWithdraw}</span>
+                            <span>${pending.toFixed(1)} / ${minWithdraw}</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+
+                    <div class="ref-link-block">
+                        <div class="ref-link-label">Ваша реферальная ссылка</div>
+                        <div class="ref-link">
+                            <code id="refLink">${escapeHtml(refLink)}</code>
+                            <button class="copy-btn" id="copyBtn">Копировать</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function renderError(msg) {
+            document.getElementById("app").innerHTML = `
+                <div class="error">${escapeHtml(msg)}</div>
+            `;
+        }
+
+        async function loadStats() {
+            try {
+                const initData = tg?.initData || "";
+                const resp = await fetch("/api/stats", {
+                    headers: { "X-Init-Data": initData }
+                });
+                if (!resp.ok) {
+                    renderError("Не удалось загрузить статистику");
+                    return;
+                }
+                const data = await resp.json();
+
+                document.getElementById("app").innerHTML = `
+                    ${renderProfile(data.user)}
+                    ${renderStats(data.stats)}
+                    ${renderReferral(data.referral)}
+                `;
+
+                const copyBtn = document.getElementById("copyBtn");
+                if (copyBtn) {
+                    copyBtn.addEventListener("click", () => {
+                        const link = document.getElementById("refLink").textContent;
+                        if (navigator.clipboard) {
+                            navigator.clipboard.writeText(link).then(() => {
+                                copyBtn.textContent = "Готово";
+                                setTimeout(() => copyBtn.textContent = "Копировать", 1200);
+                            });
+                        } else {
+                            const ta = document.createElement("textarea");
+                            ta.value = link;
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand("copy");
+                            document.body.removeChild(ta);
+                            copyBtn.textContent = "Готово";
+                            setTimeout(() => copyBtn.textContent = "Копировать", 1200);
+                        }
+                    });
+                }
+            } catch (e) {
+                console.error(e);
+                renderError("Ошибка соединения");
+            }
+        }
+
+        loadStats();
     </script>
 </body>
 </html>
