@@ -851,11 +851,42 @@ async def api_stats(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_settings(request):
+    init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
+
+    if not init_data:
+        return web.json_response({"error": "no_init_data"}, status=401)
+
+    user = _validate_init_data(init_data)
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+
+    user_id = int(user.get("id", 0))
+    if not user_id:
+        return web.json_response({"error": "no_user"}, status=400)
+
+    try:
+        mode = db.get_text_mode(user_id)
+        translate = db.get_translate_to(user_id)
+        return web.json_response({
+            "scam_check": bool(db.get_scam_check(user_id)),
+            "text_mode": mode,
+            "text_mode_name": MODE_NAMES.get(mode, "Выкл"),
+            "translate_to": translate,
+            "translate_name": TRANSLATE_LANGS.get(translate, "Выкл"),
+            "online_mode": bool(db.get_online_mode(user_id)),
+        })
+    except Exception as e:
+        logger.error(f"[MINI_APP] Ошибка в api_settings: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def mini_app_server():
     try:
         app = web.Application()
         app.router.add_get("/", serve_index)
         app.router.add_get("/api/stats", api_stats)
+        app.router.add_get("/api/settings", api_settings)
         app.router.add_get("/{name}", serve_static)
 
         port = int(os.getenv("PORT", "3000"))
@@ -2437,17 +2468,14 @@ async def online_mode_loop():
 
         await asyncio.sleep(20)
 
-# ============ ФОНОВАЯ ЗАДАЧА: АВТОПЕРЕЗАПУСК КАЖДЫЕ 3 ЧАСА ============
 async def auto_restart_loop():
-    """Перезапускает контейнер каждые 3 часа для сброса памяти и соединений."""
-    RESTART_INTERVAL = 3 * 60 * 60  # 3 часа в секундах
+    RESTART_INTERVAL = 3 * 60 * 60
     logger.info(f"[AUTO_RESTART] Таймер запущен — перезапуск каждые {RESTART_INTERVAL // 3600} ч.")
     while True:
         await asyncio.sleep(RESTART_INTERVAL)
-        logger.info("[AUTO_RESTART] ⏰ Наступило время планового перезапуска. Выход...")
+        logger.info("[AUTO_RESTART] Наступило время планового перезапуска. Выход...")
         await asyncio.sleep(1)
         os._exit(0)
-# ==================================================================
 
 async def main():
     try:
