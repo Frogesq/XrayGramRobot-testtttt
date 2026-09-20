@@ -9,32 +9,38 @@
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         :root {
-            --bg: var(--tg-theme-bg-color, #0f0f0f);
-            --bg-secondary: var(--tg-theme-secondary-bg-color, #1a1a1a);
-            --bg-hover: rgba(255, 255, 255, 0.04);
+            --bg: var(--tg-theme-bg-color, #0e0e10);
+            --bg-secondary: var(--tg-theme-secondary-bg-color, #17171a);
+            --bg-elevated: rgba(255, 255, 255, 0.03);
+            --bg-hover: rgba(255, 255, 255, 0.06);
             --text: var(--tg-theme-text-color, #ffffff);
-            --hint: var(--tg-theme-hint-color, #8b8b8b);
+            --text-secondary: rgba(255, 255, 255, 0.85);
+            --hint: var(--tg-theme-hint-color, #8a8a92);
             --accent: var(--tg-theme-button-color, #3a7afe);
+            --accent-soft: rgba(58, 122, 254, 0.14);
             --divider: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.05);
             --danger: #ff6b6b;
-            --success: #22c55e;
+            --success: #2ecc71;
         }
 
         html, body { height: 100%; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
             background: var(--bg);
             color: var(--text);
             font-size: 15px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
+            letter-spacing: -0.01em;
         }
 
-        /* ============ АНИМАЦИИ ============ */
+        /* ======================= АНИМАЦИИ ======================= */
         @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(8px); }
+            from { opacity: 0; transform: translateY(6px); }
             to   { opacity: 1; transform: translateY(0); }
         }
         @keyframes fadeIn {
@@ -42,12 +48,13 @@
             to   { opacity: 1; }
         }
         @keyframes scaleIn {
-            from { opacity: 0; transform: scale(0.94); }
+            from { opacity: 0; transform: scale(0.96); }
             to   { opacity: 1; transform: scale(1); }
         }
-        @keyframes pulseAvatar {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0.25); }
-            50%      { box-shadow: 0 0 0 8px rgba(58, 122, 254, 0); }
+        @keyframes pulseRing {
+            0%   { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0.35); }
+            70%  { box-shadow: 0 0 0 10px rgba(58, 122, 254, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0); }
         }
         @keyframes shimmer {
             0%   { background-position: -200% 0; }
@@ -56,12 +63,22 @@
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
+        @keyframes tabSlide {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes countUp {
+            from { opacity: 0; transform: translateY(4px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
 
-        /* ============ ВЕРХНИЕ ТАБЫ ============ */
+        /* ======================= ТАБЫ ======================= */
         .tabs-bar {
             position: sticky;
             top: 0;
-            background: var(--bg);
+            background: color-mix(in srgb, var(--bg) 92%, transparent);
+            backdrop-filter: blur(24px) saturate(180%);
+            -webkit-backdrop-filter: blur(24px) saturate(180%);
             border-bottom: 1px solid var(--divider);
             z-index: 100;
             padding-top: env(safe-area-inset-top);
@@ -69,28 +86,40 @@
 
         .tabs-scroll {
             display: flex;
-            gap: 4px;
+            gap: 2px;
             overflow-x: auto;
             scrollbar-width: none;
             -ms-overflow-style: none;
-            padding: 8px 12px;
+            padding: 10px 12px;
             scroll-behavior: smooth;
         }
         .tabs-scroll::-webkit-scrollbar { display: none; }
 
         .tab-btn {
+            position: relative;
             flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
             background: none;
             border: none;
             color: var(--hint);
             font-family: inherit;
-            font-size: 14px;
+            font-size: 13.5px;
             font-weight: 500;
-            padding: 8px 14px;
-            border-radius: 10px;
+            padding: 8px 12px;
+            border-radius: 9px;
             cursor: pointer;
             transition: color 0.2s ease, background 0.2s ease;
             white-space: nowrap;
+            letter-spacing: -0.005em;
+        }
+        .tab-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke-width: 2;
+            opacity: 0.85;
+            transition: opacity 0.2s ease;
         }
         .tab-btn:active { background: var(--bg-hover); }
         .tab-btn.active {
@@ -98,26 +127,32 @@
             background: var(--bg-secondary);
             font-weight: 600;
         }
+        .tab-btn.active svg { opacity: 1; }
 
-        /* ============ КОНТЕНТ ============ */
+        /* ======================= КОНТЕНТ ======================= */
         .tab-content {
             display: none;
-            padding: 20px 16px 32px;
+            padding: 22px 16px 40px;
             max-width: 480px;
             margin: 0 auto;
         }
         .tab-content.active {
             display: block;
-            animation: fadeInUp 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+            animation: tabSlide 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
-        /* ============ ЗАГОЛОВКИ ============ */
         .page-title {
-            font-size: 24px;
+            font-size: 25px;
             font-weight: 700;
-            letter-spacing: -0.03em;
-            margin-bottom: 18px;
+            letter-spacing: -0.035em;
+            margin-bottom: 4px;
             animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .page-subtitle {
+            font-size: 13.5px;
+            color: var(--hint);
+            margin-bottom: 18px;
+            animation: fadeIn 0.5s ease both;
         }
 
         .section-label {
@@ -125,106 +160,134 @@
             font-weight: 600;
             color: var(--hint);
             text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin: 20px 0 8px 4px;
+            letter-spacing: 0.09em;
+            margin: 22px 0 8px 2px;
             animation: fadeIn 0.4s ease both;
         }
         .section-label:first-of-type { margin-top: 4px; }
 
-        /* ============ ПРОФИЛЬ ============ */
+        /* ======================= ПРОФИЛЬ ======================= */
         .profile-header {
             display: flex;
             align-items: center;
-            gap: 14px;
-            margin-bottom: 20px;
-            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            gap: 15px;
+            margin-bottom: 22px;
+            animation: fadeInUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
         .avatar {
-            width: 60px; height: 60px;
+            position: relative;
+            width: 64px; height: 64px;
             border-radius: 50%;
             background: var(--bg-secondary);
             display: flex; align-items: center; justify-content: center;
-            font-size: 22px; font-weight: 600; color: var(--hint);
+            font-size: 24px; font-weight: 600; color: var(--hint);
             flex-shrink: 0; overflow: hidden;
-            animation: pulseAvatar 2.4s ease-in-out infinite;
+            animation: pulseRing 3s ease-in-out infinite;
         }
-        .avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .avatar::before {
+            content: "";
+            position: absolute;
+            inset: -3px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent), #7bb1ff, #c084fc);
+            z-index: -1;
+            opacity: 0.75;
+        }
+        .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 
         .profile-info { min-width: 0; flex: 1; }
         .profile-name {
-            font-size: 19px; font-weight: 700;
-            letter-spacing: -0.02em;
+            font-size: 20px; font-weight: 700;
+            letter-spacing: -0.025em;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
         .profile-meta {
             font-size: 13px; color: var(--hint); margin-top: 2px;
+            letter-spacing: -0.005em;
         }
 
-        /* ============ КАРТОЧКИ ============ */
+        /* ======================= СТАТИСТИКА ======================= */
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 9px;
+            margin-bottom: 6px;
+        }
+        .stat-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            padding: 15px 16px;
+            animation: scaleIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            transition: transform 0.15s ease, border-color 0.2s ease;
+        }
+        .stat-card:active {
+            transform: scale(0.98);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .stat-value {
+            font-size: 26px; font-weight: 700;
+            letter-spacing: -0.04em;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 2px;
+            animation: countUp 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--hint);
+            letter-spacing: -0.005em;
+        }
+
+        /* ======================= КАРТОЧКИ ======================= */
         .card {
             background: var(--bg-secondary);
-            border-radius: 14px;
-            padding: 14px 16px;
+            border: 1px solid var(--border);
+            border-radius: 15px;
+            padding: 15px 16px;
             margin-bottom: 10px;
             animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
 
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 8px;
-        }
-        .stat-card {
-            background: var(--bg-secondary);
-            border-radius: 14px;
-            padding: 14px 16px;
-            animation: scaleIn 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
-        }
-        .stat-value {
-            font-size: 24px; font-weight: 700;
-            letter-spacing: -0.03em;
-            font-variant-numeric: tabular-nums;
-            margin-bottom: 2px;
-        }
-        .stat-label { font-size: 12px; color: var(--hint); }
-
-        /* ============ КОМАНДЫ ============ */
+        /* ======================= КОМАНДЫ ======================= */
         .command-card {
             background: var(--bg-secondary);
-            border-radius: 12px;
+            border: 1px solid var(--border);
+            border-radius: 13px;
             padding: 12px 14px;
             margin-bottom: 8px;
             animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+            transition: border-color 0.2s ease;
         }
+        .command-card:active { border-color: rgba(255, 255, 255, 0.1); }
         .command-name {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
             font-size: 13px;
             font-weight: 600;
             color: var(--accent);
             margin-bottom: 4px;
+            letter-spacing: -0.01em;
         }
         .command-desc {
             font-size: 13px;
             color: var(--hint);
-            line-height: 1.45;
+            line-height: 1.5;
         }
         .command-desc code {
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
             font-size: 12px;
             background: var(--bg-hover);
-            padding: 1px 5px;
-            border-radius: 4px;
-            color: var(--text);
+            padding: 1px 6px;
+            border-radius: 5px;
+            color: var(--text-secondary);
         }
 
-        /* ============ НАСТРОЙКИ ============ */
+        /* ======================= НАСТРОЙКИ ======================= */
         .setting-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 12px 0;
+            padding: 13px 0;
             gap: 12px;
         }
         .setting-row + .setting-row {
@@ -233,37 +296,52 @@
         .setting-info { flex: 1; min-width: 0; }
         .setting-name {
             font-size: 14px;
-            font-weight: 500;
+            font-weight: 600;
             margin-bottom: 2px;
+            letter-spacing: -0.005em;
         }
         .setting-desc {
             font-size: 12px;
             color: var(--hint);
-            line-height: 1.4;
+            line-height: 1.45;
         }
         .setting-value {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
             font-size: 12px;
             font-weight: 600;
             padding: 5px 10px;
             border-radius: 8px;
             background: var(--bg-hover);
             white-space: nowrap;
+            letter-spacing: -0.005em;
+        }
+        .setting-value::before {
+            content: "";
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--hint);
         }
         .setting-value.on { color: var(--success); }
+        .setting-value.on::before { background: var(--success); }
         .setting-value.off { color: var(--hint); }
 
         .hint-note {
-            font-size: 12px;
+            font-size: 12.5px;
             color: var(--hint);
-            line-height: 1.5;
-            padding: 12px 4px;
+            line-height: 1.55;
+            padding: 10px 4px;
             animation: fadeIn 0.4s ease both;
+            text-align: center;
         }
 
-        /* ============ РЕФЕРАЛЫ ============ */
+        /* ======================= РЕФЕРАЛЫ ======================= */
         .referral-card {
             background: var(--bg-secondary);
-            border-radius: 14px;
+            border: 1px solid var(--border);
+            border-radius: 15px;
             padding: 16px;
             margin-bottom: 10px;
             animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -272,54 +350,60 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 7px 0;
+            padding: 8px 0;
             font-size: 14px;
         }
         .ref-row + .ref-row { border-top: 1px solid var(--divider); }
         .ref-label { color: var(--hint); }
-        .ref-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .ref-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.01em;
+        }
 
         .progress-wrap {
-            margin-top: 12px;
-            padding-top: 12px;
+            margin-top: 14px;
+            padding-top: 14px;
             border-top: 1px solid var(--divider);
         }
         .progress-info {
             display: flex; justify-content: space-between;
             font-size: 12px; color: var(--hint);
-            margin-bottom: 6px;
+            margin-bottom: 8px;
+            font-variant-numeric: tabular-nums;
         }
         .progress-bar {
-            height: 5px;
+            height: 6px;
             background: rgba(255, 255, 255, 0.06);
             border-radius: 3px;
             overflow: hidden;
         }
         .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, var(--accent), #5c9bff, var(--accent));
+            background: linear-gradient(90deg, var(--accent), #7bb1ff, var(--accent));
             background-size: 200% 100%;
             border-radius: 3px;
             transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
             width: 0%;
             animation: shimmer 3s linear infinite;
+            box-shadow: 0 0 10px rgba(58, 122, 254, 0.4);
         }
 
         .ref-link-block {
-            margin-top: 12px;
-            padding-top: 12px;
+            margin-top: 14px;
+            padding-top: 14px;
             border-top: 1px solid var(--divider);
         }
         .ref-link-label {
-            font-size: 12px; color: var(--hint); margin-bottom: 6px;
+            font-size: 12px; color: var(--hint); margin-bottom: 8px;
         }
         .ref-link {
             display: flex; gap: 8px; align-items: center;
             background: var(--bg-hover);
             border-radius: 10px;
-            padding: 9px 11px;
+            padding: 10px 12px;
             font-size: 12px;
-            font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
             overflow: hidden;
         }
         .ref-link code {
@@ -330,36 +414,40 @@
             background: none;
             padding: 0;
             font-size: 12px;
-            color: var(--text);
+            color: var(--text-secondary);
+            letter-spacing: -0.01em;
         }
         .copy-btn {
             background: var(--accent);
             color: white;
             border: none;
             border-radius: 8px;
-            padding: 6px 10px;
+            padding: 6px 11px;
             font-size: 11px;
             font-weight: 600;
             cursor: pointer;
             flex-shrink: 0;
             transition: transform 0.15s ease, background 0.2s ease;
+            font-family: inherit;
+            letter-spacing: -0.005em;
         }
-        .copy-btn:active { transform: scale(0.9); }
+        .copy-btn:active { transform: scale(0.92); }
         .copy-btn.copied { background: var(--success); }
 
-        /* ============ ПОДКЛЮЧИТЬ БОТА ============ */
+        /* ======================= ИНСТРУКЦИЯ ======================= */
         .steps-list {
             list-style: none;
             counter-reset: step;
         }
         .steps-list li {
             background: var(--bg-secondary);
-            border-radius: 12px;
-            padding: 12px 14px 12px 48px;
+            border: 1px solid var(--border);
+            border-radius: 13px;
+            padding: 13px 15px 13px 52px;
             margin-bottom: 8px;
             position: relative;
-            font-size: 13px;
-            line-height: 1.5;
+            font-size: 13.5px;
+            line-height: 1.55;
             animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
             counter-increment: step;
         }
@@ -369,12 +457,13 @@
             left: 14px;
             top: 50%;
             transform: translateY(-50%);
-            width: 24px; height: 24px;
+            width: 26px; height: 26px;
             border-radius: 50%;
-            background: var(--accent);
+            background: linear-gradient(135deg, var(--accent), #6c9dff);
             color: white;
             display: flex; align-items: center; justify-content: center;
             font-size: 12px; font-weight: 700;
+            box-shadow: 0 2px 8px rgba(58, 122, 254, 0.3);
         }
 
         .action-btn {
@@ -383,45 +472,68 @@
             background: var(--accent);
             color: white;
             border: none;
-            border-radius: 12px;
-            padding: 14px;
-            font-size: 14px;
+            border-radius: 13px;
+            padding: 15px;
+            font-size: 14.5px;
             font-weight: 600;
             cursor: pointer;
             text-align: center;
             text-decoration: none;
-            margin-top: 14px;
-            transition: transform 0.15s ease, opacity 0.15s ease;
-            animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+            margin-top: 16px;
+            transition: transform 0.15s ease, opacity 0.15s ease, box-shadow 0.2s ease;
+            animation: fadeInUp 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+            letter-spacing: -0.01em;
+            box-shadow: 0 4px 16px rgba(58, 122, 254, 0.25);
         }
-        .action-btn:active { transform: scale(0.97); opacity: 0.9; }
+        .action-btn:active {
+            transform: scale(0.98);
+            opacity: 0.92;
+            box-shadow: 0 2px 8px rgba(58, 122, 254, 0.2);
+        }
 
-        /* ============ СООБЩЕСТВО ============ */
+        /* ======================= СООБЩЕСТВО ======================= */
         .contact-card {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 13px;
             background: var(--bg-secondary);
-            border-radius: 12px;
+            border: 1px solid var(--border);
+            border-radius: 13px;
             padding: 14px 16px;
             margin-bottom: 8px;
             text-decoration: none;
             color: var(--text);
-            transition: transform 0.15s ease, background 0.15s ease;
+            transition: transform 0.15s ease, border-color 0.2s ease;
             animation: fadeInUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
         }
         .contact-card:active {
-            transform: scale(0.98);
-            background: var(--bg-hover);
+            transform: scale(0.985);
+            border-color: rgba(255, 255, 255, 0.1);
+        }
+        .contact-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 11px;
+            background: var(--accent-soft);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: var(--accent);
+        }
+        .contact-icon svg {
+            width: 19px;
+            height: 19px;
         }
         .contact-info { flex: 1; min-width: 0; }
         .contact-name {
-            font-size: 14px;
+            font-size: 14.5px;
             font-weight: 600;
-            margin-bottom: 1px;
+            margin-bottom: 2px;
+            letter-spacing: -0.005em;
         }
         .contact-desc {
-            font-size: 12px;
+            font-size: 12.5px;
             color: var(--hint);
             white-space: nowrap;
             overflow: hidden;
@@ -429,14 +541,15 @@
         }
         .contact-arrow {
             color: var(--hint);
-            font-size: 16px;
+            font-size: 18px;
             flex-shrink: 0;
+            opacity: 0.6;
         }
 
-        /* ============ ЗАГРУЗКА ============ */
+        /* ======================= ЗАГРУЗКА ======================= */
         .loader {
             display: flex; align-items: center; justify-content: center;
-            padding: 60px 0; color: var(--hint); font-size: 13px;
+            padding: 60px 0; color: var(--hint); font-size: 13.5px;
             animation: fadeIn 0.3s ease;
         }
         .spinner {
@@ -449,44 +562,109 @@
         }
 
         .error-box {
-            padding: 20px;
+            padding: 22px;
             color: var(--hint);
             font-size: 13px;
             background: var(--bg-secondary);
+            border: 1px solid var(--border);
             border-radius: 14px;
             margin-top: 8px;
             animation: fadeInUp 0.35s ease;
             white-space: pre-wrap;
             word-break: break-word;
-            line-height: 1.5;
+            line-height: 1.55;
         }
         .error-title { color: var(--danger); font-weight: 600; margin-bottom: 6px; }
+
+        /* ======================= БЛОК "КАК ЭТО РАБОТАЕТ" ======================= */
+        .info-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .info-item {
+            display: flex;
+            gap: 10px;
+            font-size: 13.5px;
+            line-height: 1.5;
+            color: var(--text-secondary);
+        }
+        .info-num {
+            flex-shrink: 0;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            font-weight: 700;
+            margin-top: 1px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- ВЕРХНИЕ ТАБЫ -->
     <div class="tabs-bar">
         <div class="tabs-scroll" id="tabsScroll">
-            <button class="tab-btn active" data-tab="profile">Профиль</button>
-            <button class="tab-btn" data-tab="commands">Команды</button>
-            <button class="tab-btn" data-tab="settings">Настройки</button>
-            <button class="tab-btn" data-tab="referral">Звёзды</button>
-            <button class="tab-btn" data-tab="instruction">Подключить</button>
-            <button class="tab-btn" data-tab="community">Сообщество</button>
+            <button class="tab-btn active" data-tab="profile">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                </svg>
+                Профиль
+            </button>
+            <button class="tab-btn" data-tab="commands">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 17 10 11 4 5"/>
+                    <line x1="12" y1="19" x2="20" y2="19"/>
+                </svg>
+                Команды
+            </button>
+            <button class="tab-btn" data-tab="settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                Настройки
+            </button>
+            <button class="tab-btn" data-tab="referral">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+                </svg>
+                Звёзды
+            </button>
+            <button class="tab-btn" data-tab="instruction">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 2v6"/>
+                    <path d="M15 2v6"/>
+                    <path d="M6 8h12v4a6 6 0 0 1-12 0V8z"/>
+                    <path d="M12 18v4"/>
+                </svg>
+                Подключить
+            </button>
+            <button class="tab-btn" data-tab="community">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                Сообщество
+            </button>
         </div>
     </div>
 
-    <!-- ПРОФИЛЬ -->
     <div class="tab-content active" id="tab-profile">
         <div id="profile-content">
             <div class="loader"><div class="spinner"></div>Загрузка…</div>
         </div>
     </div>
 
-    <!-- КОМАНДЫ -->
     <div class="tab-content" id="tab-commands">
         <h1 class="page-title">Команды</h1>
+        <div class="page-subtitle">Все доступные команды бота</div>
 
         <div class="section-label">Управление чатом</div>
         <div class="command-card">
@@ -531,9 +709,9 @@
         </div>
     </div>
 
-    <!-- НАСТРОЙКИ -->
     <div class="tab-content" id="tab-settings">
         <h1 class="page-title">Настройки</h1>
+        <div class="page-subtitle">Текущее состояние ваших настроек</div>
         <div id="settings-content">
             <div class="loader"><div class="spinner"></div>Загрузка…</div>
         </div>
@@ -542,15 +720,25 @@
         </div>
     </div>
 
-    <!-- ЗАРАБОТАТЬ ЗВЁЗДЫ -->
     <div class="tab-content" id="tab-referral">
         <h1 class="page-title">Заработать звёзды</h1>
+        <div class="page-subtitle">Приглашайте друзей и получайте награду</div>
 
         <div class="card">
-            <div class="setting-name" style="margin-bottom: 8px;">Как это работает</div>
-            <div class="command-desc" style="margin-bottom: 6px;">1. Отправьте свою реферальную ссылку друзьям.</div>
-            <div class="command-desc" style="margin-bottom: 6px;">2. Когда друг перейдёт по ссылке и подключит бота, вам начислится 1.5 звезды.</div>
-            <div class="command-desc">3. Админ выдаёт звёзды вручную.</div>
+            <div class="info-list">
+                <div class="info-item">
+                    <div class="info-num">1</div>
+                    <div>Отправьте свою реферальную ссылку друзьям.</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-num">2</div>
+                    <div>Когда друг перейдёт по ссылке и подключит бота, вам начислится <b>1.5 звезды</b>.</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-num">3</div>
+                    <div>Админ выдаёт звёзды вручную.</div>
+                </div>
+            </div>
         </div>
 
         <div id="referral-content">
@@ -562,9 +750,9 @@
         </div>
     </div>
 
-    <!-- ПОДКЛЮЧИТЬ БОТА -->
     <div class="tab-content" id="tab-instruction">
         <h1 class="page-title">Подключить бота</h1>
+        <div class="page-subtitle">Пошаговая инструкция</div>
 
         <ul class="steps-list">
             <li>Для использования бота <b>НЕОБЯЗАТЕЛЬНО</b> иметь Telegram Premium.</li>
@@ -578,15 +766,20 @@
         </a>
 
         <div class="hint-note">
-            Заметили ошибку? Бот завис? Долго грузит? Напишите в поддержку: <b>@SupXrayGramRobot</b>
+            Заметили ошибку? Бот завис? Долго грузит?<br>Напишите в поддержку <b>@SupXrayGramRobot</b>
         </div>
     </div>
 
-    <!-- СООБЩЕСТВО -->
     <div class="tab-content" id="tab-community">
         <h1 class="page-title">Сообщество</h1>
+        <div class="page-subtitle">Полезные контакты</div>
 
         <a href="https://t.me/NovoeTelegram" class="contact-card" target="_blank" rel="noopener">
+            <div class="contact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M3 11l19-9-9 19-2-8-8-2z"/>
+                </svg>
+            </div>
             <div class="contact-info">
                 <div class="contact-name">Наш канал</div>
                 <div class="contact-desc">@NovoeTelegram — новости и обновления</div>
@@ -595,6 +788,11 @@
         </a>
 
         <a href="https://t.me/SupXrayGramRobot" class="contact-card" target="_blank" rel="noopener">
+            <div class="contact-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+                </svg>
+            </div>
             <div class="contact-info">
                 <div class="contact-name">Поддержка</div>
                 <div class="contact-desc">@SupXrayGramRobot — поможем с любым вопросом</div>
@@ -602,16 +800,8 @@
             <div class="contact-arrow">›</div>
         </a>
 
-        <a href="https://t.me/XrayGramRobot" class="contact-card" target="_blank" rel="noopener">
-            <div class="contact-info">
-                <div class="contact-name">Бот</div>
-                <div class="contact-desc">@XrayGramRobot — основной бот</div>
-            </div>
-            <div class="contact-arrow">›</div>
-        </a>
-
         <div class="hint-note">
-            Проект создан и поддерживается разработчиком @CryptoViktor.
+            Проект создан и поддерживается разработчиком @CryptoViktor
         </div>
     </div>
 
@@ -629,7 +819,6 @@
             loadedSettings: false,
         };
 
-        // ============ УТИЛИТЫ ============
         function escapeHtml(s) {
             if (s == null) return "";
             return String(s)
@@ -652,7 +841,6 @@
             } catch { return s; }
         }
 
-        // ============ API ============
         async function fetchStats() {
             const initData = tg?.initData || "";
             const resp = await fetch("/api/stats", { headers: { "X-Init-Data": initData } });
@@ -667,11 +855,9 @@
             return resp.json();
         }
 
-        // ============ РЕНДЕР: ПРОФИЛЬ ============
         function renderProfile(data) {
             const user = data.user || {};
             const stats = data.stats || {};
-            const referral = data.referral || {};
 
             const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Пользователь";
             const initial = (user.first_name || "?").charAt(0).toUpperCase();
@@ -691,7 +877,7 @@
 
             const statCardsHtml = statsCards.map((c, i) => `
                 <div class="stat-card" style="animation-delay: ${0.05 + i * 0.05}s">
-                    <div class="stat-value">${formatNumber(c.value)}</div>
+                    <div class="stat-value" style="animation-delay: ${0.15 + i * 0.05}s">${formatNumber(c.value)}</div>
                     <div class="stat-label">${c.label}</div>
                 </div>
             `).join("");
@@ -708,26 +894,9 @@
 
                 <div class="section-label">Статистика</div>
                 <div class="stat-grid">${statCardsHtml}</div>
-
-                <div class="section-label">Рефералы</div>
-                <div class="referral-card">
-                    <div class="ref-row">
-                        <span class="ref-label">Зашли по ссылке</span>
-                        <span class="ref-value">${formatNumber(referral.invited_total)}</span>
-                    </div>
-                    <div class="ref-row">
-                        <span class="ref-label">Подключили бота</span>
-                        <span class="ref-value">${formatNumber(referral.invited_credited)}</span>
-                    </div>
-                    <div class="ref-row">
-                        <span class="ref-label">Ожидают выдачи</span>
-                        <span class="ref-value">${(referral.pending_stars || 0).toFixed(1)} звёзд</span>
-                    </div>
-                </div>
             `;
         }
 
-        // ============ РЕНДЕР: НАСТРОЙКИ ============
         function renderSettings(s) {
             const rows = [
                 {
@@ -771,7 +940,6 @@
             `;
         }
 
-        // ============ РЕНДЕР: РЕФЕРАЛЫ ============
         function renderReferral(ref) {
             const pending = ref.pending_stars || 0;
             const minWithdraw = ref.min_withdraw || 15;
@@ -814,7 +982,6 @@
             `;
         }
 
-        // ============ ЗАГРУЗКА ============
         async function loadStats() {
             const el = document.getElementById("profile-content");
             try {
@@ -896,7 +1063,6 @@
             });
         }
 
-        // ============ ПЕРЕКЛЮЧЕНИЕ ТАБОВ ============
         function switchTab(tabName) {
             document.querySelectorAll(".tab-content").forEach(el => {
                 el.classList.toggle("active", el.id === `tab-${tabName}`);
@@ -930,7 +1096,6 @@
             btn.addEventListener("click", () => switchTab(btn.dataset.tab));
         });
 
-        // ============ СТАРТ ============
         loadStats();
         loadSettings();
     </script>
