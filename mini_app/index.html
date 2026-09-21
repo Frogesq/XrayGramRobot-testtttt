@@ -96,7 +96,6 @@
             z-index: 100;
             padding-top: env(safe-area-inset-top);
         }
-
         .tabs-scroll {
             display: flex;
             overflow-x: auto;
@@ -106,7 +105,6 @@
             scroll-behavior: smooth;
         }
         .tabs-scroll::-webkit-scrollbar { display: none; }
-
         .tab-btn {
             position: relative;
             flex-shrink: 0;
@@ -206,7 +204,6 @@
             margin-bottom: 20px;
             animation: fadeUp 0.6s var(--ease) both;
         }
-
         .avatar {
             position: relative;
             width: 62px;
@@ -1622,150 +1619,6 @@
             }, { passive: true });
 
             document.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
-        })();
-
-        // ======================= ПРОСМОТР КОПИИ УДАЛЁННОГО ЧАТА =======================
-        function getChatIdFromUrl() {
-            try {
-                const params = new URLSearchParams(window.location.search);
-                const chat = params.get('chat');
-                if (chat) return chat;
-            } catch (e) {}
-            const sp = tg?.initDataUnsafe?.start_param;
-            if (sp && sp.startsWith('chat_')) return sp.slice(5);
-            return null;
-        }
-
-        async function openChatCopy(chatId) {
-            const overlay = document.createElement('div');
-            Object.assign(overlay.style, {
-                position: 'fixed',
-                top: '0', right: '0', bottom: '0', left: '0',
-                background: 'rgba(0, 0, 0, 0.65)',
-                zIndex: '10000',
-                display: 'flex',
-                alignItems: 'flex-end',
-                justifyContent: 'center',
-                opacity: '0',
-                transition: 'opacity 0.3s ease',
-            });
-
-            const sheet = document.createElement('div');
-            Object.assign(sheet.style, {
-                width: '100%',
-                maxWidth: '520px',
-                height: '88vh',
-                background: 'var(--bg)',
-                borderRadius: '20px 20px 0 0',
-                overflow: 'hidden',
-                display: 'flex',
-                flexDirection: 'column',
-                transform: 'translateY(100%)',
-                transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
-                border: '1px solid var(--border)',
-                borderBottom: 'none',
-            });
-
-            const header = document.createElement('div');
-            Object.assign(header.style, {
-                padding: '16px 20px',
-                borderBottom: '1px solid var(--divider)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: '12px',
-                flexShrink: '0',
-            });
-            header.innerHTML = `
-                <div style="min-width:0;flex:1;">
-                    <div style="font-size:15px;font-weight:650;color:var(--text);" id="chatTitle">Копия чата</div>
-                    <div style="font-size:12px;color:var(--hint);margin-top:2px;" id="chatSub">Загрузка…</div>
-                </div>
-                <button id="chatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">×</button>
-            `;
-
-            const body = document.createElement('div');
-            Object.assign(body.style, {
-                flex: '1',
-                overflowY: 'auto',
-                padding: '14px 16px 24px',
-                WebkitOverflowScrolling: 'touch',
-            });
-            body.innerHTML = '<div style="padding:60px 0;text-align:center;color:var(--hint);font-size:13px;">Загрузка сообщений…</div>';
-
-            sheet.appendChild(header);
-            sheet.appendChild(body);
-            overlay.appendChild(sheet);
-            document.body.appendChild(overlay);
-
-            requestAnimationFrame(() => requestAnimationFrame(() => {
-                overlay.style.opacity = '1';
-                sheet.style.transform = 'translateY(0)';
-            }));
-
-            function close() {
-                overlay.style.opacity = '0';
-                sheet.style.transform = 'translateY(100%)';
-                setTimeout(() => overlay.remove(), 400);
-            }
-
-            header.querySelector('#chatClose').addEventListener('click', close);
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
-
-            try {
-                const initData = tg?.initData || "";
-                const resp = await fetch(`/api/chat/${encodeURIComponent(chatId)}`, {
-                    headers: { "X-Init-Data": initData }
-                });
-                if (!resp.ok) {
-                    const err = await resp.json().catch(() => ({}));
-                    throw new Error(err.error || `HTTP ${resp.status}`);
-                }
-                const data = await resp.json();
-
-                const titleEl = header.querySelector('#chatTitle');
-                const subEl = header.querySelector('#chatSub');
-
-                if (data.is_chat_deleted) {
-                    titleEl.textContent = '❌ Чат полностью удалён';
-                    titleEl.style.color = 'var(--danger)';
-                }
-                subEl.textContent = `${data.sender_name} · ${data.count} сообщений`;
-
-                if (!data.messages || data.messages.length === 0) {
-                    body.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--hint);font-size:13px;">Сообщений не найдено</div>';
-                    return;
-                }
-
-                body.innerHTML = data.messages.map(m => {
-                    const deleted = m.is_deleted;
-                    const bg = deleted ? 'var(--bg-hover)' : 'var(--bg-secondary)';
-                    const textStyle = deleted ? 'text-decoration:line-through;opacity:0.65;' : '';
-                    return `
-                        <div style="background:${bg};border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">
-                            <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:center;">
-                                <span style="font-size:11.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.from)}</span>
-                                <span style="font-size:10.5px;color:var(--hint);flex-shrink:0;display:flex;gap:6px;align-items:center;">
-                                    ${deleted ? '<span title="Удалено">🗑️</span>' : ''}
-                                    ${escapeHtml(m.date || '')}
-                                </span>
-                            </div>
-                            ${m.text ? `<div style="font-size:13.5px;color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word;${textStyle}">${escapeHtml(m.text)}</div>` : ''}
-                            ${m.has_files ? `<div style="font-size:11.5px;color:var(--hint);margin-top:6px;">📎 ${m.files_count} файл${m.files_count > 1 ? 'а' : ''}</div>` : ''}
-                            ${m.is_temp ? `<div style="font-size:11px;color:var(--danger);margin-top:4px;">⚠️ Самоуничтожающееся</div>` : ''}
-                        </div>
-                    `;
-                }).join('');
-            } catch (e) {
-                body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--danger);font-size:13px;">Не удалось загрузить: ${escapeHtml(e.message)}</div>`;
-            }
-        }
-
-        (function checkDeletedChatParam() {
-            const chatId = getChatIdFromUrl();
-            if (chatId) {
-                setTimeout(() => openChatCopy(chatId), 500);
-            }
         })();
 
         // ======================= ИНИЦИАЛИЗАЦИЯ =======================
