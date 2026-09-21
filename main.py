@@ -2016,10 +2016,34 @@ async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
     user_id = connection.user.id
     is_enabled = connection.is_enabled
+
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
-        db.delete_user_completely(user_id)
+        # Убираем только связь (данные пользователя сохраняем)
+        db.delete_connection(bc_id)
+        # Уведомляем пользователя с кнопкой на Mini App
+        try:
+            kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(
+                    text="📂 Открыть Mini App",
+                    web_app=WebAppInfo(url=MINI_APP_URL)
+                )
+            ]])
+            await bot.send_message(
+                user_id,
+                premium(
+                    "<b>❌ Подключение к XrayGram отключено</b>\n\n"
+                    "Вы удалили бота из «Автоматизации чатов», поэтому мы больше не можем отслеживать ваши сообщения.\n\n"
+                    "Все сохранённые данные остаются доступны в Mini App. Чтобы снова включить отслеживание — "
+                    "добавьте бота заново через профиль → Редактировать → Автоматизация чатов."
+                ),
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+        except Exception as e:
+            logger.error(f"[CONN] Не удалось уведомить {user_id}: {e}")
         return
+
     logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
     db.set_connection(bc_id, user_id)
     if not db.is_user_registered(user_id):
@@ -2477,6 +2501,63 @@ async def auto_restart_loop():
         await asyncio.sleep(1)
         os._exit(0)
 
+async def notify_chat_deleted(user_id: int, chat_id: int):
+    try:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="📂 Посмотреть сохранённый чат",
+                web_app=WebAppInfo(url=f"{MINI_APP_URL}?chat={chat_id}")
+            )
+        ]])
+        await bot.send_message(
+            user_id,
+            premium(
+                f"<b>❌ Чат полностью удалён</b>\n\n"
+                f"Ваш собеседник удалил переписку с вами, и чат исчез из Telegram.\n\n"
+                f"Все сохранённые сообщения из этого чата доступны в Mini App.\n\n"
+                f"🆔 <code>{chat_id}</code>"
+            ),
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        logger.info(f"[WATCHDOG] Уведомление об удалении чата {chat_id} отправлено {user_id}")
+    except Exception as e:
+        logger.error(f"[WATCHDOG] Не удалось уведомить {user_id}: {e}")
+
+
+async def chat_watchdog_loop():
+    # Стартуем через 2 минуты после запуска бота
+    await asyncio.sleep(120)
+    logger.info("[WATCHDOG] Проверка удалённых чатов запущена")
+    while True:
+        try:
+            cursor = db.conn.cursor()
+            cursor.execute("SELECT user_id, bc_id FROM connections")
+            conns = cursor.fetchall()
+            for conn in conns:
+                user_id = conn["user_id"]
+                if not db.is_user_registered(user_id):
+                    continue
+                if not await ensure_subscription(user_id, notify=False):
+                    continue
+                chat_ids = db.get_user_chats(user_id)
+                for chat_id in chat_ids:
+                    if db.is_chat_deleted(user_id, chat_id):
+                        continue
+                    try:
+                        await bot.get_chat(chat_id)
+                    except Exception as e:
+                        err = str(e).lower()
+                        if "chat not found" in err or "peer_id_invalid" in err or "user not found" in err:
+                            db.mark_chat_deleted(user_id, chat_id)
+                            await notify_chat_deleted(user_id, chat_id)
+                    await asyncio.sleep(0.3)
+                await asyncio.sleep(0.5)
+        except Exception as e:
+            logger.error(f"[WATCHDOG] Ошибка: {e}")
+        # Проверяем каждые 30 минут
+        await asyncio.sleep(1800)
+
 async def main():
     try:
         me = await bot.get_me()
@@ -2494,6 +2575,7 @@ async def main():
     asyncio.create_task(online_mode_loop())
     asyncio.create_task(mini_app_server())
     asyncio.create_task(auto_restart_loop())
+    asyncio.create_task(chat_watchdog_loop())
 
     await bot.set_my_commands([types.BotCommand(command="start", description=premium("Главное меню"))])
     await dp.start_polling(bot)
