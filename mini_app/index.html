@@ -36,7 +36,6 @@
             font-size: 15px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
             letter-spacing: -0.01em;
             transition: background 0.4s var(--ease), color 0.4s var(--ease);
@@ -49,42 +48,17 @@
             pointer-events: none;
             z-index: -1;
             opacity: 0.6;
-            transition: opacity 0.4s var(--ease);
         }
 
-        @keyframes fadeUp {
-            from { opacity: 0; transform: translateY(8px); }
-            to   { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to   { opacity: 1; }
-        }
-        @keyframes titleIn {
-            from { opacity: 0; letter-spacing: -0.08em; transform: translateY(6px); }
-            to   { opacity: 1; letter-spacing: -0.03em; transform: translateY(0); }
-        }
-        @keyframes avatarBreath {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0); }
-            50%      { box-shadow: 0 0 24px 0 rgba(58, 122, 254, 0.18); }
-        }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes titleIn { from { opacity: 0; letter-spacing: -0.08em; transform: translateY(6px); } to { opacity: 1; letter-spacing: -0.03em; transform: translateY(0); } }
+        @keyframes avatarBreath { 0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0); } 50% { box-shadow: 0 0 24px 0 rgba(58, 122, 254, 0.18); } }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes progressShimmer {
-            0%   { background-position: -150% 0; }
-            100% { background-position: 250% 0; }
-        }
-        @keyframes shimmer {
-            0%   { background-position: -200% 0; }
-            100% { background-position: 200% 0; }
-        }
-        @keyframes toastIn {
-            from { opacity: 0; transform: translateY(20px) scale(0.95); }
-            to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes pulseDot {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50%      { opacity: 0.4; transform: scale(0.85); }
-        }
+        @keyframes progressShimmer { 0% { background-position: -150% 0; } 100% { background-position: 250% 0; } }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        @keyframes toastIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
 
         .tabs-bar {
             position: sticky;
@@ -96,15 +70,7 @@
             z-index: 100;
             padding-top: env(safe-area-inset-top);
         }
-
-        .tabs-scroll {
-            display: flex;
-            overflow-x: auto;
-            scrollbar-width: none;
-            -ms-overflow-style: none;
-            padding: 4px 10px 0;
-            scroll-behavior: smooth;
-        }
+        .tabs-scroll { display: flex; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 4px 10px 0; scroll-behavior: smooth; }
         .tabs-scroll::-webkit-scrollbar { display: none; }
 
         .tab-btn {
@@ -125,13 +91,7 @@
             letter-spacing: -0.005em;
             transition: color 0.4s var(--ease), transform 0.35s var(--ease-spring);
         }
-        .tab-btn svg {
-            width: 15px;
-            height: 15px;
-            stroke-width: 1.8;
-            opacity: 0.9;
-            transition: opacity 0.4s var(--ease), transform 0.5s var(--ease-spring);
-        }
+        .tab-btn svg { width: 15px; height: 15px; stroke-width: 1.8; opacity: 0.9; transition: opacity 0.4s var(--ease), transform 0.5s var(--ease-spring); }
         .tab-btn::after {
             content: "";
             position: absolute;
@@ -151,29 +111,11 @@
         .tab-btn.active::after { transform: scaleX(1); opacity: 1; }
         .tab-btn.active svg { opacity: 1; transform: scale(1.05); }
 
-        .tab-content {
-            display: none;
-            padding: 26px 18px 48px;
-            max-width: 480px;
-            margin: 0 auto;
-        }
-        .tab-content.active {
-            display: block;
-            animation: fadeIn 0.5s var(--ease) both;
-        }
+        .tab-content { display: none; padding: 26px 18px 48px; max-width: 480px; margin: 0 auto; }
+        .tab-content.active { display: block; animation: fadeIn 0.5s var(--ease) both; }
 
-        .page-title {
-            font-size: 24px;
-            font-weight: 650;
-            margin-bottom: 4px;
-            animation: titleIn 0.7s var(--ease) both;
-        }
-        .page-subtitle {
-            font-size: 13.5px;
-            color: var(--hint);
-            margin-bottom: 20px;
-            animation: fadeUp 0.7s var(--ease) 0.06s both;
-        }
+        .page-title { font-size: 24px; font-weight: 650; margin-bottom: 4px; animation: titleIn 0.7s var(--ease) both; }
+        .page-subtitle { font-size: 13.5px; color: var(--hint); margin-bottom: 20px; animation: fadeUp 0.7s var(--ease) 0.06s both; }
 
         .section-label {
             display: flex;
@@ -188,127 +130,48 @@
             animation: fadeUp 0.55s var(--ease) both;
         }
         .section-label:first-of-type { margin-top: 4px; }
-        .section-label .count {
-            font-size: 10px;
-            padding: 2px 7px;
-            border-radius: 6px;
-            background: var(--bg-hover);
-            color: var(--hint);
-            letter-spacing: 0;
-            text-transform: none;
-            font-weight: 600;
-        }
+        .section-label .count { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--bg-hover); color: var(--hint); letter-spacing: 0; text-transform: none; font-weight: 600; }
 
-        .profile-header {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 20px;
-            animation: fadeUp 0.6s var(--ease) both;
-        }
-
+        .profile-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; animation: fadeUp 0.6s var(--ease) both; }
         .avatar {
             position: relative;
-            width: 62px;
-            height: 62px;
+            width: 62px; height: 62px;
             border-radius: 50%;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 23px;
-            font-weight: 600;
-            color: var(--hint);
-            flex-shrink: 0;
-            overflow: hidden;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 23px; font-weight: 600; color: var(--hint);
+            flex-shrink: 0; overflow: hidden;
             animation: avatarBreath 4s ease-in-out infinite;
             transition: transform 0.5s var(--ease-spring);
         }
         .avatar:hover { transform: scale(1.04); }
         .avatar img { width: 100%; height: 100%; object-fit: cover; }
-
         .profile-info { min-width: 0; flex: 1; }
-        .profile-name-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            min-width: 0;
-        }
-        .profile-name {
-            font-size: 19px;
-            font-weight: 650;
-            letter-spacing: -0.025em;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            background: var(--success);
-            box-shadow: 0 0 8px rgba(61, 220, 132, 0.7);
-            flex-shrink: 0;
-            animation: pulseDot 2.2s ease-in-out infinite;
-        }
-        .status-dot.off {
-            background: var(--hint);
-            box-shadow: none;
-            animation: none;
-            opacity: 0.6;
-        }
-        .profile-meta {
-            font-size: 12.5px;
-            color: var(--hint);
-            margin-top: 2px;
-        }
+        .profile-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+        .profile-name { font-size: 19px; font-weight: 650; letter-spacing: -0.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(61, 220, 132, 0.7); flex-shrink: 0; animation: pulseDot 2.2s ease-in-out infinite; }
+        .status-dot.off { background: var(--hint); box-shadow: none; animation: none; opacity: 0.6; }
+        .profile-meta { font-size: 12.5px; color: var(--hint); margin-top: 2px; }
 
-        .quick-actions {
-            display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 8px;
-            margin-bottom: 8px;
-            animation: fadeUp 0.6s var(--ease) 0.08s both;
-        }
+        .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; animation: fadeUp 0.6s var(--ease) 0.08s both; }
         .qa-btn {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 12px 4px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 6px; padding: 12px 4px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             color: var(--text);
-            font-family: inherit;
-            font-size: 10.5px;
-            font-weight: 500;
+            font-family: inherit; font-size: 10.5px; font-weight: 500;
             cursor: pointer;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring), background 0.4s var(--ease);
         }
-        .qa-btn svg {
-            width: 18px;
-            height: 18px;
-            stroke-width: 1.8;
-            color: var(--accent);
-            transition: transform 0.5s var(--ease-spring);
-        }
-        .qa-btn:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-            background: var(--bg-hover);
-        }
+        .qa-btn svg { width: 18px; height: 18px; stroke-width: 1.8; color: var(--accent); transition: transform 0.5s var(--ease-spring); }
+        .qa-btn:hover { border-color: var(--border-hover); transform: translateY(-2px); background: var(--bg-hover); }
         .qa-btn:hover svg { transform: scale(1.12); }
         .qa-btn:active { transform: scale(0.97); }
 
-        .stat-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 6px;
-        }
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
         .stat-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -317,52 +180,16 @@
             animation: fadeUp 0.65s var(--ease) both;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .stat-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-        }
+        .stat-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
         .stat-card:active { transform: scale(0.985); }
-        .stat-value {
-            font-size: 25px;
-            font-weight: 650;
-            letter-spacing: -0.04em;
-            font-variant-numeric: tabular-nums;
-            margin-bottom: 2px;
-        }
-        .stat-label {
-            font-size: 12px;
-            color: var(--hint);
-        }
+        .stat-value { font-size: 25px; font-weight: 650; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+        .stat-label { font-size: 12px; color: var(--hint); }
 
-        .card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 4px 16px;
-            margin-bottom: 10px;
-            animation: fadeUp 0.6s var(--ease) both;
-            transition: border-color 0.4s var(--ease), box-shadow 0.5s var(--ease);
-        }
-        .card:hover {
-            border-color: var(--border-hover);
-            box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05);
-        }
+        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 16px; margin-bottom: 10px; animation: fadeUp 0.6s var(--ease) both; transition: border-color 0.4s var(--ease), box-shadow 0.5s var(--ease); }
+        .card:hover { border-color: var(--border-hover); box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05); }
 
-        .search-wrap {
-            position: relative;
-            margin-bottom: 6px;
-            animation: fadeUp 0.5s var(--ease) 0.05s both;
-        }
-        .search-wrap svg {
-            position: absolute;
-            left: 13px;
-            top: 50%;
-            transform: translateY(-50%);
-            width: 15px;
-            height: 15px;
-            color: var(--hint);
-            pointer-events: none;
-        }
+        .search-wrap { position: relative; margin-bottom: 6px; animation: fadeUp 0.5s var(--ease) 0.05s both; }
+        .search-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--hint); pointer-events: none; }
         .search-input {
             width: 100%;
             padding: 11px 14px 11px 38px;
@@ -370,16 +197,12 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             color: var(--text);
-            font-family: inherit;
-            font-size: 13.5px;
+            font-family: inherit; font-size: 13.5px;
             outline: none;
             transition: border-color 0.4s var(--ease), box-shadow 0.4s var(--ease);
         }
         .search-input::placeholder { color: var(--hint); }
-        .search-input:focus {
-            border-color: rgba(58, 122, 254, 0.4);
-            box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.1);
-        }
+        .search-input:focus { border-color: rgba(58, 122, 254, 0.4); box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.1); }
 
         .command-card {
             background: var(--bg-secondary);
@@ -390,210 +213,42 @@
             animation: fadeUp 0.55s var(--ease) both;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .command-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-        }
-        .command-card:active { transform: scale(0.99); }
-        .command-name {
-            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--accent);
-            margin-bottom: 4px;
-            letter-spacing: -0.01em;
-            transition: text-shadow 0.4s var(--ease);
-        }
-        .command-card:hover .command-name { text-shadow: 0 0 12px rgba(58, 122, 254, 0.4); }
-        .command-desc {
-            font-size: 13px;
-            color: var(--hint);
-            line-height: 1.5;
-        }
-        .command-desc code {
-            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-            font-size: 12px;
-            background: var(--bg-hover);
-            padding: 1px 6px;
-            border-radius: 5px;
-            color: var(--text-secondary);
-        }
+        .command-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
+        .command-name { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
+        .command-desc { font-size: 13px; color: var(--hint); line-height: 1.5; }
+        .command-desc code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--bg-hover); padding: 1px 6px; border-radius: 5px; color: var(--text-secondary); }
 
-        .setting-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 0;
-            gap: 14px;
-            animation: fadeUp 0.5s var(--ease) both;
-        }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; gap: 14px; animation: fadeUp 0.5s var(--ease) both; }
         .setting-row + .setting-row { border-top: 1px solid var(--divider); }
         .setting-info { flex: 1; min-width: 0; }
-        .setting-name {
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 2px;
-        }
-        .setting-desc {
-            font-size: 12px;
-            color: var(--hint);
-            line-height: 1.45;
-        }
-        .setting-value {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            padding: 5px 10px;
-            border-radius: 8px;
-            background: var(--bg-hover);
-            white-space: nowrap;
-            color: var(--hint);
-            transition: color 0.4s var(--ease), background 0.4s var(--ease), transform 0.4s var(--ease-spring);
-        }
-        .setting-value:hover { transform: scale(1.05); }
-        .setting-value::before {
-            content: "";
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: currentColor;
-            opacity: 0.7;
-            transition: opacity 0.4s var(--ease), box-shadow 0.4s var(--ease);
-        }
-        .setting-value.on {
-            color: var(--success);
-            background: rgba(61, 220, 132, 0.1);
-        }
-        .setting-value.on::before {
-            opacity: 1;
-            box-shadow: 0 0 8px rgba(61, 220, 132, 0.6);
-        }
+        .setting-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+        .setting-desc { font-size: 12px; color: var(--hint); line-height: 1.45; }
+        .setting-value { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 8px; background: var(--bg-hover); white-space: nowrap; color: var(--hint); transition: color 0.4s var(--ease), background 0.4s var(--ease); }
+        .setting-value::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+        .setting-value.on { color: var(--success); background: rgba(61, 220, 132, 0.1); }
+        .setting-value.on::before { opacity: 1; box-shadow: 0 0 8px rgba(61, 220, 132, 0.6); }
 
-        .hint-note {
-            font-size: 12.5px;
-            color: var(--hint);
-            line-height: 1.55;
-            padding: 12px 4px 0;
-            animation: fadeIn 0.5s var(--ease) both;
-            text-align: center;
-        }
+        .hint-note { font-size: 12.5px; color: var(--hint); line-height: 1.55; padding: 12px 4px 0; text-align: center; }
 
-        .referral-card {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 6px 16px 16px;
-            margin-bottom: 10px;
-            animation: fadeUp 0.6s var(--ease) both;
-            transition: border-color 0.4s var(--ease), box-shadow 0.5s var(--ease);
-        }
-        .referral-card:hover {
-            border-color: var(--border-hover);
-            box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05);
-        }
-        .ref-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 11px 0;
-            font-size: 14px;
-        }
+        .referral-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 16px 16px; margin-bottom: 10px; animation: fadeUp 0.6s var(--ease) both; }
+        .ref-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; font-size: 14px; }
         .ref-row + .ref-row { border-top: 1px solid var(--divider); }
         .ref-label { color: var(--hint); }
-        .ref-value {
-            font-weight: 600;
-            font-variant-numeric: tabular-nums;
-            letter-spacing: -0.01em;
-        }
+        .ref-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 
-        .progress-wrap {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .progress-info {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            color: var(--hint);
-            margin-bottom: 10px;
-            font-variant-numeric: tabular-nums;
-        }
-        .progress-bar {
-            height: 4px;
-            background: var(--bg-hover);
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            border-radius: 4px;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent) 0%, #7bb1ff 45%, var(--accent) 90%);
-            background-size: 250% 100%;
-            transition: width 1.1s var(--ease);
-            animation: progressShimmer 3.5s linear infinite;
-        }
+        .progress-wrap { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
+        .progress-info { display: flex; justify-content: space-between; font-size: 12px; color: var(--hint); margin-bottom: 10px; }
+        .progress-bar { height: 4px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
+        .progress-fill { height: 100%; border-radius: 4px; width: 0%; background: linear-gradient(90deg, var(--accent) 0%, #7bb1ff 45%, var(--accent) 90%); background-size: 250% 100%; transition: width 1.1s var(--ease); animation: progressShimmer 3.5s linear infinite; }
 
-        .ref-link-block {
-            margin-top: 16px;
-            padding-top: 16px;
-            border-top: 1px solid var(--divider);
-        }
-        .ref-link-label {
-            font-size: 12px;
-            color: var(--hint);
-            margin-bottom: 9px;
-        }
-        .ref-link {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            background: var(--bg-hover);
-            border: 1px solid transparent;
-            border-radius: 10px;
-            padding: 10px 12px;
-            overflow: hidden;
-            transition: border-color 0.4s var(--ease), box-shadow 0.4s var(--ease);
-        }
-        .ref-link:hover {
-            border-color: var(--border-hover);
-            box-shadow: 0 0 18px rgba(58, 122, 254, 0.08);
-        }
-        .ref-link code {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            background: none;
-            padding: 0;
-            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
-            font-size: 12px;
-            color: var(--text-secondary);
-            letter-spacing: -0.01em;
-        }
-        .copy-btn {
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: 8px;
-            padding: 6px 12px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            flex-shrink: 0;
-            font-family: inherit;
-            transition: opacity 0.35s var(--ease), background 0.35s var(--ease), transform 0.35s var(--ease-spring), box-shadow 0.35s var(--ease);
-        }
-        .copy-btn:hover { opacity: 0.9; box-shadow: 0 0 16px rgba(58, 122, 254, 0.4); }
+        .ref-link-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
+        .ref-link-label { font-size: 12px; color: var(--hint); margin-bottom: 9px; }
+        .ref-link { display: flex; gap: 8px; align-items: center; background: var(--bg-hover); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; overflow: hidden; }
+        .ref-link code { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-secondary); }
+        .copy-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; font-family: inherit; transition: opacity 0.35s var(--ease), transform 0.35s var(--ease-spring); }
+        .copy-btn:hover { opacity: 0.9; }
         .copy-btn:active { transform: scale(0.94); }
-        .copy-btn.copied {
-            background: var(--success);
-            color: #0b1a12;
-            box-shadow: 0 0 18px rgba(61, 220, 132, 0.4);
-        }
+        .copy-btn.copied { background: var(--success); color: #0b1a12; }
 
         .steps-list { list-style: none; counter-reset: step; }
         .steps-list li {
@@ -609,257 +264,94 @@
             counter-increment: step;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .steps-list li:hover {
-            border-color: var(--border-hover);
-            transform: translateX(3px);
-        }
+        .steps-list li:hover { border-color: var(--border-hover); transform: translateX(3px); }
         .steps-list li::before {
             content: counter(step);
             position: absolute;
-            left: 15px;
-            top: 50%;
+            left: 15px; top: 50%;
             transform: translateY(-50%);
-            width: 24px;
-            height: 24px;
+            width: 24px; height: 24px;
             border-radius: 50%;
             background: var(--accent-soft);
             color: var(--accent);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11.5px;
-            font-weight: 700;
-            transition: transform 0.4s var(--ease-spring), box-shadow 0.4s var(--ease);
-        }
-        .steps-list li:hover::before {
-            transform: translateY(-50%) scale(1.1);
-            box-shadow: 0 0 14px rgba(58, 122, 254, 0.3);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11.5px; font-weight: 700;
         }
 
         .action-btn {
-            display: block;
-            width: 100%;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: var(--radius);
-            padding: 15px;
-            font-size: 14.5px;
-            font-weight: 600;
-            cursor: pointer;
-            text-align: center;
-            text-decoration: none;
+            display: block; width: 100%;
+            background: var(--accent); color: #fff;
+            border: none; border-radius: var(--radius);
+            padding: 15px; font-size: 14.5px; font-weight: 600;
+            cursor: pointer; text-align: center; text-decoration: none;
             margin-top: 16px;
-            letter-spacing: -0.01em;
-            animation: fadeUp 0.6s var(--ease) both;
             transition: opacity 0.4s var(--ease), transform 0.4s var(--ease-spring), box-shadow 0.4s var(--ease);
-            position: relative;
-            overflow: hidden;
         }
-        .action-btn::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
-            transform: translateX(-100%);
-            transition: transform 0.8s var(--ease);
-        }
-        .action-btn:hover::before { transform: translateX(100%); }
-        .action-btn:hover {
-            opacity: 0.95;
-            transform: translateY(-2px);
-            box-shadow: 0 8px 28px rgba(58, 122, 254, 0.35);
-        }
-        .action-btn:active { transform: scale(0.985); opacity: 0.85; }
+        .action-btn:hover { opacity: 0.95; transform: translateY(-2px); box-shadow: 0 8px 28px rgba(58, 122, 254, 0.35); }
+        .action-btn:active { transform: scale(0.985); }
 
         .contact-card {
-            display: flex;
-            align-items: center;
-            gap: 13px;
+            display: flex; align-items: center; gap: 13px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             padding: 14px 16px;
             margin-bottom: 8px;
-            text-decoration: none;
-            color: var(--text);
+            text-decoration: none; color: var(--text);
             animation: fadeUp 0.55s var(--ease) both;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .contact-card:hover {
-            border-color: var(--border-hover);
-            transform: translateY(-2px);
-        }
-        .contact-card:active { transform: scale(0.99); }
+        .contact-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
         .contact-icon {
-            width: 38px;
-            height: 38px;
+            width: 38px; height: 38px;
             border-radius: 11px;
             background: var(--accent-soft);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            color: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; color: var(--accent);
             transition: background 0.4s var(--ease), transform 0.5s var(--ease-spring);
         }
-        .contact-card:hover .contact-icon {
-            background: rgba(58, 122, 254, 0.18);
-            transform: rotate(-6deg) scale(1.06);
-        }
+        .contact-card:hover .contact-icon { background: rgba(58, 122, 254, 0.18); transform: rotate(-6deg) scale(1.06); }
         .contact-icon svg { width: 18px; height: 18px; }
         .contact-info { flex: 1; min-width: 0; }
-        .contact-name {
-            font-size: 14.5px;
-            font-weight: 600;
-            margin-bottom: 2px;
-        }
-        .contact-desc {
-            font-size: 12.5px;
-            color: var(--hint);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .contact-arrow {
-            color: var(--hint);
-            font-size: 18px;
-            flex-shrink: 0;
-            opacity: 0.5;
-            transition: opacity 0.4s var(--ease), transform 0.4s var(--ease-spring), color 0.4s var(--ease);
-        }
-        .contact-card:hover .contact-arrow {
-            opacity: 1;
-            color: var(--accent);
-            transform: translateX(4px);
-        }
+        .contact-name { font-size: 14.5px; font-weight: 600; margin-bottom: 2px; }
+        .contact-desc { font-size: 12.5px; color: var(--hint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .contact-arrow { color: var(--hint); font-size: 18px; flex-shrink: 0; opacity: 0.5; transition: opacity 0.4s var(--ease), transform 0.4s var(--ease-spring), color 0.4s var(--ease); }
+        .contact-card:hover .contact-arrow { opacity: 1; color: var(--accent); transform: translateX(4px); }
 
-        .faq-item {
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-bottom: 8px;
-            overflow: hidden;
-            animation: fadeUp 0.55s var(--ease) both;
-            transition: border-color 0.4s var(--ease);
-        }
-        .faq-item:hover { border-color: var(--border-hover); }
-        .faq-q {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-            padding: 14px 16px;
-            font-size: 13.5px;
-            font-weight: 600;
-            cursor: pointer;
-            user-select: none;
-            letter-spacing: -0.005em;
-        }
-        .faq-q svg {
-            width: 14px;
-            height: 14px;
-            color: var(--hint);
-            flex-shrink: 0;
-            transition: transform 0.45s var(--ease-spring), color 0.4s var(--ease);
-        }
-        .faq-item.open .faq-q svg {
-            transform: rotate(180deg);
-            color: var(--accent);
-        }
-        .faq-a {
-            max-height: 0;
-            overflow: hidden;
-            padding: 0 16px;
-            font-size: 13px;
-            color: var(--hint);
-            line-height: 1.55;
-            transition: max-height 0.5s var(--ease), padding 0.5s var(--ease), opacity 0.4s var(--ease);
-            opacity: 0;
-        }
-        .faq-item.open .faq-a {
-            max-height: 260px;
-            padding: 0 16px 14px;
-            opacity: 1;
-        }
+        .faq-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; animation: fadeUp 0.55s var(--ease) both; }
+        .faq-q { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; font-size: 13.5px; font-weight: 600; cursor: pointer; user-select: none; }
+        .faq-q svg { width: 14px; height: 14px; color: var(--hint); flex-shrink: 0; transition: transform 0.45s var(--ease-spring), color 0.4s var(--ease); }
+        .faq-item.open .faq-q svg { transform: rotate(180deg); color: var(--accent); }
+        .faq-a { max-height: 0; overflow: hidden; padding: 0 16px; font-size: 13px; color: var(--hint); line-height: 1.55; transition: max-height 0.5s var(--ease), padding 0.5s var(--ease), opacity 0.4s var(--ease); opacity: 0; }
+        .faq-item.open .faq-a { max-height: 260px; padding: 0 16px 14px; opacity: 1; }
 
         .skel {
-            background: linear-gradient(
-                90deg,
-                var(--bg-hover) 0%,
-                var(--border-hover) 50%,
-                var(--bg-hover) 100%
-            );
+            background: linear-gradient(90deg, var(--bg-hover) 0%, var(--border-hover) 50%, var(--bg-hover) 100%);
             background-size: 200% 100%;
             animation: shimmer 1.6s linear infinite;
             border-radius: 8px;
         }
-        .skel-profile {
-            display: flex;
-            align-items: center;
-            gap: 15px;
-            margin-bottom: 24px;
-        }
-        .skel-avatar {
-            width: 62px;
-            height: 62px;
-            border-radius: 50%;
-            flex-shrink: 0;
-        }
-        .skel-lines {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
+        .skel-profile { display: flex; align-items: center; gap: 15px; margin-bottom: 24px; }
+        .skel-avatar { width: 62px; height: 62px; border-radius: 50%; flex-shrink: 0; }
+        .skel-lines { flex: 1; display: flex; flex-direction: column; gap: 8px; }
         .skel-line { height: 12px; }
         .skel-line.w70 { width: 70%; }
         .skel-line.w40 { width: 40%; height: 10px; }
         .skel-line.w50 { width: 50%; height: 10px; }
-        .skel-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .skel-card {
-            height: 84px;
-            border-radius: var(--radius);
-        }
-        .skel-label {
-            width: 90px;
-            height: 10px;
-            margin: 22px 0 12px 2px;
-            border-radius: 5px;
-        }
-        .skel-settings {
-            height: 220px;
-            border-radius: var(--radius);
-        }
+        .skel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 20px; }
+        .skel-card { height: 84px; border-radius: var(--radius); }
+        .skel-label { width: 90px; height: 10px; margin: 22px 0 12px 2px; border-radius: 5px; }
+        .skel-settings { height: 220px; border-radius: var(--radius); }
 
-        #toast-container {
-            position: fixed;
-            left: 0; right: 0;
-            bottom: calc(20px + env(safe-area-inset-bottom));
-            z-index: 9998;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 8px;
-            pointer-events: none;
-            padding: 0 18px;
-        }
+        #toast-container { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 9998; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 18px; }
         .toast {
-            display: flex;
-            align-items: center;
-            gap: 9px;
+            display: flex; align-items: center; gap: 9px;
             padding: 11px 16px;
             background: var(--bg-secondary);
             border: 1px solid var(--border-hover);
             border-radius: 12px;
             color: var(--text);
-            font-size: 13px;
-            font-weight: 500;
+            font-size: 13px; font-weight: 500;
             backdrop-filter: blur(20px) saturate(180%);
             -webkit-backdrop-filter: blur(20px) saturate(180%);
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
@@ -867,83 +359,21 @@
             max-width: 380px;
             pointer-events: auto;
         }
-        .toast.hide {
-            opacity: 0;
-            transform: translateY(12px) scale(0.96);
-            transition: opacity 0.35s var(--ease), transform 0.35s var(--ease);
-        }
+        .toast.hide { opacity: 0; transform: translateY(12px) scale(0.96); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
         .toast svg { width: 16px; height: 16px; flex-shrink: 0; }
         .toast.success svg { color: var(--success); }
         .toast.info svg { color: var(--accent); }
         .toast.error svg { color: var(--danger); }
 
-        .loader {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 60px 0;
-            color: var(--hint);
-            font-size: 13.5px;
-            animation: fadeIn 0.4s var(--ease);
-        }
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 1.5px solid var(--divider);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 0.9s linear infinite;
-            margin-right: 10px;
-        }
+        .loader { display: flex; align-items: center; justify-content: center; padding: 60px 0; color: var(--hint); font-size: 13.5px; }
+        .spinner { width: 16px; height: 16px; border: 1.5px solid var(--divider); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; margin-right: 10px; }
 
-        .error-box {
-            padding: 22px;
-            color: var(--hint);
-            font-size: 13px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            margin-top: 8px;
-            animation: fadeUp 0.55s var(--ease) both;
-            white-space: pre-wrap;
-            word-break: break-word;
-            line-height: 1.55;
-        }
+        .error-box { padding: 22px; color: var(--hint); font-size: 13px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; animation: fadeUp 0.55s var(--ease) both; }
         .error-title { color: var(--danger); font-weight: 600; margin-bottom: 6px; }
 
-        .info-list {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            padding: 14px 0;
-        }
-        .info-item {
-            display: flex;
-            gap: 11px;
-            font-size: 13.5px;
-            line-height: 1.5;
-            color: var(--text-secondary);
-            animation: fadeUp 0.5s var(--ease) both;
-        }
-        .info-num {
-            flex-shrink: 0;
-            width: 20px;
-            height: 20px;
-            border-radius: 50%;
-            background: var(--accent-soft);
-            color: var(--accent);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 11px;
-            font-weight: 700;
-            margin-top: 1px;
-            transition: transform 0.4s var(--ease-spring), box-shadow 0.4s var(--ease);
-        }
-        .info-item:hover .info-num {
-            transform: scale(1.15);
-            box-shadow: 0 0 12px rgba(58, 122, 254, 0.35);
-        }
+        .info-list { display: flex; flex-direction: column; gap: 12px; padding: 14px 0; }
+        .info-item { display: flex; gap: 11px; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); animation: fadeUp 0.5s var(--ease) both; }
+        .info-num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
 
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -1201,50 +631,6 @@
             <div class="contact-arrow">›</div>
         </a>
 
-        <div class="section-label">
-            <span>Частые вопросы</span>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-q">
-                <span>Нужен ли Telegram Premium?</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                </svg>
-            </div>
-            <div class="faq-a">Нет, бот работает на обычном аккаунте. Premium не требуется.</div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-q">
-                <span>Как быстро выдаются звёзды?</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                </svg>
-            </div>
-            <div class="faq-a">Администратор обрабатывает заявки вручную в течение 1–24 часов после достижения минимума в 15 звёзд.</div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-q">
-                <span>Можно ли отключить бота?</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                </svg>
-            </div>
-            <div class="faq-a">Да, просто удалите бота из раздела «Автоматизация чатов» в настройках профиля.</div>
-        </div>
-
-        <div class="faq-item">
-            <div class="faq-q">
-                <span>Что будет с сохранёнными сообщениями?</span>
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 12 15 18 9"/>
-                </svg>
-            </div>
-            <div class="faq-a">Они хранятся только локально у вас в чате. Бот не передаёт данные третьим лицам.</div>
-        </div>
-
         <div class="hint-note">
             Проект создан и поддерживается разработчиком @CryptoViktor
         </div>
@@ -1255,9 +641,9 @@
         (function initSplash() {
             if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-            const MIN_SHOW = 1300;
-            const MAX_SHOW = 3200;
-            const HARD_KILL = 4500;
+            const MIN_SHOW = 1000;
+            const MAX_SHOW = 3000;
+            const HARD_KILL = 4200;
             const IDLE_TARGET = 88;
             const t0 = performance.now();
 
@@ -1271,8 +657,7 @@
                 alignItems: 'center',
                 justifyContent: 'center',
                 opacity: '1',
-                transition: 'opacity 550ms cubic-bezier(0.22, 1, 0.36, 1)',
-                willChange: 'opacity',
+                transition: 'opacity 500ms cubic-bezier(0.22, 1, 0.36, 1)',
             });
 
             const inner = document.createElement('div');
@@ -1282,24 +667,22 @@
                 flexDirection: 'column',
                 gap: '14px',
                 opacity: '0',
-                transition: 'opacity 500ms cubic-bezier(0.22, 1, 0.36, 1)',
+                transition: 'opacity 400ms cubic-bezier(0.22, 1, 0.36, 1)',
             });
 
             const label = document.createElement('div');
             label.textContent = 'XrayGram';
             Object.assign(label.style, {
-                fontFamily: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace',
+                fontFamily: 'ui-monospace, "SF Mono", monospace',
                 fontSize: '10.5px',
                 fontWeight: '500',
                 letterSpacing: '0.24em',
                 textTransform: 'uppercase',
                 color: 'var(--hint, #8b8b93)',
-                paddingLeft: '1px',
             });
 
             const track = document.createElement('div');
             Object.assign(track.style, {
-                position: 'relative',
                 height: '1.5px',
                 width: '100%',
                 background: 'var(--border, rgba(255,255,255,0.07))',
@@ -1313,7 +696,6 @@
                 width: '0%',
                 background: 'var(--text, #ffffff)',
                 borderRadius: '2px',
-                willChange: 'width',
             });
 
             track.appendChild(bar);
@@ -1328,7 +710,6 @@
 
             let progress = 0;
             let done = false;
-            let rafId;
 
             function tick() {
                 if (done) return;
@@ -1336,20 +717,17 @@
                 if (remaining > 0.3) {
                     progress += remaining * 0.06;
                     bar.style.width = progress.toFixed(2) + '%';
-                    rafId = requestAnimationFrame(tick);
+                    requestAnimationFrame(tick);
                 }
             }
-            rafId = requestAnimationFrame(tick);
+            requestAnimationFrame(tick);
 
             function finish() {
                 if (done) return;
                 done = true;
-                cancelAnimationFrame(rafId);
-
                 const from = progress;
                 const tStart = performance.now();
-                const DUR = 380;
-
+                const DUR = 350;
                 function step(now) {
                     const t = Math.min(1, (now - tStart) / DUR);
                     const eased = 1 - Math.pow(1 - t, 3);
@@ -1359,8 +737,8 @@
                     } else {
                         setTimeout(() => {
                             splash.style.opacity = '0';
-                            setTimeout(() => splash.remove(), 600);
-                        }, 220);
+                            setTimeout(() => { try { splash.remove(); } catch(e){} }, 550);
+                        }, 200);
                     }
                 }
                 requestAnimationFrame(step);
@@ -1375,11 +753,10 @@
             else window.addEventListener('load', tryFinish);
             setTimeout(finish, MAX_SHOW);
 
-            // Резервный kill-switch: если что-то упало — просто убираем
             setTimeout(() => {
                 try {
                     splash.style.opacity = '0';
-                    setTimeout(() => { try { splash.remove(); } catch(e){} }, 600);
+                    setTimeout(() => { try { splash.remove(); } catch(e){} }, 550);
                 } catch(e){}
             }, HARD_KILL);
         })();
@@ -1393,29 +770,20 @@
         // ======================= ТЕМА =======================
         const THEMES = {
             dark: {
-                '--bg': '#0f0f10',
-                '--bg-secondary': '#171719',
+                '--bg': '#0f0f10', '--bg-secondary': '#171719',
                 '--bg-hover': 'rgba(255, 255, 255, 0.04)',
-                '--text': '#ffffff',
-                '--text-secondary': 'rgba(255, 255, 255, 0.78)',
-                '--hint': '#8b8b93',
-                '--divider': 'rgba(255, 255, 255, 0.07)',
-                '--border': 'rgba(255, 255, 255, 0.07)',
-                '--border-hover': 'rgba(255, 255, 255, 0.14)',
+                '--text': '#ffffff', '--text-secondary': 'rgba(255, 255, 255, 0.78)',
+                '--hint': '#8b8b93', '--divider': 'rgba(255, 255, 255, 0.07)',
+                '--border': 'rgba(255, 255, 255, 0.07)', '--border-hover': 'rgba(255, 255, 255, 0.14)',
             },
             light: {
-                '--bg': '#ffffff',
-                '--bg-secondary': '#f4f4f7',
+                '--bg': '#ffffff', '--bg-secondary': '#f4f4f7',
                 '--bg-hover': 'rgba(0, 0, 0, 0.04)',
-                '--text': '#0a0a0a',
-                '--text-secondary': 'rgba(0, 0, 0, 0.78)',
-                '--hint': '#70707a',
-                '--divider': 'rgba(0, 0, 0, 0.08)',
-                '--border': 'rgba(0, 0, 0, 0.08)',
-                '--border-hover': 'rgba(0, 0, 0, 0.16)',
+                '--text': '#0a0a0a', '--text-secondary': 'rgba(0, 0, 0, 0.78)',
+                '--hint': '#70707a', '--divider': 'rgba(0, 0, 0, 0.08)',
+                '--border': 'rgba(0, 0, 0, 0.08)', '--border-hover': 'rgba(0, 0, 0, 0.16)',
             }
         };
-
         let currentThemeMode = 'auto';
         let particleRGB = '255, 255, 255';
 
@@ -1424,110 +792,76 @@
             if (tg && tg.colorScheme) return tg.colorScheme;
             return 'dark';
         }
-
         function updateParticleColor() {
-            const eff = getEffectiveTheme();
-            particleRGB = eff === 'light' ? '0, 0, 0' : '255, 255, 255';
+            particleRGB = getEffectiveTheme() === 'light' ? '0, 0, 0' : '255, 255, 255';
         }
-
         function applyTheme(mode) {
             currentThemeMode = mode;
             const root = document.documentElement;
             if (mode === 'auto') {
-                for (const k of Object.keys(THEMES.dark)) {
-                    root.style.removeProperty(k);
-                }
+                for (const k of Object.keys(THEMES.dark)) root.style.removeProperty(k);
             } else {
-                const vars = THEMES[mode];
-                for (const [k, v] of Object.entries(vars)) {
-                    root.style.setProperty(k, v);
-                }
+                for (const [k, v] of Object.entries(THEMES[mode])) root.style.setProperty(k, v);
             }
             try { localStorage.setItem('xraygram_theme', mode); } catch (e) {}
-
-            const effective = getEffectiveTheme();
-            const bgColor = effective === 'light' ? '#ffffff' : '#0f0f10';
+            const eff = getEffectiveTheme();
+            const bgColor = eff === 'light' ? '#ffffff' : '#0f0f10';
             if (tg) {
                 try { tg.setHeaderColor(bgColor); } catch (e) {}
                 try { tg.setBackgroundColor(bgColor); } catch (e) {}
             }
             updateParticleColor();
         }
-
         function cycleTheme() {
             const order = ['auto', 'dark', 'light'];
-            const idx = order.indexOf(currentThemeMode);
-            const next = order[(idx + 1) % order.length];
+            const next = order[(order.indexOf(currentThemeMode) + 1) % order.length];
             applyTheme(next);
             const labels = { auto: 'Авто', dark: 'Тёмная', light: 'Светлая' };
-            if (typeof showToast === 'function') {
-                showToast(`Тема: ${labels[next]}`, 'info');
-            }
+            if (typeof showToast === 'function') showToast(`Тема: ${labels[next]}`, 'info');
         }
-
         (function initTheme() {
             let saved = 'auto';
             try { saved = localStorage.getItem('xraygram_theme') || 'auto'; } catch (e) {}
             applyTheme(saved);
         })();
-
         updateParticleColor();
 
         // ======================= ФОН С ЧАСТИЦАМИ =======================
         (function initParticles() {
             const canvas = document.getElementById('particles-canvas');
             if (!canvas) return;
-
-            const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-            if (motionQuery.matches) {
-                canvas.style.display = 'none';
-                return;
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+                canvas.style.display = 'none'; return;
             }
-
             const ctx = canvas.getContext('2d');
-            let width, height, dpr;
-            let particles = [];
-            const PARTICLE_COUNT = 45;
-            const MAX_SPEED = 0.18;
-            const RADIUS = 1.2;
+            let width, height, dpr, particles = [];
+            const COUNT = 45, SPEED = 0.18, R = 1.2;
 
             function resize() {
                 dpr = window.devicePixelRatio || 1;
-                width = window.innerWidth;
-                height = window.innerHeight;
-                canvas.width = width * dpr;
-                canvas.height = height * dpr;
-                canvas.style.width = width + 'px';
-                canvas.style.height = height + 'px';
+                width = window.innerWidth; height = window.innerHeight;
+                canvas.width = width * dpr; canvas.height = height * dpr;
+                canvas.style.width = width + 'px'; canvas.style.height = height + 'px';
                 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-                createParticles();
-            }
-
-            function createParticles() {
                 particles = [];
-                for (let i = 0; i < PARTICLE_COUNT; i++) {
+                for (let i = 0; i < COUNT; i++) {
                     particles.push({
-                        x: Math.random() * width,
-                        y: Math.random() * height,
-                        vx: (Math.random() - 0.5) * MAX_SPEED * 2,
-                        vy: (Math.random() - 0.5) * MAX_SPEED * 2,
-                        r: RADIUS + Math.random() * 0.6,
+                        x: Math.random() * width, y: Math.random() * height,
+                        vx: (Math.random() - 0.5) * SPEED * 2,
+                        vy: (Math.random() - 0.5) * SPEED * 2,
+                        r: R + Math.random() * 0.6,
                         alpha: 0.15 + Math.random() * 0.25,
                     });
                 }
             }
-
             function draw() {
                 ctx.clearRect(0, 0, width, height);
                 for (const p of particles) {
-                    p.x += p.vx;
-                    p.y += p.vy;
-
+                    p.x += p.vx; p.y += p.vy;
                     if (p.x < -10) p.x = width + 10;
                     if (p.x > width + 10) p.x = -10;
                     if (p.y < -10) p.y = height + 10;
                     if (p.y > height + 10) p.y = -10;
-
                     ctx.beginPath();
                     ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
                     ctx.fillStyle = `rgba(${particleRGB}, ${p.alpha})`;
@@ -1535,10 +869,8 @@
                 }
                 requestAnimationFrame(draw);
             }
-
             window.addEventListener('resize', resize);
-            resize();
-            draw();
+            resize(); draw();
         })();
 
         // ======================= TOAST =======================
@@ -1568,26 +900,13 @@
         }
 
         // ======================= УТИЛИТЫ =======================
-        const state = {
-            stats: null,
-            settings: null,
-            loadedStats: false,
-            loadedSettings: false,
-        };
+        const state = { stats: null, settings: null, loadedStats: false, loadedSettings: false };
 
         function escapeHtml(s) {
             if (s == null) return "";
-            return String(s)
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;");
+            return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
         }
-
-        function formatNumber(n) {
-            return (n ?? 0).toLocaleString("ru-RU");
-        }
-
+        function formatNumber(n) { return (n ?? 0).toLocaleString("ru-RU"); }
         function formatDate(s) {
             if (!s) return "—";
             try {
@@ -1603,7 +922,6 @@
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             return resp.json();
         }
-
         async function fetchSettings() {
             const initData = tg?.initData || "";
             const resp = await fetch("/api/settings", { headers: { "X-Init-Data": initData } });
@@ -1614,18 +932,12 @@
         function renderProfile(data) {
             const user = data.user || {};
             const stats = data.stats || {};
-
             const fullName = [user.first_name, user.last_name].filter(Boolean).join(" ") || "Пользователь";
             const initial = (user.first_name || "?").charAt(0).toUpperCase();
-            const avatar = user.photo_url
-                ? `<img src="${escapeHtml(user.photo_url)}" alt="">`
-                : escapeHtml(initial);
-
+            const avatar = user.photo_url ? `<img src="${escapeHtml(user.photo_url)}" alt="">` : escapeHtml(initial);
             let meta = `ID: ${user.id}`;
             if (user.username) meta = `@${escapeHtml(user.username)} · ${meta}`;
-
             const isActive = (stats.active_connections || 0) > 0;
-
             const statsCards = [
                 { value: stats.messages_saved || 0, label: "Сообщений сохранено" },
                 { value: stats.deleted_tracked || 0, label: "Удалёнок отслежено" },
@@ -1638,7 +950,6 @@
                     <div class="stat-label">${c.label}</div>
                 </div>
             `).join("");
-
             return `
                 <div class="profile-header">
                     <div class="avatar">${avatar}</div>
@@ -1651,7 +962,6 @@
                         <div class="profile-meta">Регистрация: ${escapeHtml(formatDate(user.registered_at))}</div>
                     </div>
                 </div>
-
                 <div class="quick-actions">
                     <button class="qa-btn" id="qaRefresh">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
@@ -1662,9 +972,7 @@
                     </button>
                     <button class="qa-btn" id="qaShare">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="18" cy="5" r="3"/>
-                            <circle cx="6" cy="12" r="3"/>
-                            <circle cx="18" cy="19" r="3"/>
+                            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
                             <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
                             <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
                         </svg>
@@ -1684,7 +992,6 @@
                         Тема
                     </button>
                 </div>
-
                 <div class="section-label"><span>Статистика</span></div>
                 <div class="stat-grid">${statCardsHtml}</div>
             `;
@@ -1692,32 +999,11 @@
 
         function renderSettings(s) {
             const rows = [
-                {
-                    name: "Проверка на СКАМ/СПАМ",
-                    desc: "Проверяет собеседников через Telegram и SpamProtection API",
-                    value: s.scam_check ? "Вкл" : "Выкл",
-                    on: s.scam_check,
-                },
-                {
-                    name: "Режим текста",
-                    desc: "Автоматически применяет выбранный стиль к вашим сообщениям",
-                    value: s.text_mode_name || "Выкл",
-                    on: s.text_mode && s.text_mode !== "off",
-                },
-                {
-                    name: "Авто перевод",
-                    desc: "Присылает перевод входящих сообщений на выбранный язык",
-                    value: s.translate_name || "Выкл",
-                    on: s.translate_to && s.translate_to !== "off",
-                },
-                {
-                    name: "Онлайн мод",
-                    desc: "Ваш аккаунт постоянно находится в статусе «в сети»",
-                    value: s.online_mode ? "Вкл" : "Выкл",
-                    on: s.online_mode,
-                },
+                { name: "Проверка на СКАМ/СПАМ", desc: "Проверяет собеседников через Telegram и SpamProtection API", value: s.scam_check ? "Вкл" : "Выкл", on: s.scam_check },
+                { name: "Режим текста", desc: "Автоматически применяет выбранный стиль к вашим сообщениям", value: s.text_mode_name || "Выкл", on: s.text_mode && s.text_mode !== "off" },
+                { name: "Авто перевод", desc: "Присылает перевод входящих сообщений на выбранный язык", value: s.translate_name || "Выкл", on: s.translate_to && s.translate_to !== "off" },
+                { name: "Онлайн мод", desc: "Ваш аккаунт постоянно находится в статусе «в сети»", value: s.online_mode ? "Вкл" : "Выкл", on: s.online_mode },
             ];
-
             return `
                 <div class="card">
                     ${rows.map((r, i) => `
@@ -1738,32 +1024,15 @@
             const minWithdraw = ref.min_withdraw || 15;
             const progress = Math.min(100, (pending / minWithdraw) * 100);
             const refLink = `https://t.me/XrayGramRobot?start=ref_${tg?.initDataUnsafe?.user?.id || ""}`;
-
             return `
                 <div class="referral-card">
-                    <div class="ref-row">
-                        <span class="ref-label">Зашли по ссылке</span>
-                        <span class="ref-value">${formatNumber(ref.invited_total)}</span>
-                    </div>
-                    <div class="ref-row">
-                        <span class="ref-label">Подключили бота</span>
-                        <span class="ref-value">${formatNumber(ref.invited_credited)}</span>
-                    </div>
-                    <div class="ref-row">
-                        <span class="ref-label">Ожидают выдачи</span>
-                        <span class="ref-value">${pending.toFixed(1)} звёзд</span>
-                    </div>
-
+                    <div class="ref-row"><span class="ref-label">Зашли по ссылке</span><span class="ref-value">${formatNumber(ref.invited_total)}</span></div>
+                    <div class="ref-row"><span class="ref-label">Подключили бота</span><span class="ref-value">${formatNumber(ref.invited_credited)}</span></div>
+                    <div class="ref-row"><span class="ref-label">Ожидают выдачи</span><span class="ref-value">${pending.toFixed(1)} звёзд</span></div>
                     <div class="progress-wrap">
-                        <div class="progress-info">
-                            <span>До вывода</span>
-                            <span>${pending.toFixed(1)} / ${minWithdraw}</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill" id="progressFill" data-progress="${progress}"></div>
-                        </div>
+                        <div class="progress-info"><span>До вывода</span><span>${pending.toFixed(1)} / ${minWithdraw}</span></div>
+                        <div class="progress-bar"><div class="progress-fill" id="progressFill" data-progress="${progress}"></div></div>
                     </div>
-
                     <div class="ref-link-block">
                         <div class="ref-link-label">Ваша реферальная ссылка</div>
                         <div class="ref-link">
@@ -1781,53 +1050,34 @@
                 refreshBtn.addEventListener('click', async () => {
                     refreshBtn.disabled = true;
                     refreshBtn.style.opacity = '0.6';
-                    try {
-                        await loadStats();
-                        showToast('Данные обновлены', 'success');
-                    } catch {
-                        showToast('Не удалось обновить', 'error');
-                    } finally {
-                        refreshBtn.disabled = false;
-                        refreshBtn.style.opacity = '';
-                    }
+                    try { await loadStats(); showToast('Данные обновлены', 'success'); }
+                    catch { showToast('Не удалось обновить', 'error'); }
+                    finally { refreshBtn.disabled = false; refreshBtn.style.opacity = ''; }
                 });
             }
-
             const shareBtn = document.getElementById('qaShare');
             if (shareBtn) {
                 shareBtn.addEventListener('click', () => {
                     const text = 'Попробуй XrayGram — удобный бот для Telegram!';
                     const url = 'https://t.me/XrayGramRobot';
-                    if (navigator.share) {
-                        navigator.share({ title: 'XrayGram', text, url }).catch(() => {});
-                    } else if (tg?.openTelegramLink) {
-                        tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
-                    } else {
-                        showToast('Скопируйте ссылку: ' + url, 'info');
-                    }
+                    if (navigator.share) navigator.share({ title: 'XrayGram', text, url }).catch(() => {});
+                    else if (tg?.openTelegramLink) tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
+                    else showToast('Скопируйте: ' + url, 'info');
                 });
             }
-
             const setBtn = document.getElementById('qaSettings');
-            if (setBtn) {
-                setBtn.addEventListener('click', () => switchTab('settings'));
-            }
-
+            if (setBtn) setBtn.addEventListener('click', () => switchTab('settings'));
             const themeBtn = document.getElementById('qaTheme');
-            if (themeBtn) {
-                themeBtn.addEventListener('click', cycleTheme);
-            }
+            if (themeBtn) themeBtn.addEventListener('click', cycleTheme);
         }
 
         async function loadStats() {
             const el = document.getElementById("profile-content");
             try {
                 const data = await fetchStats();
-                state.stats = data;
-                state.loadedStats = true;
+                state.stats = data; state.loadedStats = true;
                 el.innerHTML = renderProfile(data);
                 bindProfileActions();
-
                 const refEl = document.getElementById("referral-content");
                 if (refEl && data.referral) {
                     refEl.innerHTML = renderReferral(data.referral);
@@ -1835,44 +1085,27 @@
                     bindCopyBtn();
                 }
             } catch (e) {
-                el.innerHTML = `
-                    <div class="error-box">
-                        <div class="error-title">Не удалось загрузить данные</div>
-                        <div>${escapeHtml(e.message)}</div>
-                    </div>
-                `;
+                el.innerHTML = `<div class="error-box"><div class="error-title">Не удалось загрузить данные</div><div>${escapeHtml(e.message)}</div></div>`;
             }
         }
-
         async function loadSettings() {
             const el = document.getElementById("settings-content");
             try {
                 const data = await fetchSettings();
-                state.settings = data;
-                state.loadedSettings = true;
+                state.settings = data; state.loadedSettings = true;
                 el.innerHTML = renderSettings(data);
             } catch (e) {
-                el.innerHTML = `
-                    <div class="error-box">
-                        <div class="error-title">Не удалось загрузить настройки</div>
-                        <div>${escapeHtml(e.message)}</div>
-                    </div>
-                `;
+                el.innerHTML = `<div class="error-box"><div class="error-title">Не удалось загрузить настройки</div><div>${escapeHtml(e.message)}</div></div>`;
             }
         }
-
         function animateProgressBar() {
             requestAnimationFrame(() => {
                 setTimeout(() => {
                     const pf = document.getElementById("progressFill");
-                    if (pf) {
-                        const target = pf.getAttribute("data-progress");
-                        pf.style.width = target + "%";
-                    }
+                    if (pf) pf.style.width = pf.getAttribute("data-progress") + "%";
                 }, 300);
             });
         }
-
         function bindCopyBtn() {
             const btn = document.getElementById("copyBtn");
             if (!btn || btn.dataset.bound === "1") return;
@@ -1883,27 +1116,12 @@
                     btn.textContent = "Готово";
                     btn.classList.add("copied");
                     showToast('Ссылка скопирована', 'success');
-                    setTimeout(() => {
-                        btn.textContent = "Копировать";
-                        btn.classList.remove("copied");
-                    }, 1400);
+                    setTimeout(() => { btn.textContent = "Копировать"; btn.classList.remove("copied"); }, 1400);
                 };
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(link).then(done).catch(() => {
-                        showToast('Не удалось скопировать', 'error');
-                    });
-                } else {
-                    const ta = document.createElement("textarea");
-                    ta.value = link;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    document.execCommand("copy");
-                    document.body.removeChild(ta);
-                    done();
-                }
+                if (navigator.clipboard) navigator.clipboard.writeText(link).then(done).catch(() => showToast('Не удалось скопировать', 'error'));
+                else { const ta = document.createElement("textarea"); ta.value = link; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); document.body.removeChild(ta); done(); }
             });
         }
-
         function setupCommandSearch() {
             const input = document.getElementById('cmdSearch');
             if (!input) return;
@@ -1916,48 +1134,35 @@
                     card.style.display = match ? '' : 'none';
                 });
                 document.querySelectorAll('#tab-commands .section-label').forEach(label => {
-                    let next = label.nextElementSibling;
-                    let any = false;
+                    let next = label.nextElementSibling; let any = false;
                     while (next && !next.classList.contains('section-label')) {
-                        if (next.classList.contains('command-card') && next.style.display !== 'none') {
-                            any = true;
-                        }
+                        if (next.classList.contains('command-card') && next.style.display !== 'none') any = true;
                         next = next.nextElementSibling;
                     }
                     label.style.display = any ? '' : 'none';
                 });
             });
         }
-
         function setupFaq() {
             document.querySelectorAll('.faq-item').forEach(item => {
                 const q = item.querySelector('.faq-q');
                 if (!q) return;
-                q.addEventListener('click', () => {
-                    item.classList.toggle('open');
-                });
+                q.addEventListener('click', () => item.classList.toggle('open'));
             });
         }
 
-        // ======================= ПЕРЕКЛЮЧЕНИЕ ТАБОВ + СВАЙПЫ =======================
+        // ======================= ТАБЫ =======================
         const TAB_ORDER = ['profile', 'commands', 'settings', 'referral', 'instruction', 'community'];
         let currentTab = 'profile';
 
         function switchTab(tabName, fromSwipe = false) {
             currentTab = tabName;
-
-            document.querySelectorAll(".tab-content").forEach(el => {
-                el.classList.toggle("active", el.id === `tab-${tabName}`);
-            });
-
+            document.querySelectorAll(".tab-content").forEach(el => el.classList.toggle("active", el.id === `tab-${tabName}`));
             document.querySelectorAll(".tab-btn").forEach(btn => {
                 const isActive = btn.dataset.tab === tabName;
                 btn.classList.toggle("active", isActive);
-                if (isActive) {
-                    btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
-                }
+                if (isActive) btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
             });
-
             if (tabName === "referral") {
                 const refEl = document.getElementById("referral-content");
                 if (refEl && state.stats && state.stats.referral && !refEl.querySelector(".referral-card")) {
@@ -1966,16 +1171,9 @@
                 animateProgressBar();
                 bindCopyBtn();
             }
-
-            if (tabName === "settings" && !state.loadedSettings) {
-                loadSettings();
-            }
-
-            if (!fromSwipe) {
-                window.scrollTo({ top: 0, behavior: "smooth" });
-            } else {
-                window.scrollTo({ top: 0, behavior: "auto" });
-            }
+            if (tabName === "settings" && !state.loadedSettings) loadSettings();
+            if (!fromSwipe) window.scrollTo({ top: 0, behavior: "smooth" });
+            else window.scrollTo({ top: 0, behavior: "auto" });
         }
 
         document.querySelectorAll(".tab-btn").forEach(btn => {
@@ -1984,30 +1182,24 @@
 
         // ======================= СВАЙПЫ =======================
         (function setupSwipes() {
-            let touchStartX = 0;
-            let touchStartY = 0;
-            let touchStartTime = 0;
-            let tracking = false;
-            let moved = false;
+            let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+            let tracking = false, moved = false;
 
-            const MIN_DX = 100;          // минимальный сдвиг по X для свайпа
-            const MAX_DY = 60;           // максимальный сдвиг по Y
-            const MAX_TIME = 500;        // максимальное время касания
-            const MOVE_THRESHOLD = 10;   // порог, после которого считаем, что палец двигается
+            const MIN_DX = 100;
+            const MAX_DY = 60;
+            const MAX_TIME = 500;
+            const MOVE_THRESHOLD = 12;
 
-            // Игнорируем старт свайпа с этих элементов
-            const IGNORE_SELECTOR = 'button, a, input, textarea, select, .tab-btn, .tabs-scroll, .tabs-bar, .qa-btn, .copy-btn, .faq-q, .command-card, .contact-card, .action-btn, .info-num, .ref-link';
+            // Игнорируем старт с интерактивных элементов
+            const IGNORE = 'button, a, input, textarea, select, .tab-btn, .tabs-scroll, .tabs-bar, .qa-btn, .copy-btn, .faq-q, .command-card, .contact-card, .action-btn, .info-num, .ref-link, .search-input';
 
             document.addEventListener('touchstart', (e) => {
                 if (!e.touches || e.touches.length !== 1) { tracking = false; return; }
-                const target = e.target;
-                if (target && target.closest && target.closest(IGNORE_SELECTOR)) {
-                    tracking = false;
-                    return;
-                }
-                const t = e.touches[0];
-                touchStartX = t.clientX;
-                touchStartY = t.clientY;
+                const t = e.target;
+                if (t && t.closest && t.closest(IGNORE)) { tracking = false; return; }
+                const touch = e.touches[0];
+                touchStartX = touch.clientX;
+                touchStartY = touch.clientY;
                 touchStartTime = Date.now();
                 tracking = true;
                 moved = false;
@@ -2015,10 +1207,9 @@
 
             document.addEventListener('touchmove', (e) => {
                 if (!tracking) return;
-                const t = e.touches && e.touches[0];
-                if (!t) return;
-                if (Math.abs(t.clientX - touchStartX) > MOVE_THRESHOLD ||
-                    Math.abs(t.clientY - touchStartY) > MOVE_THRESHOLD) {
+                const touch = e.touches && e.touches[0];
+                if (!touch) return;
+                if (Math.abs(touch.clientX - touchStartX) > MOVE_THRESHOLD || Math.abs(touch.clientY - touchStartY) > MOVE_THRESHOLD) {
                     moved = true;
                 }
             }, { passive: true });
@@ -2026,28 +1217,20 @@
             document.addEventListener('touchend', (e) => {
                 if (!tracking) return;
                 tracking = false;
-
-                const t = e.changedTouches && e.changedTouches[0];
-                if (!t) return;
-
-                const dx = t.clientX - touchStartX;
-                const dy = t.clientY - touchStartY;
+                const touch = e.changedTouches && e.changedTouches[0];
+                if (!touch) return;
+                const dx = touch.clientX - touchStartX;
+                const dy = touch.clientY - touchStartY;
                 const dt = Date.now() - touchStartTime;
-
-                if (!moved) return;               // это был тап, не свайп
+                if (!moved) return;
                 if (dt > MAX_TIME) return;
                 if (Math.abs(dx) < MIN_DX) return;
                 if (Math.abs(dy) > MAX_DY) return;
                 if (Math.abs(dy) > Math.abs(dx)) return;
-
                 const idx = TAB_ORDER.indexOf(currentTab);
                 if (idx === -1) return;
-
-                if (dx < 0 && idx < TAB_ORDER.length - 1) {
-                    switchTab(TAB_ORDER[idx + 1], true);
-                } else if (dx > 0 && idx > 0) {
-                    switchTab(TAB_ORDER[idx - 1], true);
-                }
+                if (dx < 0 && idx < TAB_ORDER.length - 1) switchTab(TAB_ORDER[idx + 1], true);
+                else if (dx > 0 && idx > 0) switchTab(TAB_ORDER[idx - 1], true);
             }, { passive: true });
 
             document.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
@@ -2070,7 +1253,7 @@
             Object.assign(overlay.style, {
                 position: 'fixed',
                 top: '0', right: '0', bottom: '0', left: '0',
-                background: 'rgba(0, 0, 0, 0.6)',
+                background: 'rgba(0, 0, 0, 0.65)',
                 zIndex: '10000',
                 display: 'flex',
                 alignItems: 'flex-end',
@@ -2083,7 +1266,7 @@
             Object.assign(sheet.style, {
                 width: '100%',
                 maxWidth: '520px',
-                maxHeight: '85vh',
+                height: '88vh',
                 background: 'var(--bg)',
                 borderRadius: '20px 20px 0 0',
                 overflow: 'hidden',
@@ -2107,10 +1290,10 @@
             });
             header.innerHTML = `
                 <div style="min-width:0;flex:1;">
-                    <div style="font-size:15px;font-weight:650;color:var(--text);">Сохранённый чат</div>
+                    <div style="font-size:15px;font-weight:650;color:var(--text);" id="delChatTitle">Сохранённый чат</div>
                     <div style="font-size:12px;color:var(--hint);margin-top:2px;" id="delChatSubtitle">Загрузка…</div>
                 </div>
-                <button id="delChatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+                <button id="delChatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">×</button>
             `;
 
             const body = document.createElement('div');
@@ -2127,12 +1310,10 @@
             overlay.appendChild(sheet);
             document.body.appendChild(overlay);
 
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    overlay.style.opacity = '1';
-                    sheet.style.transform = 'translateY(0)';
-                });
-            });
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                overlay.style.opacity = '1';
+                sheet.style.transform = 'translateY(0)';
+            }));
 
             function close() {
                 overlay.style.opacity = '0';
@@ -2141,9 +1322,7 @@
             }
 
             header.querySelector('#delChatClose').addEventListener('click', close);
-            overlay.addEventListener('click', (e) => {
-                if (e.target === overlay) close();
-            });
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
             try {
                 const initData = tg?.initData || "";
@@ -2156,25 +1335,44 @@
                 }
                 const data = await resp.json();
 
-                header.querySelector('#delChatSubtitle').textContent =
-                    `${data.sender_name} · ${data.count} сообщений`;
+                const titleEl = header.querySelector('#delChatTitle');
+                const subEl = header.querySelector('#delChatSubtitle');
+
+                if (data.is_chat_deleted) {
+                    titleEl.textContent = '❌ Чат полностью удалён';
+                    titleEl.style.color = 'var(--danger)';
+                } else {
+                    titleEl.textContent = '💬 Сохранённый чат';
+                }
+                subEl.textContent = `${data.sender_name} · ${data.count} сообщений`;
 
                 if (!data.messages || data.messages.length === 0) {
                     body.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--hint);font-size:13px;">Сообщений не найдено</div>';
                     return;
                 }
 
-                body.innerHTML = data.messages.map(m => `
-                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">
-                        <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;">
-                            <span style="font-size:11.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.from)}</span>
-                            <span style="font-size:10.5px;color:var(--hint);flex-shrink:0;">${escapeHtml(m.date || '')}</span>
+                body.innerHTML = data.messages.map(m => {
+                    const deleted = m.is_deleted;
+                    const bg = deleted ? 'var(--bg-hover)' : 'var(--bg-secondary)';
+                    const borderColor = deleted ? 'var(--border)' : 'var(--border)';
+                    const textStyle = deleted
+                        ? 'text-decoration:line-through;opacity:0.65;'
+                        : '';
+                    return `
+                        <div style="background:${bg};border:1px solid ${borderColor};border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+                            <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:center;">
+                                <span style="font-size:11.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.from)}</span>
+                                <span style="font-size:10.5px;color:var(--hint);flex-shrink:0;display:flex;gap:6px;align-items:center;">
+                                    ${deleted ? '<span title="Удалено">🗑️</span>' : ''}
+                                    ${escapeHtml(m.date || '')}
+                                </span>
+                            </div>
+                            ${m.text ? `<div style="font-size:13.5px;color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word;${textStyle}">${escapeHtml(m.text)}</div>` : ''}
+                            ${m.has_files ? `<div style="font-size:11.5px;color:var(--hint);margin-top:6px;">📎 ${m.files_count} файл${m.files_count > 1 ? 'а' : ''}</div>` : ''}
+                            ${m.is_temp ? `<div style="font-size:11px;color:var(--danger);margin-top:4px;">⚠️ Самоуничтожающееся</div>` : ''}
                         </div>
-                        ${m.text ? `<div style="font-size:13.5px;color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word;">${escapeHtml(m.text)}</div>` : ''}
-                        ${m.has_files ? `<div style="font-size:11.5px;color:var(--hint);margin-top:6px;">📎 ${m.files_count} файл${m.files_count > 1 ? 'а' : ''}</div>` : ''}
-                        ${m.is_temp ? `<div style="font-size:11px;color:var(--danger);margin-top:4px;">⚠️ Самоуничтожающееся</div>` : ''}
-                    </div>
-                `).join('');
+                    `;
+                }).join('');
             } catch (e) {
                 body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--danger);font-size:13px;">Не удалось загрузить: ${escapeHtml(e.message)}</div>`;
             }
@@ -2183,7 +1381,7 @@
         (function checkDeletedChatParam() {
             const chatId = getChatIdFromUrl();
             if (chatId) {
-                setTimeout(() => openDeletedChatModal(chatId), 700);
+                setTimeout(() => openDeletedChatModal(chatId), 500);
             }
         })();
 
