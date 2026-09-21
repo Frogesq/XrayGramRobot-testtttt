@@ -42,7 +42,6 @@
             transition: background 0.4s var(--ease), color 0.4s var(--ease);
         }
 
-        /* ======================= ФОН С ЧАСТИЦАМИ ======================= */
         #particles-canvas {
             position: fixed;
             top: 0; left: 0;
@@ -53,7 +52,6 @@
             transition: opacity 0.4s var(--ease);
         }
 
-        /* ======================= АНИМАЦИИ ======================= */
         @keyframes fadeUp {
             from { opacity: 0; transform: translateY(8px); }
             to   { opacity: 1; transform: translateY(0); }
@@ -88,7 +86,6 @@
             50%      { opacity: 0.4; transform: scale(0.85); }
         }
 
-        /* ======================= ТАБЫ ======================= */
         .tabs-bar {
             position: sticky;
             top: 0;
@@ -154,7 +151,6 @@
         .tab-btn.active::after { transform: scaleX(1); opacity: 1; }
         .tab-btn.active svg { opacity: 1; transform: scale(1.05); }
 
-        /* ======================= КОНТЕНТ ======================= */
         .tab-content {
             display: none;
             padding: 26px 18px 48px;
@@ -203,7 +199,6 @@
             font-weight: 600;
         }
 
-        /* ======================= ПРОФИЛЬ ======================= */
         .profile-header {
             display: flex;
             align-items: center;
@@ -269,7 +264,6 @@
             margin-top: 2px;
         }
 
-        /* Быстрые действия */
         .quick-actions {
             display: grid;
             grid-template-columns: repeat(4, 1fr);
@@ -309,7 +303,6 @@
         .qa-btn:hover svg { transform: scale(1.12); }
         .qa-btn:active { transform: scale(0.97); }
 
-        /* ======================= СТАТИСТИКА ======================= */
         .stat-grid {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -341,7 +334,6 @@
             color: var(--hint);
         }
 
-        /* ======================= КАРТОЧКИ ======================= */
         .card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -356,7 +348,6 @@
             box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05);
         }
 
-        /* ======================= ПОИСК В КОМАНДАХ ======================= */
         .search-wrap {
             position: relative;
             margin-bottom: 6px;
@@ -390,7 +381,6 @@
             box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.1);
         }
 
-        /* ======================= КОМАНДЫ ======================= */
         .command-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -429,7 +419,6 @@
             color: var(--text-secondary);
         }
 
-        /* ======================= НАСТРОЙКИ ======================= */
         .setting-row {
             display: flex;
             justify-content: space-between;
@@ -491,7 +480,6 @@
             text-align: center;
         }
 
-        /* ======================= РЕФЕРАЛЫ ======================= */
         .referral-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -607,7 +595,6 @@
             box-shadow: 0 0 18px rgba(61, 220, 132, 0.4);
         }
 
-        /* ======================= ИНСТРУКЦИЯ ======================= */
         .steps-list { list-style: none; counter-reset: step; }
         .steps-list li {
             position: relative;
@@ -685,7 +672,6 @@
         }
         .action-btn:active { transform: scale(0.985); opacity: 0.85; }
 
-        /* ======================= СООБЩЕСТВО ======================= */
         .contact-card {
             display: flex;
             align-items: center;
@@ -748,7 +734,6 @@
             transform: translateX(4px);
         }
 
-        /* FAQ */
         .faq-item {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -798,7 +783,6 @@
             opacity: 1;
         }
 
-        /* ======================= СКЕЛЕТОН-ЗАГРУЗКА ======================= */
         .skel {
             background: linear-gradient(
                 90deg,
@@ -853,7 +837,6 @@
             border-radius: var(--radius);
         }
 
-        /* ======================= ТОСТ ======================= */
         #toast-container {
             position: fixed;
             left: 0; right: 0;
@@ -894,7 +877,6 @@
         .toast.info svg { color: var(--accent); }
         .toast.error svg { color: var(--danger); }
 
-        /* ======================= ЗАГРУЗКА ======================= */
         .loader {
             display: flex;
             align-items: center;
@@ -929,7 +911,6 @@
         }
         .error-title { color: var(--danger); font-weight: 600; margin-bottom: 6px; }
 
-        /* ======================= INFO-ЛИСТ ======================= */
         .info-list {
             display: flex;
             flex-direction: column;
@@ -964,7 +945,6 @@
             box-shadow: 0 0 12px rgba(58, 122, 254, 0.35);
         }
 
-        /* ======================= ДОСТУПНОСТЬ ======================= */
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
                 animation-duration: 0.001ms !important;
@@ -976,7 +956,6 @@
 </head>
 <body>
 
-    <!-- Фон с частицами -->
     <canvas id="particles-canvas"></canvas>
 
     <div class="tabs-bar">
@@ -1278,13 +1257,14 @@
 
             const MIN_SHOW = 1300;
             const MAX_SHOW = 3200;
+            const HARD_KILL = 4500;
             const IDLE_TARGET = 88;
             const t0 = performance.now();
 
             const splash = document.createElement('div');
             Object.assign(splash.style, {
                 position: 'fixed',
-                inset: '0',
+                top: '0', right: '0', bottom: '0', left: '0',
                 zIndex: '9999',
                 background: 'var(--bg, #0f0f10)',
                 display: 'flex',
@@ -1394,9 +1374,16 @@
             if (document.readyState === 'complete') tryFinish();
             else window.addEventListener('load', tryFinish);
             setTimeout(finish, MAX_SHOW);
+
+            // Резервный kill-switch: если что-то упало — просто убираем
+            setTimeout(() => {
+                try {
+                    splash.style.opacity = '0';
+                    setTimeout(() => { try { splash.remove(); } catch(e){} }, 600);
+                } catch(e){}
+            }, HARD_KILL);
         })();
 
-        // ======================= ОСНОВНАЯ ЛОГИКА =======================
         const tg = window.Telegram?.WebApp;
         if (tg) {
             tg.ready();
@@ -1430,6 +1417,18 @@
         };
 
         let currentThemeMode = 'auto';
+        let particleRGB = '255, 255, 255';
+
+        function getEffectiveTheme() {
+            if (currentThemeMode !== 'auto') return currentThemeMode;
+            if (tg && tg.colorScheme) return tg.colorScheme;
+            return 'dark';
+        }
+
+        function updateParticleColor() {
+            const eff = getEffectiveTheme();
+            particleRGB = eff === 'light' ? '0, 0, 0' : '255, 255, 255';
+        }
 
         function applyTheme(mode) {
             currentThemeMode = mode;
@@ -1446,7 +1445,6 @@
             }
             try { localStorage.setItem('xraygram_theme', mode); } catch (e) {}
 
-            // Синхронизация с Telegram
             const effective = getEffectiveTheme();
             const bgColor = effective === 'light' ? '#ffffff' : '#0f0f10';
             if (tg) {
@@ -1454,12 +1452,6 @@
                 try { tg.setBackgroundColor(bgColor); } catch (e) {}
             }
             updateParticleColor();
-        }
-
-        function getEffectiveTheme() {
-            if (currentThemeMode !== 'auto') return currentThemeMode;
-            if (tg && tg.colorScheme) return tg.colorScheme;
-            return 'dark';
         }
 
         function cycleTheme() {
@@ -1473,22 +1465,15 @@
             }
         }
 
-        // Применяем сохранённую тему сразу
         (function initTheme() {
             let saved = 'auto';
             try { saved = localStorage.getItem('xraygram_theme') || 'auto'; } catch (e) {}
             applyTheme(saved);
         })();
 
-        // ======================= ФОН С ЧАСТИЦАМИ =======================
-        let particleRGB = '255, 255, 255';
-
-        function updateParticleColor() {
-            const eff = getEffectiveTheme();
-            particleRGB = eff === 'light' ? '0, 0, 0' : '255, 255, 255';
-        }
         updateParticleColor();
 
+        // ======================= ФОН С ЧАСТИЦАМИ =======================
         (function initParticles() {
             const canvas = document.getElementById('particles-canvas');
             if (!canvas) return;
@@ -1582,7 +1567,7 @@
             }, 2400);
         }
 
-        // ======================= СОСТОЯНИЕ =======================
+        // ======================= УТИЛИТЫ =======================
         const state = {
             stats: null,
             settings: null,
@@ -1997,29 +1982,45 @@
             btn.addEventListener("click", () => switchTab(btn.dataset.tab));
         });
 
-        // Свайпы между вкладками
+        // ======================= СВАЙПЫ =======================
         (function setupSwipes() {
             let touchStartX = 0;
             let touchStartY = 0;
             let touchStartTime = 0;
             let tracking = false;
+            let moved = false;
 
-            const MIN_DX = 70;
-            const MAX_DY_RATIO = 0.6;
-            const MAX_TIME = 700;
+            const MIN_DX = 100;          // минимальный сдвиг по X для свайпа
+            const MAX_DY = 60;           // максимальный сдвиг по Y
+            const MAX_TIME = 500;        // максимальное время касания
+            const MOVE_THRESHOLD = 10;   // порог, после которого считаем, что палец двигается
+
+            // Игнорируем старт свайпа с этих элементов
+            const IGNORE_SELECTOR = 'button, a, input, textarea, select, .tab-btn, .tabs-scroll, .tabs-bar, .qa-btn, .copy-btn, .faq-q, .command-card, .contact-card, .action-btn, .info-num, .ref-link';
 
             document.addEventListener('touchstart', (e) => {
                 if (!e.touches || e.touches.length !== 1) { tracking = false; return; }
-                // Игнорируем свайпы в скролл-зоне табов
-                if (e.target.closest && e.target.closest('.tabs-scroll')) { tracking = false; return; }
-                // Игнорируем на интерактивных элементах, которые могут скроллиться горизонтально
-                if (e.target.closest && e.target.closest('.tabs-bar')) { tracking = false; return; }
-
+                const target = e.target;
+                if (target && target.closest && target.closest(IGNORE_SELECTOR)) {
+                    tracking = false;
+                    return;
+                }
                 const t = e.touches[0];
                 touchStartX = t.clientX;
                 touchStartY = t.clientY;
                 touchStartTime = Date.now();
                 tracking = true;
+                moved = false;
+            }, { passive: true });
+
+            document.addEventListener('touchmove', (e) => {
+                if (!tracking) return;
+                const t = e.touches && e.touches[0];
+                if (!t) return;
+                if (Math.abs(t.clientX - touchStartX) > MOVE_THRESHOLD ||
+                    Math.abs(t.clientY - touchStartY) > MOVE_THRESHOLD) {
+                    moved = true;
+                }
             }, { passive: true });
 
             document.addEventListener('touchend', (e) => {
@@ -2033,9 +2034,11 @@
                 const dy = t.clientY - touchStartY;
                 const dt = Date.now() - touchStartTime;
 
+                if (!moved) return;               // это был тап, не свайп
                 if (dt > MAX_TIME) return;
                 if (Math.abs(dx) < MIN_DX) return;
-                if (Math.abs(dy) > Math.abs(dx) * MAX_DY_RATIO) return;
+                if (Math.abs(dy) > MAX_DY) return;
+                if (Math.abs(dy) > Math.abs(dx)) return;
 
                 const idx = TAB_ORDER.indexOf(currentTab);
                 if (idx === -1) return;
@@ -2046,8 +2049,145 @@
                     switchTab(TAB_ORDER[idx - 1], true);
                 }
             }, { passive: true });
+
+            document.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
         })();
 
+        // ======================= ПРОСМОТР УДАЛЁННОГО ЧАТА =======================
+        function getChatIdFromUrl() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const chat = params.get('chat');
+                if (chat) return chat;
+            } catch (e) {}
+            const sp = tg?.initDataUnsafe?.start_param;
+            if (sp && sp.startsWith('chat_')) return sp.slice(5);
+            return null;
+        }
+
+        async function openDeletedChatModal(chatId) {
+            const overlay = document.createElement('div');
+            Object.assign(overlay.style, {
+                position: 'fixed',
+                top: '0', right: '0', bottom: '0', left: '0',
+                background: 'rgba(0, 0, 0, 0.6)',
+                zIndex: '10000',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                opacity: '0',
+                transition: 'opacity 0.3s ease',
+            });
+
+            const sheet = document.createElement('div');
+            Object.assign(sheet.style, {
+                width: '100%',
+                maxWidth: '520px',
+                maxHeight: '85vh',
+                background: 'var(--bg)',
+                borderRadius: '20px 20px 0 0',
+                overflow: 'hidden',
+                display: 'flex',
+                flexDirection: 'column',
+                transform: 'translateY(100%)',
+                transition: 'transform 0.4s cubic-bezier(0.22, 1, 0.36, 1)',
+                border: '1px solid var(--border)',
+                borderBottom: 'none',
+            });
+
+            const header = document.createElement('div');
+            Object.assign(header.style, {
+                padding: '16px 20px',
+                borderBottom: '1px solid var(--divider)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                flexShrink: '0',
+            });
+            header.innerHTML = `
+                <div style="min-width:0;flex:1;">
+                    <div style="font-size:15px;font-weight:650;color:var(--text);">Сохранённый чат</div>
+                    <div style="font-size:12px;color:var(--hint);margin-top:2px;" id="delChatSubtitle">Загрузка…</div>
+                </div>
+                <button id="delChatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>
+            `;
+
+            const body = document.createElement('div');
+            Object.assign(body.style, {
+                flex: '1',
+                overflowY: 'auto',
+                padding: '14px 16px 24px',
+                WebkitOverflowScrolling: 'touch',
+            });
+            body.innerHTML = '<div style="padding:60px 0;text-align:center;color:var(--hint);font-size:13px;">Загрузка сообщений…</div>';
+
+            sheet.appendChild(header);
+            sheet.appendChild(body);
+            overlay.appendChild(sheet);
+            document.body.appendChild(overlay);
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    overlay.style.opacity = '1';
+                    sheet.style.transform = 'translateY(0)';
+                });
+            });
+
+            function close() {
+                overlay.style.opacity = '0';
+                sheet.style.transform = 'translateY(100%)';
+                setTimeout(() => overlay.remove(), 400);
+            }
+
+            header.querySelector('#delChatClose').addEventListener('click', close);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) close();
+            });
+
+            try {
+                const initData = tg?.initData || "";
+                const resp = await fetch(`/api/chat/${encodeURIComponent(chatId)}`, {
+                    headers: { "X-Init-Data": initData }
+                });
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || `HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+
+                header.querySelector('#delChatSubtitle').textContent =
+                    `${data.sender_name} · ${data.count} сообщений`;
+
+                if (!data.messages || data.messages.length === 0) {
+                    body.innerHTML = '<div style="padding:60px 20px;text-align:center;color:var(--hint);font-size:13px;">Сообщений не найдено</div>';
+                    return;
+                }
+
+                body.innerHTML = data.messages.map(m => `
+                    <div style="background:var(--bg-secondary);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+                        <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;">
+                            <span style="font-size:11.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.from)}</span>
+                            <span style="font-size:10.5px;color:var(--hint);flex-shrink:0;">${escapeHtml(m.date || '')}</span>
+                        </div>
+                        ${m.text ? `<div style="font-size:13.5px;color:var(--text);line-height:1.5;white-space:pre-wrap;word-break:break-word;">${escapeHtml(m.text)}</div>` : ''}
+                        ${m.has_files ? `<div style="font-size:11.5px;color:var(--hint);margin-top:6px;">📎 ${m.files_count} файл${m.files_count > 1 ? 'а' : ''}</div>` : ''}
+                        ${m.is_temp ? `<div style="font-size:11px;color:var(--danger);margin-top:4px;">⚠️ Самоуничтожающееся</div>` : ''}
+                    </div>
+                `).join('');
+            } catch (e) {
+                body.innerHTML = `<div style="padding:40px 20px;text-align:center;color:var(--danger);font-size:13px;">Не удалось загрузить: ${escapeHtml(e.message)}</div>`;
+            }
+        }
+
+        (function checkDeletedChatParam() {
+            const chatId = getChatIdFromUrl();
+            if (chatId) {
+                setTimeout(() => openDeletedChatModal(chatId), 700);
+            }
+        })();
+
+        // ======================= ИНИЦИАЛИЗАЦИЯ =======================
         setupCommandSearch();
         setupFaq();
         loadStats();
