@@ -2,7 +2,6 @@ import sqlite3
 import json
 import os
 import logging
-import shutil
 import time
 
 logger = logging.getLogger(__name__)
@@ -331,7 +330,6 @@ class Database:
         except Exception:
             return 0
 
-    # ---------- Реферальная система ----------
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -498,7 +496,6 @@ class Database:
         except Exception as e:
             logger.error(f"[DB] mark_stars_awarded: {e}")
 
-    # ---------- Настройки ----------
     def get_scam_check(self, user_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT scam_check FROM user_settings WHERE user_id = ?", (user_id,))
@@ -558,7 +555,6 @@ class Database:
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
-    # ---------- Подключения ----------
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -590,7 +586,6 @@ class Database:
         """)
         return cursor.fetchall()
 
-    # ---------- Удалённые чаты ----------
     def get_user_chats(self, user_id):
         try:
             cursor = self.conn.cursor()
@@ -647,7 +642,6 @@ class Database:
         except Exception:
             return []
 
-    # ---------- Сообщения ----------
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None,
                      is_temporary=False, chat_id=None):
         cursor = self.conn.cursor()
@@ -749,7 +743,6 @@ class Database:
         row = cursor.fetchone()
         return row["chat_id"] if row else None
 
-    # ---------- Mute ----------
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -770,7 +763,6 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
-    # ---------- TTT ----------
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
