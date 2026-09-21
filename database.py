@@ -168,6 +168,14 @@ class Database:
                 online_mode BOOLEAN DEFAULT 0
             )
         """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS deleted_chats (
+                user_id INTEGER,
+                chat_id INTEGER,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, chat_id)
+            )
+        """)
 
         # Миграции user_settings
         cursor.execute("PRAGMA table_info(user_settings)")
@@ -187,7 +195,7 @@ class Database:
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
 
-        # Legacy-колонки в users (оставлены для совместимости, не используются)
+        # Legacy-колонки в users (оставлены для совместимости)
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
         if "referrer_id" not in user_cols:
@@ -205,6 +213,7 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_chats_user ON deleted_chats(user_id)")
         self.conn.commit()
 
     # ================================================================
@@ -237,7 +246,6 @@ class Database:
                 UNIQUE(invited_id)
             )
         """)
-        # ---- Статистика пользователя ----
         cur.execute("""
             CREATE TABLE IF NOT EXISTS user_stats (
                 user_id INTEGER PRIMARY KEY,
@@ -355,6 +363,7 @@ class Database:
         cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM connections WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM deleted_chats WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
@@ -696,6 +705,52 @@ class Database:
             WHERE s.online_mode = 1
         """)
         return cursor.fetchall()
+
+    # ============ УДАЛЁННЫЕ ЧАТЫ ============
+    def get_user_chats(self, user_id):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT DISTINCT chat_id FROM messages WHERE user_id = ? AND chat_id IS NOT NULL",
+                (user_id,)
+            )
+            return [row["chat_id"] for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"[DB] get_user_chats: {e}")
+            return []
+
+    def mark_chat_deleted(self, user_id, chat_id):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "INSERT OR IGNORE INTO deleted_chats (user_id, chat_id) VALUES (?, ?)",
+                (user_id, chat_id)
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] mark_chat_deleted: {e}")
+
+    def is_chat_deleted(self, user_id, chat_id):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT 1 FROM deleted_chats WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id)
+            )
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+
+    def get_deleted_chats(self, user_id):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "SELECT chat_id, deleted_at FROM deleted_chats WHERE user_id = ? ORDER BY deleted_at DESC",
+                (user_id,)
+            )
+            return cursor.fetchall()
+        except Exception:
+            return []
 
     # ============ СООБЩЕНИЯ ============
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None,
