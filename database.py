@@ -107,9 +107,6 @@ class Database:
         self._init_tables()
         self._init_referral_tables()
 
-    # ================================================================
-    # ОСНОВНАЯ БД (messages.db)
-    # ================================================================
     def _init_tables(self):
         cursor = self.conn.cursor()
 
@@ -177,7 +174,6 @@ class Database:
             )
         """)
 
-        # Миграции user_settings
         cursor.execute("PRAGMA table_info(user_settings)")
         cols = [row["name"] for row in cursor.fetchall()]
         if "scam_check" not in cols:
@@ -189,13 +185,11 @@ class Database:
         if "online_mode" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
 
-        # Миграция messages
         cursor.execute("PRAGMA table_info(messages)")
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
 
-        # Legacy-колонки в users (оставлены для совместимости)
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
         if "referrer_id" not in user_cols:
@@ -216,9 +210,6 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_chats_user ON deleted_chats(user_id)")
         self.conn.commit()
 
-    # ================================================================
-    # РЕФЕРАЛЬНАЯ БД (referrals.db)
-    # ================================================================
     def _init_referral_tables(self):
         cur = self.ref_conn.cursor()
 
@@ -259,45 +250,6 @@ class Database:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
         self.ref_conn.commit()
 
-        # Одноразовая миграция из старой схемы users
-        try:
-            cur.execute("SELECT COUNT(*) AS c FROM referral_relations")
-            rel_count = cur.fetchone()["c"]
-            cur.execute("SELECT COUNT(*) AS c FROM referral_balances")
-            bal_count = cur.fetchone()["c"]
-            if rel_count == 0 and bal_count == 0:
-                main_cur = self.conn.cursor()
-                main_cur.execute("""
-                    SELECT user_id, referrer_id, referral_credited,
-                           COALESCE(pending_stars,0) AS ps, COALESCE(awarded_stars,0) AS as_
-                    FROM users
-                    WHERE referrer_id IS NOT NULL
-                       OR COALESCE(pending_stars,0) > 0
-                       OR COALESCE(awarded_stars,0) > 0
-                """)
-                migrated_rel = 0
-                migrated_bal = 0
-                for row in main_cur.fetchall():
-                    uid = row["user_id"]
-                    if row["referrer_id"] is not None:
-                        cur.execute(
-                            "INSERT OR IGNORE INTO referral_relations (user_id, referrer_id, credited) VALUES (?, ?, ?)",
-                            (uid, row["referrer_id"], row["referral_credited"] or 0)
-                        )
-                        migrated_rel += 1
-                    if row["ps"] > 0 or row["as_"] > 0:
-                        cur.execute(
-                            "INSERT OR IGNORE INTO referral_balances (user_id, pending_stars, awarded_stars) VALUES (?, ?, ?)",
-                            (uid, row["ps"], row["as_"])
-                        )
-                        migrated_bal += 1
-                if migrated_rel or migrated_bal:
-                    logger.info(f"[DB] Миграция рефералов: связей {migrated_rel}, балансов {migrated_bal}")
-                self.ref_conn.commit()
-        except Exception as e:
-            logger.error(f"[DB] Ошибка миграции рефералов: {e}")
-
-    # ============ БЭКАПЫ ============
     def auto_backup(self) -> str:
         try:
             if not os.path.exists(REFERRAL_DB_PATH):
@@ -337,7 +289,6 @@ class Database:
         except Exception:
             return []
 
-    # ============ ПОЛЬЗОВАТЕЛИ ============
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -367,7 +318,6 @@ class Database:
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
-    # ============ СТАТИСТИКА ПОЛЬЗОВАТЕЛЯ ============
     def increment_stat(self, user_id: int, field: str):
         if field not in ("deleted_count", "edited_count"):
             return
@@ -415,7 +365,6 @@ class Database:
         except Exception:
             return 0
 
-    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -614,7 +563,6 @@ class Database:
         except Exception as e:
             logger.error(f"[DB] mark_stars_awarded: {e}")
 
-    # ============ НАСТРОЙКИ ============
     def get_scam_check(self, user_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT scam_check FROM user_settings WHERE user_id = ?", (user_id,))
@@ -674,7 +622,6 @@ class Database:
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
-    # ============ ПОДКЛЮЧЕНИЯ ============
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -706,7 +653,6 @@ class Database:
         """)
         return cursor.fetchall()
 
-    # ============ УДАЛЁННЫЕ ЧАТЫ ============
     def get_user_chats(self, user_id):
         try:
             cursor = self.conn.cursor()
@@ -752,7 +698,6 @@ class Database:
         except Exception:
             return []
 
-    # ============ СООБЩЕНИЯ ============
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None,
                      is_temporary=False, chat_id=None):
         cursor = self.conn.cursor()
@@ -803,7 +748,6 @@ class Database:
         row = cursor.fetchone()
         return row["chat_id"] if row else None
 
-    # ============ MUTE ============
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -824,7 +768,6 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
-    # ============ TTT ============
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -878,7 +821,6 @@ class Database:
             }
         return None
 
-    # ============ СТАТИСТИКА ОБЩАЯ ============
     def get_users_count(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM users")
