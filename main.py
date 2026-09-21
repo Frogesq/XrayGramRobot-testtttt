@@ -881,12 +881,74 @@ async def api_settings(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_chat_messages(request):
+    init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
+    if not init_data:
+        return web.json_response({"error": "no_init_data"}, status=401)
+
+    user = _validate_init_data(init_data)
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+
+    user_id = int(user.get("id", 0))
+    if not user_id:
+        return web.json_response({"error": "no_user"}, status=400)
+
+    try:
+        chat_id = int(request.match_info.get("chat_id", "0"))
+    except (ValueError, TypeError):
+        return web.json_response({"error": "invalid_chat_id"}, status=400)
+
+    try:
+        cursor = db.conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ?",
+            (user_id, chat_id)
+        )
+        if cursor.fetchone()["c"] == 0:
+            return web.json_response({"error": "not_found"}, status=404)
+
+        cursor.execute("""
+            SELECT msg_id, fullname, text, files, is_temporary, created_at
+            FROM messages
+            WHERE user_id = ? AND chat_id = ?
+            ORDER BY msg_id ASC
+        """, (user_id, chat_id))
+        rows = cursor.fetchall()
+
+        messages = []
+        for r in rows:
+            files = json.loads(r["files"]) if r["files"] else []
+            messages.append({
+                "id": r["msg_id"],
+                "from": r["fullname"] or "Неизвестный",
+                "text": r["text"] or "",
+                "has_files": bool(files),
+                "files_count": len(files),
+                "is_temp": bool(r["is_temporary"]),
+                "date": (r["created_at"] or "")[5:16] if r["created_at"] else "",
+            })
+
+        sender_name = messages[0]["from"] if messages else "Неизвестный"
+
+        return web.json_response({
+            "chat_id": chat_id,
+            "sender_name": sender_name,
+            "messages": messages,
+            "count": len(messages),
+        })
+    except Exception as e:
+        logger.error(f"[MINI_APP] Ошибка в api_chat_messages: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+
 async def mini_app_server():
     try:
         app = web.Application()
         app.router.add_get("/", serve_index)
         app.router.add_get("/api/stats", api_stats)
         app.router.add_get("/api/settings", api_settings)
+        app.router.add_get("/api/chat/{chat_id}", api_chat_messages)
         app.router.add_get("/{name}", serve_static)
 
         port = int(os.getenv("PORT", "3000"))
@@ -1939,13 +2001,13 @@ async def active_connections(callback: types.CallbackQuery):
             if conn and conn.is_enabled:
                 active_ids.append(user_id)
             else:
-                db.delete_user_completely(user_id)
+                db.delete_connection(bc_id)
                 removed += 1
-                logger.info(f"[ACTIVE] {user_id} отключил бота — удалён из БД")
+                logger.info(f"[ACTIVE] {user_id} отключил бота — связь удалена")
         except Exception as e:
-            db.delete_user_completely(user_id)
+            db.delete_connection(bc_id)
             removed += 1
-            logger.info(f"[ACTIVE] bc_id {bc_id} невалиден — {user_id} удалён из БД")
+            logger.info(f"[ACTIVE] bc_id {bc_id} невалиден — связь удалена")
 
     if not active_ids:
         await callback.answer(f"Нет активных подключений. Очищено: {removed}", show_alert=True)
@@ -2019,9 +2081,7 @@ async def handle_business_connection(connection: BusinessConnection):
 
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
-        # Убираем только связь (данные пользователя сохраняем)
         db.delete_connection(bc_id)
-        # Уведомляем пользователя с кнопкой на Mini App
         try:
             kb = InlineKeyboardMarkup(inline_keyboard=[[
                 InlineKeyboardButton(
@@ -2501,6 +2561,7 @@ async def auto_restart_loop():
         await asyncio.sleep(1)
         os._exit(0)
 
+
 async def notify_chat_deleted(user_id: int, chat_id: int):
     try:
         kb = InlineKeyboardMarkup(inline_keyboard=[[
@@ -2526,7 +2587,6 @@ async def notify_chat_deleted(user_id: int, chat_id: int):
 
 
 async def chat_watchdog_loop():
-    # Стартуем через 2 минуты после запуска бота
     await asyncio.sleep(120)
     logger.info("[WATCHDOG] Проверка удалённых чатов запущена")
     while True:
@@ -2555,8 +2615,8 @@ async def chat_watchdog_loop():
                 await asyncio.sleep(0.5)
         except Exception as e:
             logger.error(f"[WATCHDOG] Ошибка: {e}")
-        # Проверяем каждые 30 минут
         await asyncio.sleep(1800)
+
 
 async def main():
     try:
