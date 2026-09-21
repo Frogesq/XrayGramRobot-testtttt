@@ -158,6 +158,7 @@ B XrayGramGPT 1.0 лучший подход полныпроблем модел�
 RANVIK_API_BASE = "https://api.ranvik.ru/v1"
 RANVIK_MODEL = "deepseek-v4-flash"
 
+
 class RanvikAPI:
     def __init__(self, api_key: str, model: str = RANVIK_MODEL):
         self.api_key = api_key
@@ -218,6 +219,7 @@ class RanvikAPI:
                 formatted += p.strip() + "\n\n"
         formatted += "─\nБот - @XrayGramRobot"
         return formatted
+
 
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
@@ -354,7 +356,6 @@ def pickmeify(text: str) -> str:
         while core and not core[-1].isalnum():
             suffix = core[-1] + suffix
             core = core[:-1]
-
         low = core.lower()
         if low in PICKME_SUBSTITUTIONS:
             result.append(prefix + PICKME_SUBSTITUTIONS[low] + suffix)
@@ -363,7 +364,6 @@ def pickmeify(text: str) -> str:
                 result.append(prefix + core + "~" + suffix)
             else:
                 result.append(w)
-
     out = " ".join(result)
     out += " " + random.choice(PICKME_EMOJIS)
     if random.random() < 0.5:
@@ -445,7 +445,6 @@ def apply_text_mode(text: str, mode: str) -> str:
 
 async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
     stripped = (text or "").strip()
-
     if len(stripped) < 3:
         return text, ""
     if not any(ch.isalpha() for ch in stripped):
@@ -453,10 +452,8 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
     letters_only = [ch for ch in stripped if ch.isalpha()]
     if len(letters_only) < 3:
         return text, ""
-
     if text_matches_lang_script(stripped, target_lang):
         return text, ""
-
     try:
         url = "https://translate.googleapis.com/translate_a/single"
         params = {
@@ -492,7 +489,6 @@ async def translate_text(text: str, target_lang: str) -> tuple[str, str]:
                     def _base(c): return (c or "").split("-")[0].lower()
                     if detected and _base(detected) == _base(target_lang):
                         return text, ""
-
                     return result, detected
     except Exception as e:
         logger.debug(f"[TRANSLATE] Ошибка: {e}")
@@ -512,11 +508,17 @@ KNOWN_COMMANDS = (
     ".anim", ".ttt", ".gn", ".troll", ".stoptroll",
 )
 
+# Для отложенных уведомлений об очистке чата
+_pending_deletions = {}       # (user_id, chat_id) -> list of dict
+_pending_deletion_timers = {} # (user_id, chat_id) -> asyncio.Task
+
+
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
         if emoji in text and emoji_id and str(emoji_id).isdigit():
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
+
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -528,23 +530,13 @@ db = Database()
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 os.makedirs(MINI_APP_DIR, exist_ok=True)
 
-if os.path.exists(INSTRUCTION_VIDEO_PATH):
-    logger.info("✅ Видео инструкции найдено")
-else:
-    logger.warning("❌ Видео инструкции НЕ найдено")
-if os.path.exists(BANNER_PATH):
-    logger.info("✅ Баннер найден")
-else:
-    logger.warning("❌ Баннер НЕ найден")
-if os.path.exists(os.path.join(MINI_APP_DIR, "index.html")):
-    logger.info("✅ Mini App index.html найден")
-else:
-    logger.warning("❌ Mini App index.html НЕ найден")
 
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
+
 ttt_games = {}
+
 
 def ttt_board_to_text(board):
     res = ""
@@ -555,12 +547,14 @@ def ttt_board_to_text(board):
         res += "\n"
     return res.strip()
 
+
 def ttt_check_winner(board):
     win = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]
     for combo in win:
         if board[combo[0]] == board[combo[1]] == board[combo[2]] and board[combo[0]] != " ":
             return board[combo[0]]
     return None if " " in board else "draw"
+
 
 def ttt_keyboard(board, game_id):
     kb = []
@@ -576,6 +570,7 @@ def ttt_keyboard(board, game_id):
     kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data=f"ttt_end_{game_id}", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация...</i>", parse_mode="HTML")
     cur = ""
@@ -587,6 +582,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             pass
         await asyncio.sleep(delay)
     await asyncio.sleep(0.5)
+
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
@@ -605,13 +601,16 @@ def main_menu_keyboard(is_admin: bool = False):
         kb.append([InlineKeyboardButton(text="Админ панель", callback_data="admin_panel", icon_custom_emoji_id="5257965174979042426")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+
 def subscription_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")]
     ])
 
+
 def instruction_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -622,20 +621,26 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
+
 def cancel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast", style="danger")]])
+
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]])
 
+
 def commands_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
 
 def profile_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
 
+
 def referral_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
 
 def settings_keyboard(user_id: int):
     enabled = db.get_scam_check(user_id)
@@ -654,6 +659,7 @@ def settings_keyboard(user_id: int):
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
+
 def text_mode_keyboard(user_id: int):
     current = db.get_text_mode(user_id)
     modes = [
@@ -670,6 +676,7 @@ def text_mode_keyboard(user_id: int):
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def translate_keyboard(user_id: int):
     current = db.get_translate_to(user_id)
     buttons = []
@@ -679,6 +686,7 @@ def translate_keyboard(user_id: int):
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -687,9 +695,9 @@ async def is_subscribed(user_id: int) -> bool:
     except:
         return True
 
+
 _sub_cache = {}
 _sub_notified = {}
-
 SUB_CACHE_TTL = 60
 SUB_NOTIFY_COOLDOWN = 300
 
@@ -707,16 +715,13 @@ async def _check_subscription_cached(user_id: int, ttl: int = SUB_CACHE_TTL) -> 
 async def ensure_subscription(user_id: int, notify: bool = True, force_notify: bool = False) -> bool:
     if await _check_subscription_cached(user_id):
         return True
-
     if not notify:
         return False
-
     now = time.time()
     last = _sub_notified.get(user_id, 0)
     if not force_notify and now - last < SUB_NOTIFY_COOLDOWN:
         return False
     _sub_notified[user_id] = now
-
     try:
         await bot.send_message(
             user_id,
@@ -731,6 +736,7 @@ async def ensure_subscription(user_id: int, notify: bool = True, force_notify: b
     except Exception as e:
         logger.error(f"[SUB] Не удалось отправить уведомление {user_id}: {e}")
     return False
+
 
 _pending_sub_tasks = {}
 
@@ -753,16 +759,16 @@ async def _wait_for_subscription_and_send_instruction(user_id: int):
                 _sub_cache[user_id] = (True, time.time())
                 try:
                     await show_instruction_logic(user_id)
-                    logger.info(f"[SUB_WATCH] Инструкция отправлена {user_id} после подписки")
                 except Exception as e:
-                    logger.error(f"[SUB_WATCH] Ошибка отправки инструкции {user_id}: {e}")
+                    logger.error(f"[SUB_WATCH] Ошибка: {e}")
                 return
     except asyncio.CancelledError:
         return
     finally:
         _pending_sub_tasks.pop(user_id, None)
 
-# ============ ВЕБ-СЕРВЕР ДЛЯ MINI APP ============
+
+# ============ ВЕБ-СЕРВЕР ============
 def _validate_init_data(init_data: str) -> dict | None:
     try:
         parsed = dict(parse_qsl(init_data, keep_blank_values=True))
@@ -801,29 +807,23 @@ async def serve_static(request):
 
 async def api_stats(request):
     init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
-
     if not init_data:
         return web.json_response({"error": "no_init_data"}, status=401)
-
     user = _validate_init_data(init_data)
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-
     user_id = int(user.get("id", 0))
     if not user_id:
         return web.json_response({"error": "no_user"}, status=400)
-
     try:
         row = db.get_user(user_id)
         registered_at = row["registered_at"] if row and row["registered_at"] else None
-
         stars = db.get_user_stars(user_id)
         stats = db.get_user_stats(user_id)
         msgs_saved = db.get_user_messages_saved(user_id)
         active_conns = db.get_user_active_connections(user_id)
         invited_total = db.count_referrals_invited(user_id)
         invited_credited = db.count_referrals(user_id)
-
         return web.json_response({
             "user": {
                 "id": user_id,
@@ -853,18 +853,14 @@ async def api_stats(request):
 
 async def api_settings(request):
     init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
-
     if not init_data:
         return web.json_response({"error": "no_init_data"}, status=401)
-
     user = _validate_init_data(init_data)
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-
     user_id = int(user.get("id", 0))
     if not user_id:
         return web.json_response({"error": "no_user"}, status=400)
-
     try:
         mode = db.get_text_mode(user_id)
         translate = db.get_translate_to(user_id)
@@ -882,43 +878,33 @@ async def api_settings(request):
 
 
 async def api_chat_messages(request):
+    """Возвращает ВСЕ сообщения чата, включая удалённые (с флагом is_deleted)."""
     init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
     if not init_data:
         return web.json_response({"error": "no_init_data"}, status=401)
-
     user = _validate_init_data(init_data)
     if not user:
         return web.json_response({"error": "invalid_init_data"}, status=401)
-
     user_id = int(user.get("id", 0))
     if not user_id:
         return web.json_response({"error": "no_user"}, status=400)
-
     try:
         chat_id = int(request.match_info.get("chat_id", "0"))
     except (ValueError, TypeError):
         return web.json_response({"error": "invalid_chat_id"}, status=400)
-
     try:
-        cursor = db.conn.cursor()
-        cursor.execute(
-            "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ?",
-            (user_id, chat_id)
-        )
-        if cursor.fetchone()["c"] == 0:
+        rows = db.get_chat_messages(user_id, chat_id)
+        if not rows:
             return web.json_response({"error": "not_found"}, status=404)
-
-        cursor.execute("""
-            SELECT msg_id, fullname, text, files, is_temporary, created_at
-            FROM messages
-            WHERE user_id = ? AND chat_id = ?
-            ORDER BY msg_id ASC
-        """, (user_id, chat_id))
-        rows = cursor.fetchall()
 
         messages = []
         for r in rows:
             files = json.loads(r["files"]) if r["files"] else []
+            # Правильное определение is_deleted с учетом отсутствия колонки
+            try:
+                is_deleted = bool(r["is_deleted"]) if r["is_deleted"] is not None else False
+            except (KeyError, IndexError):
+                is_deleted = False
             messages.append({
                 "id": r["msg_id"],
                 "from": r["fullname"] or "Неизвестный",
@@ -926,16 +912,19 @@ async def api_chat_messages(request):
                 "has_files": bool(files),
                 "files_count": len(files),
                 "is_temp": bool(r["is_temporary"]),
+                "is_deleted": is_deleted,
                 "date": (r["created_at"] or "")[5:16] if r["created_at"] else "",
             })
 
         sender_name = messages[0]["from"] if messages else "Неизвестный"
+        is_chat_deleted = db.is_chat_deleted(user_id, chat_id)
 
         return web.json_response({
             "chat_id": chat_id,
             "sender_name": sender_name,
             "messages": messages,
             "count": len(messages),
+            "is_chat_deleted": is_chat_deleted,
         })
     except Exception as e:
         logger.error(f"[MINI_APP] Ошибка в api_chat_messages: {e}")
@@ -950,7 +939,6 @@ async def mini_app_server():
         app.router.add_get("/api/settings", api_settings)
         app.router.add_get("/api/chat/{chat_id}", api_chat_messages)
         app.router.add_get("/{name}", serve_static)
-
         port = int(os.getenv("PORT", "3000"))
         runner = web.AppRunner(app)
         await runner.setup()
@@ -959,12 +947,14 @@ async def mini_app_server():
         logger.info(f"✅ Mini App сервер запущен на 0.0.0.0:{port}")
     except Exception as e:
         logger.error(f"❌ Ошибка запуска Mini App сервера: {e}")
-# ==================================================
 
+
+# ============ УТИЛИТЫ ============
 def get_user_download_dir(user_id: int) -> str:
     d = os.path.join(DOWNLOADS_DIR, f"user_{user_id}")
     os.makedirs(d, exist_ok=True)
     return d
+
 
 def extract_media(message: types.Message):
     if message.photo:
@@ -985,7 +975,8 @@ def extract_media(message: types.Message):
         return "sticker", message.sticker.file_id
     return None, None
 
-async def load_media_to_buffer(file_id: str) -> bytes | None:
+
+async def load_media_to_buffer(file_id: str):
     if not file_id:
         return None
     try:
@@ -1001,6 +992,7 @@ async def load_media_to_buffer(file_id: str) -> bytes | None:
     except Exception as e:
         logger.error(f"Ошибка скачивания медиа: {e}")
         return None
+
 
 async def download_files(message: types.Message, user_id: int) -> list:
     file_paths = []
@@ -1036,14 +1028,15 @@ async def download_files(message: types.Message, user_id: int) -> list:
             path = os.path.join(user_dir, safe)
             await bot.download_file(file.file_path, path)
             file_paths.append(path)
-            logger.info(f"Файл сохранён: {path}")
         except Exception as e:
             logger.error(f"Ошибка скачивания {file_id}: {e}")
     return file_paths
 
+
 def format_user_info(user: types.User) -> str:
     name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
     return f"{name} (@{user.username})" if user.username else f"{name} (ID: {user.id})"
+
 
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
@@ -1061,6 +1054,7 @@ async def send_notification(chat_id: int, text: str, files: list = None, parse_m
     except Exception as e:
         logger.error(f"Ошибка отправки уведомления: {e}")
 
+
 async def check_scam(user_id: int) -> tuple[bool, str]:
     try:
         chat = await bot.get_chat(user_id)
@@ -1070,12 +1064,10 @@ async def check_scam(user_id: int) -> tuple[bool, str]:
             return True, "Telegram пометил как FAKE"
     except Exception as e:
         logger.debug(f"[SCAM] get_chat {user_id}: {e}")
-
     try:
         resp = requests.get(
             f"https://api.intellivoid.net/spamprotection/v1/lookup?query={user_id}",
-            timeout=8,
-            verify=False
+            timeout=8, verify=False
         )
         if resp.status_code == 200:
             data = resp.json()
@@ -1087,8 +1079,8 @@ async def check_scam(user_id: int) -> tuple[bool, str]:
                     return True, f"SpamProtection: {reason}"
     except Exception as e:
         logger.debug(f"[SCAM] SpamProtection {user_id}: {e}")
-
     return False, ""
+
 
 def split_into_chunks(text: str) -> list[str]:
     words = text.split()
@@ -1103,6 +1095,7 @@ def split_into_chunks(text: str) -> list[str]:
         i += chunk_size
     return chunks
 
+
 async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
     while True:
         template = random.choice(TROLL_MESSAGES)
@@ -1113,16 +1106,18 @@ async def troll_spam_task(chat_id: int, bc_id: str, user_id: int):
             try:
                 await bot.send_message(chat_id, text=chunk, business_connection_id=bc_id)
             except Exception as e:
-                logger.error(f"Ошибка отправки троллинга в чат {chat_id}: {e}")
+                logger.error(f"Ошибка троллинга: {e}")
             await asyncio.sleep(random.uniform(2, 4))
             if asyncio.current_task().cancelled():
                 return
+
 
 def _positive_ttl(value) -> bool:
     try:
         return value is not None and int(value) > 0
     except (TypeError, ValueError):
         return False
+
 
 def _object_value(obj, key: str):
     if obj is None:
@@ -1132,6 +1127,7 @@ def _object_value(obj, key: str):
         return value
     extra = getattr(obj, "model_extra", None) or {}
     return extra.get(key)
+
 
 def _nested_value(obj, *keys, _seen=None):
     if obj is None:
@@ -1143,7 +1139,6 @@ def _nested_value(obj, *keys, _seen=None):
         if marker in _seen:
             return None
         _seen.add(marker)
-
     if isinstance(obj, dict):
         for key in keys:
             if obj.get(key) is not None:
@@ -1171,12 +1166,12 @@ def _nested_value(obj, *keys, _seen=None):
         raw_dict = getattr(obj, "__dict__", None)
         if isinstance(raw_dict, dict):
             values.extend(raw_dict.values())
-
     for value in values:
         found = _nested_value(value, *keys, _seen=_seen)
         if found is not None:
             return found
     return None
+
 
 def _has_restricted_marker(message: types.Message) -> bool:
     return (
@@ -1187,6 +1182,7 @@ def _has_restricted_marker(message: types.Message) -> bool:
         ))
     )
 
+
 def is_restricted_media(message: types.Message) -> bool:
     media_fields = (
         "photo", "video", "video_note", "animation", "voice", "audio", "document", "sticker"
@@ -1196,6 +1192,7 @@ def is_restricted_media(message: types.Message) -> bool:
     if getattr(message, "has_protected_content", False) is True:
         return True
     return _has_restricted_marker(message)
+
 
 async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup: InlineKeyboardMarkup = None):
     new_text = premium(new_text)
@@ -1213,7 +1210,6 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
                 pass
             await bot.send_message(message.chat.id, new_text, parse_mode="HTML", reply_markup=reply_markup)
         else:
-            logger.error(f"Ошибка редактирования: {e}")
             try:
                 await message.delete()
             except:
@@ -1223,11 +1219,77 @@ async def safe_edit_or_send(message: types.Message, new_text: str, reply_markup:
             except Exception as e2:
                 logger.error(f"Ошибка отправки: {e2}")
 
+
+# ============ УВЕДОМЛЕНИЯ ОБ УДАЛЕНИИ ЧАТА ============
+async def notify_chat_cleared(user_id: int, chat_id: int, msg_count: int):
+    """Отправляет уведомление о том, что чат был очищен."""
+    try:
+        kb = InlineKeyboardMarkup(inline_keyboard=[[
+            InlineKeyboardButton(
+                text="📂 Посмотреть сохранённый чат",
+                web_app=WebAppInfo(url=f"{MINI_APP_URL}?chat={chat_id}")
+            )
+        ]])
+        await bot.send_message(
+            user_id,
+            premium(
+                f"<b>❌ Чат полностью удалён</b>\n\n"
+                f"Ваш собеседник очистил переписку с вами — все сообщения были удалены из Telegram.\n\n"
+                f"📊 Сохранено сообщений: <b>{msg_count}</b>\n"
+                f"🆔 ID чата: <code>{chat_id}</code>\n\n"
+                f"Нажмите кнопку ниже, чтобы посмотреть полную копию переписки."
+            ),
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        logger.info(f"[CLEAR] Уведомление о очистке чата {chat_id} отправлено {user_id} (сообщений: {msg_count})")
+    except Exception as e:
+        logger.error(f"[CLEAR] Не удалось уведомить {user_id}: {e}")
+
+
+async def _finalize_chat_deletions(user_id: int, chat_id: int, delay: float = 5.0):
+    """
+    Ждёт `delay` секунд после последнего batch удалений, затем проверяет:
+    - если все сообщения из чата стали is_deleted=1 → это была очистка чата → одно уведомление с кнопкой
+    - иначе — это были одиночные удаления → уведомляем по одному
+    """
+    try:
+        await asyncio.sleep(delay)
+    except asyncio.CancelledError:
+        return
+
+    key = (user_id, chat_id)
+    _pending_deletion_timers.pop(key, None)
+    items = _pending_deletions.pop(key, [])
+    if not items:
+        return
+
+    try:
+        total = db.count_all_messages(user_id, chat_id)
+        active = db.count_active_messages(user_id, chat_id)
+
+        if total >= 2 and active == 0:
+            # Все сообщения из чата удалены → полная очистка
+            if not db.is_chat_deleted(user_id, chat_id):
+                db.mark_chat_deleted(user_id, chat_id)
+                await notify_chat_cleared(user_id, chat_id, total)
+        else:
+            # Одиночные удаления — уведомляем по каждому
+            for item in items:
+                if item.get("text"):
+                    notif_text = premium(f"<b>❌ Сообщение удалено от {item['fullname']}\n\n{item['text']}</b>")
+                else:
+                    notif_text = premium(f"<b>❌ Сообщение удалено от {item['fullname']}</b>")
+                await send_notification(user_id, notif_text, item.get("files"))
+    except Exception as e:
+        logger.error(f"[DEL] Ошибка финализации {key}: {e}")
+
+
+# ============ ХЕНДЛЕРЫ КОМАНД ============
 @dp.message(Command("start"))
 async def start_command(message: types.Message):
     user = message.from_user
     db.register_user(user.id, user.username or "", user.first_name or "", user.last_name or "")
-
     try:
         parts = (message.text or "").split()
         if len(parts) > 1 and parts[1].startswith("ref_"):
@@ -1237,7 +1299,6 @@ async def start_command(message: types.Message):
                     logger.info(f"[REF] {user.id} пришёл по ссылке от {referrer_id}")
     except (ValueError, IndexError):
         pass
-
     is_admin = (user.id == ADMIN_ID)
     first_name = user.first_name or "друг"
     main_text = premium(
@@ -1258,9 +1319,11 @@ async def start_command(message: types.Message):
     else:
         await message.answer(main_text, reply_markup=main_menu_keyboard(is_admin), parse_mode="HTML")
 
+
 @dp.message(Command("duel"))
 async def cmd_duel(message: types.Message):
     await start_duel(message)
+
 
 @dp.message(Command("anim"))
 async def cmd_anim(message: types.Message):
@@ -1270,9 +1333,11 @@ async def cmd_anim(message: types.Message):
         return
     await animate_text(message.chat.id, text, message)
 
+
 @dp.message(Command("ttt"))
 async def cmd_ttt(message: types.Message):
     await start_ttt(message)
+
 
 @dp.message(Command("gn"))
 async def cmd_gn(message: types.Message):
@@ -1281,7 +1346,7 @@ async def cmd_gn(message: types.Message):
     bc_id = message.business_connection_id
     question = message.text.replace("/gn", "").strip()
     if not question:
-        await message.answer(premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"))
+        await message.answer(premium("<b>❌ Напишите вопрос после команды!</b>"))
         return
     loading = await message.answer(premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
     try:
@@ -1294,13 +1359,14 @@ async def cmd_gn(message: types.Message):
             await bot.send_message(chat_id, premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"), parse_mode="HTML")
     except Exception as e:
         await loading.delete()
-        await bot.send_message(chat_id, premium(f"<b>❌ Ошибка при обращении к Нейросети:\n{str(e)}</b>"), parse_mode="HTML")
+        await bot.send_message(chat_id, premium(f"<b>❌ Ошибка:</b> {str(e)}"), parse_mode="HTML")
+
 
 async def start_duel(message: types.Message):
     chat_id = message.chat.id
     user_id = message.from_user.id
     if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Дуэль доступна только в личных чатах!</b>"))
+        await message.answer(premium("<b>❌ Дуэль только в личных чатах!</b>"))
         return
     msg = await message.answer(premium("⚔️ ДУЭЛЬ НАЧИНАЕТСЯ!"), parse_mode="HTML")
     stages = ["⚔️ 3...", "⚔️ 2...", "⚔️ 1...", "🔫 ПРИЦЕЛИВАЙСЯ!", "💥 ВЫСТРЕЛ!"]
@@ -1310,16 +1376,17 @@ async def start_duel(message: types.Message):
     await asyncio.sleep(0.5)
     winner = random.choice([user_id, chat_id])
     if winner == user_id:
-        result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел был точным! Противник повержен! 🎉"
+        result = f"🏆 ПОБЕДИТЕЛЬ: {format_user_info(message.from_user)}!\n\n🎉 Выстрел точный! 🎉"
     else:
-        result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Вы были быстрее, но удача была на его стороне..."
+        result = "🏆 ПОБЕДИТЕЛЬ: ВАШ СОБЕСЕДНИК!\n\n💀 Удача была на его стороне..."
     await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
+
 
 async def start_ttt(message: types.Message):
     user_id = message.from_user.id
     chat_id = message.chat.id
     if message.chat.type != "private":
-        await message.answer(premium("<b>❌ Игра доступна только в личных чатах!</b>"))
+        await message.answer(premium("<b>❌ Игра только в личных чатах!</b>"))
         return
     if chat_id in ttt_games:
         await message.answer(premium("<b>⚠️ Игра уже идёт!</b>"))
@@ -1332,6 +1399,7 @@ async def start_ttt(message: types.Message):
         premium(f"<b>❌⭕ Крестики-Нолики</b>\n\nХод: <b>❌ ({player_x_name})</b>\n{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}\n{EMPTY}{EMPTY}{EMPTY}"),
         parse_mode="HTML", reply_markup=ttt_keyboard(board, game_id)
     )
+
 
 @dp.callback_query(lambda c: c.data.startswith("ttt_"))
 async def ttt_callback(callback: types.CallbackQuery):
@@ -1371,7 +1439,7 @@ async def ttt_callback(callback: types.CallbackQuery):
     player_o = game["player_o"]
     if turn == "X":
         if user_id != player_x:
-            await callback.answer("⏳ Сейчас ход крестиков! (ваш ход)", show_alert=True)
+            await callback.answer("⏳ Сейчас ход крестиков!", show_alert=True)
             return
     else:
         if player_o == 0:
@@ -1382,7 +1450,7 @@ async def ttt_callback(callback: types.CallbackQuery):
             game["player_o"] = user_id
             ttt_games[chat_id] = game
         if user_id != game["player_o"]:
-            await callback.answer("⏳ Сейчас ход ноликов! (ход соперника)", show_alert=True)
+            await callback.answer("⏳ Сейчас ход ноликов!", show_alert=True)
             return
     if board[cell] != " ":
         await callback.answer("⏳ Занято!")
@@ -1426,6 +1494,7 @@ async def ttt_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1443,34 +1512,24 @@ async def check_subscription(callback: types.CallbackQuery):
             main_text = premium(
                 f"<b>👋 Привет, {html.escape(first_name)}, добро пожаловать в XrayGram!</b>\n\n"
                 "<b>🤖 Что умеет бот:</b>\n"
-                "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
-                "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
-                "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-                "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n\n"
-                "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
+                "<blockquote expandable>Отслеживает удалённые сообщения.\n\n"
+                "Показывает изменения.\n\n"
+                "Сохраняет самоуничтожающиеся медиа.\n\n"
+                "Генерирует ответы с XrayGPT 1.0.\n\n"
                 "Проверяет собеседника на СКАМ/СПАМ.\n\n"
-                "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
                 "Авто переводит личные сообщения.</blockquote>"
             )
             if os.path.exists(BANNER_PATH):
                 banner = FSInputFile(BANNER_PATH)
-                await bot.send_photo(
-                    chat_id=user_id,
-                    photo=banner,
-                    caption=main_text,
-                    parse_mode="HTML",
-                    reply_markup=main_menu_keyboard(is_admin)
-                )
+                await bot.send_photo(chat_id=user_id, photo=banner, caption=main_text,
+                                     parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
             else:
-                await bot.send_message(
-                    chat_id=user_id,
-                    text=main_text,
-                    parse_mode="HTML",
-                    reply_markup=main_menu_keyboard(is_admin)
-                )
+                await bot.send_message(chat_id=user_id, text=main_text,
+                                       parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
         await callback.answer("✅ Подписка подтверждена!", show_alert=True)
     else:
-        await callback.answer("❌ Вы ещё не подписаны. Подпишитесь и попробуйте снова.", show_alert=True)
+        await callback.answer("❌ Вы ещё не подписаны.", show_alert=True)
+
 
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
@@ -1479,33 +1538,21 @@ async def show_instruction_logic(user_id: int):
         "2️⃣ Зайдите в свой профиль → Редактировать → Автоматизация чатов.\n"
         "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
         "4️⃣ Добавьте все разрешения которые находятся на видео сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
+        "❓ Заметили ошибку? Пишите @SupXrayGramRobot.</b>"
     )
     try:
         if os.path.exists(INSTRUCTION_VIDEO_PATH):
             video = FSInputFile(INSTRUCTION_VIDEO_PATH)
-            await bot.send_video(
-                chat_id=user_id,
-                video=video,
-                caption=instruction_text,
-                parse_mode="HTML",
-                reply_markup=instruction_keyboard()
-            )
+            await bot.send_video(chat_id=user_id, video=video, caption=instruction_text,
+                                 parse_mode="HTML", reply_markup=instruction_keyboard())
         else:
-            await bot.send_message(
-                chat_id=user_id,
-                text=instruction_text,
-                parse_mode="HTML",
-                reply_markup=instruction_keyboard()
-            )
+            await bot.send_message(chat_id=user_id, text=instruction_text,
+                                   parse_mode="HTML", reply_markup=instruction_keyboard())
     except Exception as e:
-        logger.error(f"Ошибка отправки инструкции пользователю {user_id}: {e}")
-        await bot.send_message(
-            chat_id=user_id,
-            text=instruction_text,
-            parse_mode="HTML",
-            reply_markup=instruction_keyboard()
-        )
+        logger.error(f"Ошибка отправки инструкции: {e}")
+        await bot.send_message(chat_id=user_id, text=instruction_text,
+                               parse_mode="HTML", reply_markup=instruction_keyboard())
+
 
 @dp.callback_query(lambda c: c.data == "show_instruction")
 async def show_instruction(callback: types.CallbackQuery):
@@ -1516,21 +1563,16 @@ async def show_instruction(callback: types.CallbackQuery):
         text = premium(
             "<b>📢 Для доступа к инструкции необходима подписка на канал!</b>\n\n"
             "Подпишитесь на @NovoeTelegram.\n\n"
-            "<i>После подписки инструкция придёт сюда автоматически в течение 5 секунд.</i>"
+            "<i>После подписки инструкция придёт автоматически в течение 5 секунд.</i>"
         )
         try:
-            await callback.message.edit_text(
-                text,
-                reply_markup=subscription_keyboard(),
-                parse_mode="HTML"
-            )
+            await callback.message.edit_text(text, reply_markup=subscription_keyboard(), parse_mode="HTML")
         except Exception:
             try:
                 await callback.message.delete()
             except Exception:
                 pass
             await bot.send_message(user_id, text, parse_mode="HTML", reply_markup=subscription_keyboard())
-
         _spawn_sub_watcher(user_id)
         await callback.answer()
         return
@@ -1538,6 +1580,7 @@ async def show_instruction(callback: types.CallbackQuery):
     await callback.message.delete()
     await show_instruction_logic(user_id)
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data.startswith("unmute_"))
 async def unmute_callback(callback: types.CallbackQuery):
@@ -1551,118 +1594,52 @@ async def unmute_callback(callback: types.CallbackQuery):
     except:
         await callback.answer("❌ Ошибка!", show_alert=True)
         return
-
     if callback.from_user.id != target_user_id:
         await callback.answer("⛔ Это не ваша кнопка.", show_alert=True)
         return
-
     db.remove_muted_chat(target_user_id, target_chat_id)
-
     cursor = db.conn.cursor()
     cursor.execute("SELECT bc_id FROM connections WHERE user_id = ?", (target_user_id,))
     row = cursor.fetchone()
     bc_id = row["bc_id"] if row else None
-
     if bc_id:
         try:
-            await bot.send_message(
-                target_chat_id,
-                premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
-                business_connection_id=bc_id, parse_mode="HTML"
-            )
+            await bot.send_message(target_chat_id, premium("<b>🔊 Вы размучены.</b>"),
+                                   business_connection_id=bc_id, parse_mode="HTML")
         except Exception as e:
-            logger.error(f"[UNMUTE] Не удалось отправить в чат {target_chat_id}: {e}")
-
+            logger.error(f"[UNMUTE] {e}")
     try:
-        await callback.message.edit_text(
-            premium(f"<b>🔊 Чат {target_chat_id} размучен.\nСообщения снова сохраняются.</b>"),
-            parse_mode="HTML"
-        )
+        await callback.message.edit_text(premium(f"<b>🔊 Чат {target_chat_id} размучен.</b>"), parse_mode="HTML")
     except Exception as e:
-        logger.error(f"[UNMUTE] Не удалось изменить сообщение: {e}")
-        try:
-            await callback.message.edit_reply_markup(reply_markup=None)
-        except:
-            pass
-
-    logger.info(f"[CMD] Мут снят через кнопку для чата {target_chat_id}")
+        logger.error(f"[UNMUTE] {e}")
     await callback.answer("✅ Мут снят")
+
 
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
         "<b>📋 Список доступных команд</b>\n\n"
-        "<blockquote>🔇 .mute – заглушить чат. (.unmute чтобы размутить)\n"
-        "💬 .spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
-        "⚔️ .duel – начать дуэль с собеседником.\n"
-        "🔄 .anim &lt;текст&gt; – анимация текста.\n"
-        "❌⭕ .ttt – начать игру в крестики-нолики.\n"
-        "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
-        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)</blockquote>\n\n"
-        "<b>Примеры:</b>\n"
-        "<blockquote>.mute\n"
-        ".unmute\n"
-        ".spam 5 Привет!\n"
-        ".duel\n"
-        ".anim Привет мир!\n"
-        ".ttt\n"
-        ".gn Как дела?\n"
-        ".troll\n"
-        ".stoptroll</blockquote>\n\n"
-        "❓ Остались вопросы? Пишите @SupXrayGramRobot."
+        "<blockquote>🔇 .mute – заглушить чат.\n"
+        "💬 .spam &lt;число&gt; &lt;текст&gt; – спам.\n"
+        "⚔️ .duel – дуэль.\n"
+        "🔄 .anim &lt;текст&gt; – анимация.\n"
+        "❌⭕ .ttt – крестики-нолики.\n"
+        "🤖 .gn &lt;вопрос&gt; – XrayGPT 1.0.\n"
+        "🧨 .troll – бесконечный спам. (.stoptroll чтобы остановить.)</blockquote>"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
-@dp.callback_query(lambda c: c.data == "profile")
-async def show_profile(callback: types.CallbackQuery):
-    user = callback.from_user
-    user_id = user.id
-
-    full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
-    username = f"@{user.username}" if user.username else "без username"
-
-    row = db.get_user(user_id)
-    if row and row["registered_at"]:
-        registered_at = row["registered_at"]
-    else:
-        registered_at = "неизвестно"
-
-    if user_id == ADMIN_ID:
-        tariff = "👑 Админ"
-    else:
-        tariff = "👤 Free"
-
-    text = premium(
-        "<b>👤 Профиль</b>\n\n"
-        f"Имя: {full_name}\n"
-        f"Username: {username}\n"
-        f"ID: <code>{user_id}</code>\n"
-        f"Регистрация: {registered_at}\n"
-        f"Тариф: {tariff}"
-    )
-    await safe_edit_or_send(callback.message, text, profile_keyboard())
-    await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "referral_menu")
 async def referral_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-
     invited_total = db.count_referrals_invited(user_id)
     invited_credited = db.count_referrals(user_id)
     stars = db.get_user_stars(user_id)
-
     ref_link = f"https://t.me/{BOT_USERNAME}?start=ref_{user_id}"
-
     text = premium(
         "<b>⭐ Заработать звёзды</b>\n\n"
-        "<b>Как это работает:</b>\n"
-        "<blockquote>"
-        "1. Отправьте свою реферальную ссылку друзьям.\n"
-        "2. Когда друг перейдёт по ссылке и <b>подключит бота</b> (автоматизацию чатов), "
-        "вам начислится <b>+1.5 ⭐</b> в ожидающие.\n"
-        "3. Админ выдаёт звёзды вручную.\n"
-        "</blockquote>\n"
         f"<b>🔗 Ваша ссылка:</b>\n<code>{ref_link}</code>\n\n"
         f"<b>📊 Статистика:</b>\n"
         f"• Зашли по ссылке: <b>{invited_total}</b>\n"
@@ -1670,7 +1647,6 @@ async def referral_menu(callback: types.CallbackQuery):
         f"• Ожидают выдачи: <b>{stars['pending']:.1f} ⭐</b>\n\n"
         "<b>⚠️ Минимальная сумма вывода: 15 ⭐</b>"
     )
-
     try:
         await callback.message.edit_text(text, reply_markup=referral_keyboard(), parse_mode="HTML")
     except Exception:
@@ -1679,8 +1655,8 @@ async def referral_menu(callback: types.CallbackQuery):
         except Exception:
             pass
         await bot.send_message(user_id, text, reply_markup=referral_keyboard(), parse_mode="HTML")
-
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "settings")
 async def show_settings(callback: types.CallbackQuery):
@@ -1688,18 +1664,17 @@ async def show_settings(callback: types.CallbackQuery):
     text = premium(
         "<b>⚙️ Настройки</b>\n\n"
         "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
+        "Проверяет каждого собеседника.\n\n"
         "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
+        "Автоматически редактирует ваши сообщения.\n\n"
         "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
+        "Переводит входящие сообщения.\n\n"
         "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
+        "Ваш аккаунт всегда в сети."
     )
     await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "toggle_scam_check")
 async def toggle_scam_check(callback: types.CallbackQuery):
@@ -1707,21 +1682,9 @@ async def toggle_scam_check(callback: types.CallbackQuery):
     new_state = not db.get_scam_check(user_id)
     db.set_scam_check(user_id, new_state)
     status = "включена" if new_state else "выключена"
-    await callback.answer(f"Проверка на СКАМ/СПАМ {status}", show_alert=True)
-    text = premium(
-        "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
-        "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
-        "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
-    )
-    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await callback.answer(f"Проверка {status}", show_alert=True)
+    await safe_edit_or_send(callback.message, premium("<b>⚙️ Настройки</b>"), settings_keyboard(user_id))
+
 
 @dp.callback_query(lambda c: c.data == "toggle_online_mode")
 async def toggle_online_mode(callback: types.CallbackQuery):
@@ -1730,39 +1693,16 @@ async def toggle_online_mode(callback: types.CallbackQuery):
     db.set_online_mode(user_id, new_state)
     status = "включён" if new_state else "выключен"
     await callback.answer(f"Онлайн мод {status}", show_alert=True)
-    text = premium(
-        "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
-        "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
-        "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
-    )
-    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, premium("<b>⚙️ Настройки</b>"), settings_keyboard(user_id))
+
 
 @dp.callback_query(lambda c: c.data == "text_mode_menu")
 async def text_mode_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    text = premium(
-        "<b>✏️ Режим текста</b>\n\n"
-        "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
-        "<b>HTML-стили:</b>\n"
-        "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
-        "<b>Специальные стили:</b>\n"
-        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
-        "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
-        "• <b>Широкий</b> — пробелы между буквами\n"
-        "• <b>КАПС</b> — всё капсом\n"
-        "• <b>Перевёрнутый</b> — текст перевёрнут вверх ногами\n"
-        "• <b>С хлопками</b> — 👏 между словами"
-    )
+    text = premium("<b>✏️ Режим текста</b>\n\nВыберите стиль для ваших сообщений.")
     await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data.startswith("set_text_mode_"))
 async def set_text_mode(callback: types.CallbackQuery):
@@ -1773,30 +1713,16 @@ async def set_text_mode(callback: types.CallbackQuery):
         return
     db.set_text_mode(user_id, mode)
     await callback.answer(f"Режим: {MODE_NAMES[mode]}", show_alert=True)
-    text = premium(
-        "<b>✏️ Режим текста</b>\n\n"
-        "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
-        "<b>HTML-стили:</b>\n"
-        "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
-        "<b>Специальные стили:</b>\n"
-        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
-        "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
-        "• <b>Широкий</b> — пробелы между буквами\n"
-        "• <b>КАПС</b> — всё капсом\n"
-        "• <b>Перевёрнутый</b> — текст перевёрнут вверх ногами\n"
-        "• <b>С хлопками</b> — 👏 между словами"
-    )
-    await safe_edit_or_send(callback.message, text, text_mode_keyboard(user_id))
+    await safe_edit_or_send(callback.message, premium("<b>✏️ Режим текста</b>"), text_mode_keyboard(user_id))
+
 
 @dp.callback_query(lambda c: c.data == "translate_menu")
 async def translate_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    text = premium(
-        "<b>🌐 Авто перевод</b>\n\n"
-        "Выберите язык, на который бот будет переводить входящие сообщения от ваших собеседников."
-    )
+    text = premium("<b>🌐 Авто перевод</b>\n\nВыберите язык перевода.")
     await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data.startswith("set_translate_"))
 async def set_translate(callback: types.CallbackQuery):
@@ -1807,11 +1733,8 @@ async def set_translate(callback: types.CallbackQuery):
         return
     db.set_translate_to(user_id, lang)
     await callback.answer(f"Авто перевод: {TRANSLATE_LANGS[lang]}", show_alert=True)
-    text = premium(
-        "<b>🌐 Авто перевод</b>\n\n"
-        "Выберите язык, на который бот будет переводить входящие сообщения от ваших собеседников."
-    )
-    await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
+    await safe_edit_or_send(callback.message, premium("<b>🌐 Авто перевод</b>"), translate_keyboard(user_id))
+
 
 @dp.callback_query(lambda c: c.data == "back_to_main")
 async def back_to_main(callback: types.CallbackQuery):
@@ -1821,13 +1744,11 @@ async def back_to_main(callback: types.CallbackQuery):
     main_text = premium(
         f"<b>👋 Привет, {html.escape(first_name)}, добро пожаловать в XrayGram!</b>\n\n"
         "<b>🤖 Что умеет бот:</b>\n"
-        "<blockquote expandable>Отслеживает удалённые сообщения в ваших личных чатах и присылает их копии.\n\n"
-        "Показывает изменения в отредактированных сообщениях (было → стало).\n\n"
-        "Сохраняет самоуничтожающиеся медиа. (Чтобы сохранить надо ответить на сообщение с одноразовым медиа)\n\n"
-        "Генерирует ответы на вопросы прямо в чате с помощью XrayGPT 1.0.\n\n"
-        "Может выполнять всякие команды в личных чатах. (Чтобы узнать подробнее нажмите в меню кнопку «Команды».)\n\n"
+        "<blockquote expandable>Отслеживает удалённые сообщения.\n\n"
+        "Показывает изменения.\n\n"
+        "Сохраняет самоуничтожающиеся медиа.\n\n"
+        "Генерирует ответы с XrayGPT 1.0.\n\n"
         "Проверяет собеседника на СКАМ/СПАМ.\n\n"
-        "Может автоматически редактироваать ваши собственные сообщения, применяя выбранный стиль.\n\n"
         "Авто переводит личные сообщения.</blockquote>"
     )
     try:
@@ -1836,39 +1757,33 @@ async def back_to_main(callback: types.CallbackQuery):
         pass
     if os.path.exists(BANNER_PATH):
         banner = FSInputFile(BANNER_PATH)
-        await bot.send_photo(
-            chat_id=user_id,
-            photo=banner,
-            caption=main_text,
-            parse_mode="HTML",
-            reply_markup=main_menu_keyboard(is_admin)
-        )
+        await bot.send_photo(chat_id=user_id, photo=banner, caption=main_text,
+                             parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
     else:
-        await bot.send_message(
-            chat_id=user_id,
-            text=main_text,
-            parse_mode="HTML",
-            reply_markup=main_menu_keyboard(is_admin)
-        )
+        await bot.send_message(chat_id=user_id, text=main_text,
+                               parse_mode="HTML", reply_markup=main_menu_keyboard(is_admin))
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "admin_panel")
 async def admin_panel(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
+    text = premium("<b>⚙️ Админ-панель XrayGram</b>")
     await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "back_to_admin")
 async def back_to_admin(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
+    text = premium("<b>⚙️ Админ-панель XrayGram</b>")
     await safe_edit_or_send(callback.message, text, admin_panel_keyboard())
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "broadcast")
 async def broadcast_start(callback: types.CallbackQuery, state: FSMContext):
@@ -1876,10 +1791,11 @@ async def broadcast_start(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
     await callback.message.delete()
-    text = premium("<b>📢 Введите текст или отправьте медиа для рассылки\n\nВсе зарегистрированные пользователи получат это сообщение.\nДля отмены нажмите кнопку ниже.</b>")
+    text = premium("<b>📢 Введите текст или медиа для рассылки</b>")
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=cancel_keyboard())
     await state.set_state(BroadcastStates.waiting_for_content)
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "cancel_broadcast")
 async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
@@ -1888,9 +1804,10 @@ async def cancel_broadcast(callback: types.CallbackQuery, state: FSMContext):
         return
     await state.clear()
     await callback.message.delete()
-    text = premium("<b>⚙️ Админ-панель XrayGram\n\nВыберите действие:</b>")
+    text = premium("<b>⚙️ Админ-панель XrayGram</b>")
     await bot.send_message(callback.from_user.id, text, parse_mode="HTML", reply_markup=admin_panel_keyboard())
     await callback.answer()
+
 
 @dp.message(StateFilter(BroadcastStates.waiting_for_content))
 async def process_broadcast(message: types.Message, state: FSMContext):
@@ -1901,17 +1818,11 @@ async def process_broadcast(message: types.Message, state: FSMContext):
     cursor.execute("SELECT user_id FROM users")
     users = cursor.fetchall()
     if not users:
-        await message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
+        await message.answer(premium("<b>📭 Нет пользователей.</b>"), parse_mode="HTML")
         await state.clear()
         return
-
-    sent = 0
-    failed = 0
-    blocked = 0
-    no_dialog = 0
-
-    status_msg = await message.answer(premium("<b>⏳ Рассылка запущена...</b>"), parse_mode="HTML")
-
+    sent = failed = blocked = no_dialog = 0
+    status_msg = await message.answer(premium("<b>⏳ Рассылка...</b>"), parse_mode="HTML")
     for (user_id,) in users:
         try:
             await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
@@ -1919,39 +1830,22 @@ async def process_broadcast(message: types.Message, state: FSMContext):
             await asyncio.sleep(0.05)
         except Exception as e:
             err_text = str(e).lower()
-            if "flood" in err_text or "retry after" in err_text or "too many requests" in err_text:
-                await asyncio.sleep(3)
-                try:
-                    await bot.copy_message(chat_id=user_id, from_chat_id=message.chat.id, message_id=message.message_id)
-                    sent += 1
-                except Exception as e2:
-                    logger.error(f"Ошибка рассылки {user_id} (retry): {e2}")
-                    failed += 1
-            elif "blocked" in err_text:
+            if "blocked" in err_text:
                 db.delete_user_completely(user_id)
                 blocked += 1
-                logger.info(f"[BROADCAST] {user_id} заблокировал бота — удалён из БД")
             elif "can't initiate" in err_text or "chat not found" in err_text:
                 no_dialog += 1
             else:
-                logger.error(f"Ошибка рассылки {user_id}: {e}")
                 failed += 1
             await asyncio.sleep(0.05)
-
     try:
         await status_msg.delete()
     except:
         pass
-
-    report = (
-        f"<b>✅ Рассылка завершена!</b>\n\n"
-        f"📤 Отправлено: {sent}\n"
-        f"🚫 Заблокировали (удалены из БД): {blocked}\n"
-        f"💤 Не начинали диалог: {no_dialog}\n"
-        f"❌ Прочие ошибки: {failed}"
-    )
+    report = f"<b>✅ Рассылка завершена!</b>\n\n📤 {sent}\n🚫 {blocked}\n💤 {no_dialog}\n❌ {failed}"
     await message.answer(premium(report), parse_mode="HTML", reply_markup=back_to_admin_keyboard())
     await state.clear()
+
 
 @dp.callback_query(lambda c: c.data == "users_txt")
 async def users_txt(callback: types.CallbackQuery):
@@ -1962,37 +1856,34 @@ async def users_txt(callback: types.CallbackQuery):
     cursor.execute("SELECT user_id, username, first_name, last_name, registered_at FROM users ORDER BY registered_at DESC")
     users = cursor.fetchall()
     if not users:
-        await callback.message.answer(premium("<b>📭 Нет зарегистрированных пользователей.</b>"), parse_mode="HTML")
-        await callback.answer()
+        await callback.answer("Нет пользователей.", show_alert=True)
         return
-    content = "Список всех зарегистрированных пользователей XrayGram\n"
-    content += f"Всего: {len(users)}\n" + "="*50 + "\n\n"
+    content = f"Всего: {len(users)}\n" + "="*50 + "\n\n"
     for u in users:
         uid, uname, fname, lname, reg = u
         name = f"{fname or ''} {lname or ''}".strip() or "Без имени"
         un = f"@{uname}" if uname else f"ID: {uid}"
-        content += f"{name} ({un})\nID: {uid}\nЗарегистрирован: {reg}\n" + "-"*30 + "\n"
-    await callback.message.answer_document(BufferedInputFile(content.encode("utf-8"), filename="users_list.txt"),
-                                           caption=premium("<b>📄 Список всех пользователей (txt)</b>"), parse_mode="HTML")
+        content += f"{name} ({un})\nID: {uid}\n{reg}\n" + "-"*30 + "\n"
+    await callback.message.answer_document(
+        BufferedInputFile(content.encode("utf-8"), filename="users_list.txt"),
+        caption=premium("<b>📄 Список пользователей</b>"), parse_mode="HTML"
+    )
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "active_connections")
 async def active_connections(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-
     cursor = db.conn.cursor()
     cursor.execute("SELECT bc_id, user_id FROM connections")
     all_conns = cursor.fetchall()
-
     if not all_conns:
-        await callback.answer("Нет активных подключений.", show_alert=True)
+        await callback.answer("Нет подключений.", show_alert=True)
         return
-
     active_ids = []
     removed = 0
-
     for row in all_conns:
         bc_id = row["bc_id"]
         user_id = row["user_id"]
@@ -2003,105 +1894,70 @@ async def active_connections(callback: types.CallbackQuery):
             else:
                 db.delete_connection(bc_id)
                 removed += 1
-                logger.info(f"[ACTIVE] {user_id} отключил бота — связь удалена")
-        except Exception as e:
+        except Exception:
             db.delete_connection(bc_id)
             removed += 1
-            logger.info(f"[ACTIVE] bc_id {bc_id} невалиден — связь удалена")
-
     if not active_ids:
-        await callback.answer(f"Нет активных подключений. Очищено: {removed}", show_alert=True)
+        await callback.answer(f"Нет активных. Очищено: {removed}", show_alert=True)
         return
-
     placeholders = ",".join("?" for _ in active_ids)
     cursor.execute(f"SELECT user_id, username, first_name, last_name FROM users WHERE user_id IN ({placeholders})", active_ids)
     users = cursor.fetchall()
-
-    content = "Активные подключения XrayGram\n"
-    content += f"Всего активных: {len(users)}\n"
-    content += f"Очищено мёртвых: {removed}\n"
-    content += "=" * 50 + "\n\n"
+    content = f"Активных: {len(users)}\nОчищено: {removed}\n" + "="*50 + "\n\n"
     for u in users:
         uid, uname, fname, lname = u
         name = f"{fname or ''} {lname or ''}".strip() or "Без имени"
         un = f"@{uname}" if uname else f"ID: {uid}"
-        content += f"{name} ({un})\nID: {uid}\n" + "-" * 30 + "\n"
-
+        content += f"{name} ({un})\nID: {uid}\n" + "-"*30 + "\n"
     await callback.message.answer_document(
         BufferedInputFile(content.encode("utf-8"), filename="active_connections.txt"),
-        caption=premium(f"<b>🔗 Активные подключения (txt)\nВсего: {len(users)} | Очищено мёртвых: {removed}</b>"),
-        parse_mode="HTML"
+        caption=premium(f"<b>🔗 Активные подключения ({len(users)})</b>"), parse_mode="HTML"
     )
     await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "ref_admin")
 async def ref_admin(callback: types.CallbackQuery):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("⛔ Доступ запрещён.", show_alert=True)
         return
-
     refs = db.get_all_referrers()
     if not refs:
         await callback.answer("Пока нет рефералов.", show_alert=True)
         return
-
     total_pending = sum(r["pending_stars"] for r in refs)
     total_credited = sum(r["invited_credited"] for r in refs)
-
-    content = "Реферальная статистика XrayGram\n"
-    content += f"Всего рефереров: {len(refs)}\n"
-    content += f"Всего подключений по ссылкам: {total_credited}\n"
-    content += f"Суммарно ожидает выдачи: {total_pending:.1f} ⭐\n"
-    content += "=" * 60 + "\n\n"
-
+    content = f"Рефереров: {len(refs)}\nПодключений: {total_credited}\nК выдаче: {total_pending:.1f} ⭐\n" + "="*60 + "\n\n"
     for r in refs:
         name = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip() or "Без имени"
         un = f"@{r['username']}" if r["username"] else f"ID: {r['user_id']}"
-        content += (
-            f"{name} ({un})\n"
-            f"ID: {r['user_id']}\n"
-            f"Зашли по ссылке: {r['invited_total']}\n"
-            f"Подключили бота: {r['invited_credited']}\n"
-            f"Ожидает выдачи: {r['pending_stars']:.1f} ⭐\n"
-            + "-" * 40 + "\n"
-        )
-
+        content += f"{name} ({un})\nID: {r['user_id']}\nЗашли: {r['invited_total']}\nПодключили: {r['invited_credited']}\nОжидает: {r['pending_stars']:.1f} ⭐\n" + "-"*40 + "\n"
     await callback.message.answer_document(
         BufferedInputFile(content.encode("utf-8"), filename="referrals.txt"),
-        caption=premium(f"<b>⭐ Рефералы (txt)\nРефереров: {len(refs)} | Подключений: {total_credited} | К выдаче: {total_pending:.1f} ⭐</b>"),
-        parse_mode="HTML"
+        caption=premium(f"<b>⭐ Рефералы ({len(refs)})</b>"), parse_mode="HTML"
     )
     await callback.answer()
 
+
+# ============ BUSINESS API ============
 @dp.business_connection()
 async def handle_business_connection(connection: BusinessConnection):
     bc_id = connection.id
     user_id = connection.user.id
     is_enabled = connection.is_enabled
-
     if not is_enabled:
         logger.info(f"[CONN] Отключено: bc_id={bc_id}, user_id={user_id}")
         db.delete_connection(bc_id)
         try:
             kb = InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(
-                    text="📂 Открыть Mini App",
-                    web_app=WebAppInfo(url=MINI_APP_URL)
-                )
+                InlineKeyboardButton(text="📂 Открыть Mini App", web_app=WebAppInfo(url=MINI_APP_URL))
             ]])
-            await bot.send_message(
-                user_id,
-                premium(
-                    "<b>❌ Подключение к XrayGram отключено</b>\n\n"
-                    "Вы удалили бота из «Автоматизации чатов», поэтому мы больше не можем отслеживать ваши сообщения.\n\n"
-                    "Все сохранённые данные остаются доступны в Mini App. Чтобы снова включить отслеживание — "
-                    "добавьте бота заново через профиль → Редактировать → Автоматизация чатов."
-                ),
-                parse_mode="HTML",
-                reply_markup=kb
-            )
+            await bot.send_message(user_id, premium(
+                "<b>❌ Подключение отключено</b>\n\n"
+                "Все сохранённые данные остаются доступны в Mini App."
+            ), parse_mode="HTML", reply_markup=kb)
         except Exception as e:
-            logger.error(f"[CONN] Не удалось уведомить {user_id}: {e}")
+            logger.error(f"[CONN] {e}")
         return
 
     logger.info(f"[CONN] Новое подключение: bc_id={bc_id}, user_id={user_id}")
@@ -2116,49 +1972,40 @@ async def handle_business_connection(connection: BusinessConnection):
             db.mark_referral_credited(user_id)
             db.add_pending_stars(referrer_id, 1.5)
             try:
-                await bot.send_message(
-                    referrer_id,
-                    premium(
-                        "<b>🎉 По вашей реферальной ссылке подключился новый пользователь!</b>\n\n"
-                        "Вам начислено <b>+1.5 ⭐</b> (ожидают выдачи).\n"
-                        "Звёзды выдаст администратор."
-                    ),
-                    parse_mode="HTML"
-                )
+                await bot.send_message(referrer_id, premium(
+                    "<b>🎉 По вашей ссылке подключился новый пользователь!</b>\n\n"
+                    "Вам начислено <b>+1.5 ⭐</b>."
+                ), parse_mode="HTML")
             except Exception as e:
-                logger.debug(f"[REF] Не удалось уведомить {referrer_id}: {e}")
-            logger.info(f"[REF] {referrer_id} получил +1.5⭐ за подключение {user_id}")
+                logger.debug(f"[REF] {e}")
     except Exception as e:
-        logger.error(f"[REF] Ошибка начисления: {e}")
+        logger.error(f"[REF] {e}")
 
     try:
-        await bot.send_message(user_id,
-            premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
-                    "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
-                    "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
-            parse_mode="HTML")
+        await bot.send_message(user_id, premium(
+            "<b>✅ Бизнес-аккаунт подключён к XrayGram!</b>\n\n"
+            "Теперь я буду отслеживать все ваши личные чаты.\n\n"
+            "Поддержка: @CryptoViktor"
+        ), parse_mode="HTML")
     except Exception as e:
-        logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
+        logger.error(f"Не удалось уведомить {user_id}: {e}")
 
     try:
         user = connection.user
         full_name = f"{user.first_name or ''} {user.last_name or ''}".strip() or "Без имени"
         username = f"@{user.username}" if user.username else "без username"
-        await bot.send_message(ADMIN_ID,
-            premium(f"<b>🔔 Новое подключение!</b>\n\n"
-                    f"👤 <b>Пользователь:</b> {full_name}\n"
-                    f"📱 <b>Username:</b> {username}\n"
-                    f"🆔 <b>ID:</b> <code>{user_id}</code>\n"
-                    f"🔗 <b>bc_id:</b> <code>{bc_id}</code>"),
-            parse_mode="HTML")
+        await bot.send_message(ADMIN_ID, premium(
+            f"<b>🔔 Новое подключение!</b>\n\n"
+            f"👤 {full_name}\n📱 {username}\n🆔 <code>{user_id}</code>\n🔗 <code>{bc_id}</code>"
+        ), parse_mode="HTML")
     except Exception as e:
-        logger.error(f"Не удалось отправить уведомление админу: {e}")
+        logger.error(f"Не удалось уведомить админа: {e}")
+
 
 @dp.business_message()
 async def handle_business_message(message: types.Message):
     bc_id = message.business_connection_id
     if not bc_id:
-        logger.warning("business_connection_id отсутствует")
         return
 
     user_id = db.get_user_by_bc_id(bc_id)
@@ -2167,18 +2014,14 @@ async def handle_business_message(message: types.Message):
         if not db.is_user_registered(ADMIN_ID):
             db.register_user(ADMIN_ID, message.from_user.username or "", message.from_user.first_name or "", message.from_user.last_name or "")
         user_id = ADMIN_ID
-        logger.info(f"[FIX] Создана связь для владельца: bc_id={bc_id}, user_id={ADMIN_ID}")
 
     if not user_id and message.from_user:
         user_id = message.from_user.id
-        logger.warning(f"bc_id={bc_id} не найден, fallback user_id={user_id}")
 
     if not user_id:
-        logger.warning(f"Не удалось определить user_id для bc_id={bc_id}")
         return
 
     if not db.get_user_by_bc_id(bc_id):
-        logger.info(f"[SKIP] bc_id={bc_id} не активен — сообщение не сохраняется")
         return
 
     if not db.is_user_registered(user_id):
@@ -2188,7 +2031,6 @@ async def handle_business_message(message: types.Message):
             db.register_user(user_id, "", "Unknown", "")
 
     if not await ensure_subscription(user_id, notify=True):
-        logger.info(f"[SUB] {user_id} не подписан — сообщение не обрабатывается")
         return
 
     chat_id = message.chat.id
@@ -2199,41 +2041,28 @@ async def handle_business_message(message: types.Message):
         try:
             is_scam, reason = await check_scam(sender_id)
             if is_scam:
-                await bot.send_message(
-                    user_id,
-                    premium(
-                        f"<b>⚠️ ВНИМАНИЕ! Возможный скамер/спамер</b>\n\n"
-                        f"От: {format_user_info(message.from_user)}\n"
-                        f"ID: <code>{sender_id}</code>\n"
-                        f"Причина: {reason}"
-                    ),
-                    parse_mode="HTML"
-                )
-                logger.info(f"[SCAM] {sender_id} помечен: {reason}")
+                await bot.send_message(user_id, premium(
+                    f"<b>⚠️ Возможный скамер/спамер</b>\n\n"
+                    f"От: {format_user_info(message.from_user)}\n"
+                    f"ID: <code>{sender_id}</code>\n"
+                    f"Причина: {reason}"
+                ), parse_mode="HTML")
         except Exception as e:
-            logger.error(f"[SCAM] Ошибка проверки: {e}")
+            logger.error(f"[SCAM] {e}")
 
     if not is_owner and message.text and not message.text.startswith('.'):
         try:
             translate_to = db.get_translate_to(user_id)
             if translate_to and translate_to != "off":
                 original = message.text.strip()
-
                 if not text_matches_lang_script(original, translate_to):
                     translated, detected = await translate_text(original, translate_to)
 
-                    def _lang_base(code: str) -> str:
-                        return (code or "").split("-")[0].lower()
-
-                    same_lang = _lang_base(detected) and _lang_base(detected) == _lang_base(translate_to)
-
-                    is_valid = (
-                        not same_lang
-                        and translated
-                        and translated.strip().lower() != original.lower()
-                        and any(ch.isalpha() for ch in translated)
-                    )
-
+                    def _base(c): return (c or "").split("-")[0].lower()
+                    same_lang = _base(detected) and _base(detected) == _base(translate_to)
+                    is_valid = (not same_lang and translated and
+                                translated.strip().lower() != original.lower() and
+                                any(ch.isalpha() for ch in translated))
                     if is_valid:
                         sender_info = format_user_info(message.from_user) if message.from_user else "Неизвестный"
                         lang_name = TRANSLATE_LANGS.get(translate_to, translate_to)
@@ -2246,9 +2075,8 @@ async def handle_business_message(message: types.Message):
                             f"<b>Перевод:</b>\n{html.escape(translated)}"
                         )
                         await bot.send_message(user_id, notif_text, parse_mode="HTML")
-                        logger.info(f"[TRANSLATE] {sender_id}: {detected} → {translate_to}")
         except Exception as e:
-            logger.error(f"[TRANSLATE] Ошибка: {e}")
+            logger.error(f"[TRANSLATE] {e}")
 
     if is_owner and message.text and not message.text.startswith('.'):
         try:
@@ -2258,17 +2086,13 @@ async def handle_business_message(message: types.Message):
                 if new_text and new_text != message.text:
                     try:
                         await bot.edit_message_text(
-                            text=new_text,
-                            chat_id=chat_id,
-                            message_id=message.message_id,
-                            business_connection_id=bc_id,
-                            parse_mode="HTML"
+                            text=new_text, chat_id=chat_id, message_id=message.message_id,
+                            business_connection_id=bc_id, parse_mode="HTML"
                         )
-                        logger.info(f"[TEXT_MODE] Применён режим '{mode}' к сообщению {message.message_id}")
                     except Exception as e:
-                        logger.error(f"[TEXT_MODE] Не удалось изменить сообщение: {e}")
+                        logger.error(f"[TEXT_MODE] {e}")
         except Exception as e:
-            logger.error(f"[TEXT_MODE] Ошибка: {e}")
+            logger.error(f"[TEXT_MODE] {e}")
 
     if message.reply_to_message and is_owner:
         replied = message.reply_to_message
@@ -2300,15 +2124,10 @@ async def handle_business_message(message: types.Message):
                         elif media_type == "sticker":
                             await bot.send_sticker(user_id, file_id)
                             await bot.send_message(user_id, caption_text)
-                        else:
-                            await bot.send_message(user_id, caption_text)
-                        logger.info(f"[REPLY] Одноразовое медиа ({media_type}) сохранено для {user_id}")
                     except Exception as e:
-                        logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
+                        logger.error(f"[REPLY] {e}")
                 else:
                     await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
-        else:
-            logger.info(f"[REPLY] Ответ на обычное медиа (не одноразовое) – пропущено")
 
     if is_owner and message.text:
         _first_word = message.text.strip().split()[0] if message.text.strip() else ""
@@ -2320,52 +2139,30 @@ async def handle_business_message(message: types.Message):
         text = message.text.strip()
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
-            logger.info(f"[CMD] Команда '{text}' удалена")
         except Exception as e:
-            logger.error(f"[CMD] Не удалось удалить команду: {e}")
+            logger.error(f"[CMD] {e}")
 
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
-
-            unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="🔊 Анмут",
-                    callback_data=f"unmute_{user_id}_{chat_id}",
-                    style="success"
-                )]
-            ])
-
+            unmute_kb = InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="🔊 Анмут", callback_data=f"unmute_{user_id}_{chat_id}", style="success")
+            ]])
             try:
-                await bot.send_message(
-                    chat_id,
-                    premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
-                    business_connection_id=bc_id,
-                    parse_mode="HTML",
-                    reply_markup=unmute_kb
-                )
-                logger.info(f"[MUTE] Уведомление с кнопкой Анмут отправлено в чат {chat_id}")
+                await bot.send_message(chat_id, premium("<b>🔇 Вы заглушены.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                                       business_connection_id=bc_id, parse_mode="HTML", reply_markup=unmute_kb)
             except Exception as e:
-                logger.error(f"[MUTE] Ошибка отправки в чат {chat_id}: {e}")
-
+                logger.error(f"[MUTE] {e}")
             try:
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
-                    parse_mode="HTML"
-                )
+                await bot.send_message(user_id, premium(f"<b>🔇 Чат {chat_id} замучен.</b>"), parse_mode="HTML")
             except Exception as e:
-                logger.error(f"[MUTE] Ошибка отправки уведомления пользователю {user_id}: {e}")
-
-            logger.info(f"[CMD] .mute выполнен для чата {chat_id}")
+                logger.error(f"[MUTE] {e}")
             return
 
         if text == ".unmute":
             db.remove_muted_chat(user_id, chat_id)
-            await bot.send_message(chat_id, premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
+            await bot.send_message(chat_id, premium("<b>🔊 Вы размучены.</b>"),
                                    business_connection_id=bc_id, parse_mode="HTML")
-            await bot.send_message(user_id, premium(f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>"),
-                                   parse_mode="HTML")
-            logger.info(f"[CMD] .unmute выполнен для чата {chat_id}")
+            await bot.send_message(user_id, premium(f"<b>🔊 Чат {chat_id} размучен.</b>"), parse_mode="HTML")
             return
 
         if text.startswith(".spam "):
@@ -2377,15 +2174,12 @@ async def handle_business_message(message: types.Message):
                     if count <= 0:
                         raise ValueError
                 except:
-                    await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam &lt;число&gt; &lt;текст&gt;</b>"), parse_mode="HTML")
+                    await bot.send_message(user_id, premium("<b>❌ Формат: .spam &lt;число&gt; &lt;текст&gt;</b>"), parse_mode="HTML")
                     return
                 for _ in range(count):
                     await bot.send_message(chat_id, text=spam_text, business_connection_id=bc_id)
                     await asyncio.sleep(0.3)
-                await bot.send_message(user_id, premium(f"<b>✅ Отправлено {count} сообщений в чат {chat_id}</b>"), parse_mode="HTML")
-                return
-            else:
-                await bot.send_message(user_id, premium("<b>❌ Неверный формат: .spam &lt;число&gt; &lt;текст&gt;</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium(f"<b>✅ Отправлено {count}</b>"), parse_mode="HTML")
                 return
 
         if text == ".duel":
@@ -2395,7 +2189,7 @@ async def handle_business_message(message: types.Message):
         if text.startswith(".anim "):
             anim_text = text.replace(".anim", "").strip()
             if not anim_text:
-                await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium("<b>❌ Напишите текст!</b>"), parse_mode="HTML")
                 return
             await animate_text(chat_id, anim_text, message)
             return
@@ -2407,26 +2201,26 @@ async def handle_business_message(message: types.Message):
         if text.startswith(".gn "):
             question = text.replace(".gn", "").strip()
             if not question:
-                await bot.send_message(user_id, premium("<b>❌ Напишите вопрос после команды!\nПример: .gn Как дела?</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium("<b>❌ Напишите вопрос!</b>"), parse_mode="HTML")
                 return
             loading = await bot.send_message(user_id, premium("<b>🤔 Думаю...</b>"), parse_mode="HTML")
             try:
                 answer = ranvik_api.get_text_response([{"role": "user", "content": question}])
                 await loading.delete()
-                await bot.send_message(chat_id, premium(f"<b>❓ Ваш вопрос:</b>\n{question}\n\n{answer}"),
+                await bot.send_message(chat_id, premium(f"<b>❓ {question}</b>\n\n{answer}"),
                                        parse_mode="HTML", business_connection_id=bc_id)
             except Exception as e:
                 await loading.delete()
-                await bot.send_message(user_id, premium(f"<b>❌ Ошибка при обращении к Нейросети:\n{str(e)}</b>"), parse_mode="HTML")
+                await bot.send_message(user_id, premium(f"<b>❌ {str(e)}</b>"), parse_mode="HTML")
             return
 
         if text == ".troll":
             if chat_id in troll_tasks:
-                await bot.send_message(user_id, "⚠️ Троллинг уже запущен в этом чате.", parse_mode="HTML")
+                await bot.send_message(user_id, "⚠️ Уже запущен.", parse_mode="HTML")
             else:
                 task = asyncio.create_task(troll_spam_task(chat_id, bc_id, user_id))
                 troll_tasks[chat_id] = task
-                await bot.send_message(user_id, "✅ Троллинг запущен! Сообщения будут отправляться собеседнику.", parse_mode="HTML")
+                await bot.send_message(user_id, "✅ Троллинг запущен!", parse_mode="HTML")
             return
 
         if text == ".stoptroll":
@@ -2437,9 +2231,9 @@ async def handle_business_message(message: types.Message):
                     await task
                 except asyncio.CancelledError:
                     pass
-                await bot.send_message(user_id, "⏹ Троллинг остановлен.", parse_mode="HTML")
+                await bot.send_message(user_id, "⏹ Остановлен.", parse_mode="HTML")
             else:
-                await bot.send_message(user_id, "❌ Троллинг не был запущен.", parse_mode="HTML")
+                await bot.send_message(user_id, "❌ Не был запущен.", parse_mode="HTML")
             return
 
         return
@@ -2447,10 +2241,9 @@ async def handle_business_message(message: types.Message):
     if db.is_chat_muted(user_id, chat_id) and not is_owner:
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
-            logger.info(f"[MUTE] Сообщение {message.message_id} удалено")
         except Exception as e:
             if "message to delete not found" not in str(e):
-                logger.error(f"[MUTE] Ошибка удаления: {e}")
+                logger.error(f"[MUTE] {e}")
         return
 
     msg_id = message.message_id
@@ -2461,11 +2254,15 @@ async def handle_business_message(message: types.Message):
     files = await download_files(message, user_id)
     db.save_message(bc_id, msg_id, user_id, fullname, text, files,
                     is_temporary=message.has_media_spoiler, chat_id=chat_id)
-    logger.info(f"[SAVE] Сохранено {msg_id} для {user_id} (chat_id={chat_id})")
+
+    # Если чат был помечен как удалённый, а теперь пришло новое сообщение — снимаем пометку
+    if db.is_chat_deleted(user_id, chat_id):
+        db.unmark_chat_deleted(user_id, chat_id)
 
     if message.has_media_spoiler and files:
-        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
+        notif_text = premium(f"<b>⚠️ Самоуничтожающееся от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
         await send_notification(user_id, notif_text, files)
+
 
 @dp.edited_business_message()
 async def handle_edited_business_message(message: types.Message):
@@ -2500,95 +2297,112 @@ async def handle_edited_business_message(message: types.Message):
     await send_notification(user_id, notif_text, files_list)
     db.increment_stat(user_id, "edited_count")
 
+
 @dp.deleted_business_messages()
 async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
+    """
+    Обрабатывает удаление сообщений.
+
+    Стратегия:
+    1. Помечаем сообщения как удалённые в БД (НЕ удаляем — нужно для Mini App).
+    2. Собираем информацию о том, какие чаты затронуты.
+    3. Планируем отложенную проверку для каждого затронутого чата:
+       - если все сообщения из чата стали is_deleted=1 → это была полная очистка чата
+         → отправляем ОДНО уведомление с кнопкой "Посмотреть сохранённый чат"
+       - иначе → отправляем уведомления по каждому удалённому сообщению
+    """
     bc_id = event.business_connection_id
     user_id = db.get_user_by_bc_id(bc_id)
     if not user_id or not db.is_user_registered(user_id):
         return
     if not await ensure_subscription(user_id, notify=False):
         return
+
+    affected_chats = set()
+
     for msg_id in event.message_ids:
         data = db.get_message(bc_id, msg_id)
         if not data:
             continue
-        fullname = data["fullname"]
-        text = data["text"] or ""
-        files = data["files"]
-        files_list = json.loads(files) if files else []
-        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
-        await send_notification(user_id, notif_text, files_list)
-        db.delete_message(bc_id, msg_id)
+        chat_id = data["chat_id"]
+        if not chat_id:
+            # без chat_id — уведомляем сразу
+            fullname = data["fullname"]
+            text = data["text"] or ""
+            files = data["files"]
+            files_list = json.loads(files) if files else []
+            notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+            await send_notification(user_id, notif_text, files_list)
+            db.mark_message_deleted(bc_id, msg_id)
+            db.increment_stat(user_id, "deleted_count")
+            continue
+
+        affected_chats.add(chat_id)
+
+        # Добавляем в список отложенных для этого чата
+        key = (user_id, chat_id)
+        _pending_deletions.setdefault(key, []).append({
+            "msg_id": msg_id,
+            "fullname": data["fullname"],
+            "text": data["text"] or "",
+            "files": json.loads(data["files"]) if data["files"] else [],
+        })
+
+        # Помечаем как удалённое — БЕЗ физического удаления
+        db.mark_message_deleted(bc_id, msg_id)
         db.increment_stat(user_id, "deleted_count")
 
+    # Планируем отложенную обработку для каждого затронутого чата
+    for chat_id in affected_chats:
+        key = (user_id, chat_id)
+        old_task = _pending_deletion_timers.get(key)
+        if old_task and not old_task.done():
+            old_task.cancel()
+        _pending_deletion_timers[key] = asyncio.create_task(
+            _finalize_chat_deletions(user_id, chat_id, delay=5.0)
+        )
+
+
+# ============ ФОНОВЫЕ ЗАДАЧИ ============
 async def online_mode_loop():
-    logger.info("[ONLINE] Фоновая задача запущена")
+    logger.info("[ONLINE] Запущена")
     while True:
         try:
             connections = db.get_online_connections()
             for conn in connections:
                 try:
                     bc_id = conn["bc_id"]
-                    user_id = conn["user_id"]
                 except Exception:
                     continue
-
                 chat_id = db.get_last_chat_for_bc(bc_id)
                 if not chat_id:
                     continue
-
                 try:
-                    await bot.send_chat_action(
-                        chat_id=chat_id,
-                        action="typing",
-                        business_connection_id=bc_id
-                    )
-                    logger.debug(f"[ONLINE] Пинг {bc_id} → chat {chat_id}")
+                    await bot.send_chat_action(chat_id=chat_id, action="typing", business_connection_id=bc_id)
                 except Exception as e:
-                    logger.debug(f"[ONLINE] Ошибка пинга {bc_id}: {e}")
-
+                    logger.debug(f"[ONLINE] {e}")
         except Exception as e:
-            logger.error(f"[ONLINE] Ошибка цикла: {e}")
-
+            logger.error(f"[ONLINE] {e}")
         await asyncio.sleep(20)
+
 
 async def auto_restart_loop():
     RESTART_INTERVAL = 3 * 60 * 60
-    logger.info(f"[AUTO_RESTART] Таймер запущен — перезапуск каждые {RESTART_INTERVAL // 3600} ч.")
+    logger.info(f"[AUTO_RESTART] каждые {RESTART_INTERVAL // 3600} ч.")
     while True:
         await asyncio.sleep(RESTART_INTERVAL)
-        logger.info("[AUTO_RESTART] Наступило время планового перезапуска. Выход...")
+        logger.info("[AUTO_RESTART] Перезапуск...")
         await asyncio.sleep(1)
         os._exit(0)
 
 
-async def notify_chat_deleted(user_id: int, chat_id: int):
-    try:
-        kb = InlineKeyboardMarkup(inline_keyboard=[[
-            InlineKeyboardButton(
-                text="📂 Посмотреть сохранённый чат",
-                web_app=WebAppInfo(url=f"{MINI_APP_URL}?chat={chat_id}")
-            )
-        ]])
-        await bot.send_message(
-            user_id,
-            premium(
-                f"<b>❌ Чат полностью удалён</b>\n\n"
-                f"Ваш собеседник удалил переписку с вами, и чат исчез из Telegram.\n\n"
-                f"Все сохранённые сообщения из этого чата доступны в Mini App.\n\n"
-                f"🆔 <code>{chat_id}</code>"
-            ),
-            parse_mode="HTML",
-            reply_markup=kb
-        )
-        logger.info(f"[WATCHDOG] Уведомление об удалении чата {chat_id} отправлено {user_id}")
-    except Exception as e:
-        logger.error(f"[WATCHDOG] Не удалось уведомить {user_id}: {e}")
-
-
 async def chat_watchdog_loop():
+    """
+    Резервная проверка: если peer полностью удалён из Telegram (аккаунт удалён).
+    Основная логика детекта "очистки чата" — в handle_deleted_business_messages.
+    """
     await asyncio.sleep(120)
-    logger.info("[WATCHDOG] Проверка удалённых чатов запущена")
+    logger.info("[WATCHDOG] Проверка удалённых peer-ов запущена")
     while True:
         try:
             cursor = db.conn.cursor()
@@ -2609,26 +2423,26 @@ async def chat_watchdog_loop():
                     except Exception as e:
                         err = str(e).lower()
                         if "chat not found" in err or "peer_id_invalid" in err or "user not found" in err:
+                            total = db.count_all_messages(user_id, chat_id)
                             db.mark_chat_deleted(user_id, chat_id)
-                            await notify_chat_deleted(user_id, chat_id)
+                            await notify_chat_cleared(user_id, chat_id, total)
                     await asyncio.sleep(0.3)
                 await asyncio.sleep(0.5)
         except Exception as e:
-            logger.error(f"[WATCHDOG] Ошибка: {e}")
+            logger.error(f"[WATCHDOG] {e}")
         await asyncio.sleep(1800)
 
 
 async def main():
     try:
         me = await bot.get_me()
-        logger.info(f"✅ Бот успешно запущен: @{me.username}")
+        logger.info(f"✅ Бот запущен: @{me.username}")
     except Exception as e:
-        logger.error(f"❌ Ошибка подключения к Telegram API: {e}")
+        logger.error(f"❌ Ошибка: {e}")
         raise
-
     try:
         await bot.delete_webhook(drop_pending_updates=True)
-        logger.info("✅ Вебхук удалён (если был)")
+        logger.info("✅ Вебхук удалён")
     except Exception as e:
         logger.warning(f"Не удалось удалить вебхук: {e}")
 
@@ -2640,13 +2454,14 @@ async def main():
     await bot.set_my_commands([types.BotCommand(command="start", description=premium("Главное меню"))])
     await dp.start_polling(bot)
 
+
 if __name__ == "__main__":
     while True:
         try:
             asyncio.run(main())
             break
         except KeyboardInterrupt:
-            logger.info("Бот остановлен пользователем")
+            logger.info("Остановлен пользователем")
             break
         except Exception as e:
             logger.error(f"❌ Критическая ошибка: {e}")
