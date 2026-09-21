@@ -36,6 +36,7 @@
             font-size: 15px;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
             overflow-x: hidden;
             letter-spacing: -0.01em;
             transition: background 0.4s var(--ease), color 0.4s var(--ease);
@@ -48,17 +49,42 @@
             pointer-events: none;
             z-index: -1;
             opacity: 0.6;
+            transition: opacity 0.4s var(--ease);
         }
 
-        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes titleIn { from { opacity: 0; letter-spacing: -0.08em; transform: translateY(6px); } to { opacity: 1; letter-spacing: -0.03em; transform: translateY(0); } }
-        @keyframes avatarBreath { 0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0); } 50% { box-shadow: 0 0 24px 0 rgba(58, 122, 254, 0.18); } }
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to   { opacity: 1; }
+        }
+        @keyframes titleIn {
+            from { opacity: 0; letter-spacing: -0.08em; transform: translateY(6px); }
+            to   { opacity: 1; letter-spacing: -0.03em; transform: translateY(0); }
+        }
+        @keyframes avatarBreath {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(58, 122, 254, 0); }
+            50%      { box-shadow: 0 0 24px 0 rgba(58, 122, 254, 0.18); }
+        }
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes progressShimmer { 0% { background-position: -150% 0; } 100% { background-position: 250% 0; } }
-        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-        @keyframes toastIn { from { opacity: 0; transform: translateY(20px) scale(0.95); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+        @keyframes progressShimmer {
+            0%   { background-position: -150% 0; }
+            100% { background-position: 250% 0; }
+        }
+        @keyframes shimmer {
+            0%   { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes toastIn {
+            from { opacity: 0; transform: translateY(20px) scale(0.95); }
+            to   { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes pulseDot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%      { opacity: 0.4; transform: scale(0.85); }
+        }
 
         .tabs-bar {
             position: sticky;
@@ -70,7 +96,15 @@
             z-index: 100;
             padding-top: env(safe-area-inset-top);
         }
-        .tabs-scroll { display: flex; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; padding: 4px 10px 0; scroll-behavior: smooth; }
+
+        .tabs-scroll {
+            display: flex;
+            overflow-x: auto;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding: 4px 10px 0;
+            scroll-behavior: smooth;
+        }
         .tabs-scroll::-webkit-scrollbar { display: none; }
 
         .tab-btn {
@@ -91,7 +125,13 @@
             letter-spacing: -0.005em;
             transition: color 0.4s var(--ease), transform 0.35s var(--ease-spring);
         }
-        .tab-btn svg { width: 15px; height: 15px; stroke-width: 1.8; opacity: 0.9; transition: opacity 0.4s var(--ease), transform 0.5s var(--ease-spring); }
+        .tab-btn svg {
+            width: 15px;
+            height: 15px;
+            stroke-width: 1.8;
+            opacity: 0.9;
+            transition: opacity 0.4s var(--ease), transform 0.5s var(--ease-spring);
+        }
         .tab-btn::after {
             content: "";
             position: absolute;
@@ -111,11 +151,29 @@
         .tab-btn.active::after { transform: scaleX(1); opacity: 1; }
         .tab-btn.active svg { opacity: 1; transform: scale(1.05); }
 
-        .tab-content { display: none; padding: 26px 18px 48px; max-width: 480px; margin: 0 auto; }
-        .tab-content.active { display: block; animation: fadeIn 0.5s var(--ease) both; }
+        .tab-content {
+            display: none;
+            padding: 26px 18px 48px;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.5s var(--ease) both;
+        }
 
-        .page-title { font-size: 24px; font-weight: 650; margin-bottom: 4px; animation: titleIn 0.7s var(--ease) both; }
-        .page-subtitle { font-size: 13.5px; color: var(--hint); margin-bottom: 20px; animation: fadeUp 0.7s var(--ease) 0.06s both; }
+        .page-title {
+            font-size: 24px;
+            font-weight: 650;
+            margin-bottom: 4px;
+            animation: titleIn 0.7s var(--ease) both;
+        }
+        .page-subtitle {
+            font-size: 13.5px;
+            color: var(--hint);
+            margin-bottom: 20px;
+            animation: fadeUp 0.7s var(--ease) 0.06s both;
+        }
 
         .section-label {
             display: flex;
@@ -130,48 +188,127 @@
             animation: fadeUp 0.55s var(--ease) both;
         }
         .section-label:first-of-type { margin-top: 4px; }
-        .section-label .count { font-size: 10px; padding: 2px 7px; border-radius: 6px; background: var(--bg-hover); color: var(--hint); letter-spacing: 0; text-transform: none; font-weight: 600; }
+        .section-label .count {
+            font-size: 10px;
+            padding: 2px 7px;
+            border-radius: 6px;
+            background: var(--bg-hover);
+            color: var(--hint);
+            letter-spacing: 0;
+            text-transform: none;
+            font-weight: 600;
+        }
 
-        .profile-header { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; animation: fadeUp 0.6s var(--ease) both; }
+        .profile-header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 20px;
+            animation: fadeUp 0.6s var(--ease) both;
+        }
+
         .avatar {
             position: relative;
-            width: 62px; height: 62px;
+            width: 62px;
+            height: 62px;
             border-radius: 50%;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
-            display: flex; align-items: center; justify-content: center;
-            font-size: 23px; font-weight: 600; color: var(--hint);
-            flex-shrink: 0; overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 23px;
+            font-weight: 600;
+            color: var(--hint);
+            flex-shrink: 0;
+            overflow: hidden;
             animation: avatarBreath 4s ease-in-out infinite;
             transition: transform 0.5s var(--ease-spring);
         }
         .avatar:hover { transform: scale(1.04); }
         .avatar img { width: 100%; height: 100%; object-fit: cover; }
-        .profile-info { min-width: 0; flex: 1; }
-        .profile-name-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
-        .profile-name { font-size: 19px; font-weight: 650; letter-spacing: -0.025em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px rgba(61, 220, 132, 0.7); flex-shrink: 0; animation: pulseDot 2.2s ease-in-out infinite; }
-        .status-dot.off { background: var(--hint); box-shadow: none; animation: none; opacity: 0.6; }
-        .profile-meta { font-size: 12.5px; color: var(--hint); margin-top: 2px; }
 
-        .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 8px; animation: fadeUp 0.6s var(--ease) 0.08s both; }
+        .profile-info { min-width: 0; flex: 1; }
+        .profile-name-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 0;
+        }
+        .profile-name {
+            font-size: 19px;
+            font-weight: 650;
+            letter-spacing: -0.025em;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px rgba(61, 220, 132, 0.7);
+            flex-shrink: 0;
+            animation: pulseDot 2.2s ease-in-out infinite;
+        }
+        .status-dot.off {
+            background: var(--hint);
+            box-shadow: none;
+            animation: none;
+            opacity: 0.6;
+        }
+        .profile-meta {
+            font-size: 12.5px;
+            color: var(--hint);
+            margin-top: 2px;
+        }
+
+        .quick-actions {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 8px;
+            margin-bottom: 8px;
+            animation: fadeUp 0.6s var(--ease) 0.08s both;
+        }
         .qa-btn {
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            gap: 6px; padding: 12px 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            padding: 12px 6px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: var(--radius);
             color: var(--text);
-            font-family: inherit; font-size: 10.5px; font-weight: 500;
+            font-family: inherit;
+            font-size: 11px;
+            font-weight: 500;
             cursor: pointer;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring), background 0.4s var(--ease);
         }
-        .qa-btn svg { width: 18px; height: 18px; stroke-width: 1.8; color: var(--accent); transition: transform 0.5s var(--ease-spring); }
-        .qa-btn:hover { border-color: var(--border-hover); transform: translateY(-2px); background: var(--bg-hover); }
+        .qa-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke-width: 1.8;
+            color: var(--accent);
+            transition: transform 0.5s var(--ease-spring);
+        }
+        .qa-btn:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+            background: var(--bg-hover);
+        }
         .qa-btn:hover svg { transform: scale(1.12); }
         .qa-btn:active { transform: scale(0.97); }
 
-        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 6px; }
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
         .stat-card {
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -180,16 +317,52 @@
             animation: fadeUp 0.65s var(--ease) both;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .stat-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
+        .stat-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
         .stat-card:active { transform: scale(0.985); }
-        .stat-value { font-size: 25px; font-weight: 650; letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-bottom: 2px; }
-        .stat-label { font-size: 12px; color: var(--hint); }
+        .stat-value {
+            font-size: 25px;
+            font-weight: 650;
+            letter-spacing: -0.04em;
+            font-variant-numeric: tabular-nums;
+            margin-bottom: 2px;
+        }
+        .stat-label {
+            font-size: 12px;
+            color: var(--hint);
+        }
 
-        .card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 4px 16px; margin-bottom: 10px; animation: fadeUp 0.6s var(--ease) both; transition: border-color 0.4s var(--ease), box-shadow 0.5s var(--ease); }
-        .card:hover { border-color: var(--border-hover); box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05); }
+        .card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 4px 16px;
+            margin-bottom: 10px;
+            animation: fadeUp 0.6s var(--ease) both;
+            transition: border-color 0.4s var(--ease), box-shadow 0.5s var(--ease);
+        }
+        .card:hover {
+            border-color: var(--border-hover);
+            box-shadow: inset 0 0 24px rgba(58, 122, 254, 0.05);
+        }
 
-        .search-wrap { position: relative; margin-bottom: 6px; animation: fadeUp 0.5s var(--ease) 0.05s both; }
-        .search-wrap svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 15px; height: 15px; color: var(--hint); pointer-events: none; }
+        .search-wrap {
+            position: relative;
+            margin-bottom: 6px;
+            animation: fadeUp 0.5s var(--ease) 0.05s both;
+        }
+        .search-wrap svg {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 15px;
+            height: 15px;
+            color: var(--hint);
+            pointer-events: none;
+        }
         .search-input {
             width: 100%;
             padding: 11px 14px 11px 38px;
@@ -197,12 +370,16 @@
             border: 1px solid var(--border);
             border-radius: 12px;
             color: var(--text);
-            font-family: inherit; font-size: 13.5px;
+            font-family: inherit;
+            font-size: 13.5px;
             outline: none;
             transition: border-color 0.4s var(--ease), box-shadow 0.4s var(--ease);
         }
         .search-input::placeholder { color: var(--hint); }
-        .search-input:focus { border-color: rgba(58, 122, 254, 0.4); box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.1); }
+        .search-input:focus {
+            border-color: rgba(58, 122, 254, 0.4);
+            box-shadow: 0 0 0 3px rgba(58, 122, 254, 0.1);
+        }
 
         .command-card {
             background: var(--bg-secondary);
@@ -213,39 +390,187 @@
             animation: fadeUp 0.55s var(--ease) both;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .command-card:hover { border-color: var(--border-hover); transform: translateY(-2px); }
-        .command-name { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 13px; font-weight: 600; color: var(--accent); margin-bottom: 4px; }
-        .command-desc { font-size: 13px; color: var(--hint); line-height: 1.5; }
-        .command-desc code { font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; background: var(--bg-hover); padding: 1px 6px; border-radius: 5px; color: var(--text-secondary); }
+        .command-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px);
+        }
+        .command-card:active { transform: scale(0.99); }
+        .command-name {
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 4px;
+            letter-spacing: -0.01em;
+            transition: text-shadow 0.4s var(--ease);
+        }
+        .command-card:hover .command-name { text-shadow: 0 0 12px rgba(58, 122, 254, 0.4); }
+        .command-desc {
+            font-size: 13px;
+            color: var(--hint);
+            line-height: 1.5;
+        }
+        .command-desc code {
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            background: var(--bg-hover);
+            padding: 1px 6px;
+            border-radius: 5px;
+            color: var(--text-secondary);
+        }
 
-        .setting-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 0; gap: 14px; animation: fadeUp 0.5s var(--ease) both; }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            gap: 14px;
+            animation: fadeUp 0.5s var(--ease) both;
+        }
         .setting-row + .setting-row { border-top: 1px solid var(--divider); }
         .setting-info { flex: 1; min-width: 0; }
-        .setting-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-        .setting-desc { font-size: 12px; color: var(--hint); line-height: 1.45; }
-        .setting-value { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 5px 10px; border-radius: 8px; background: var(--bg-hover); white-space: nowrap; color: var(--hint); transition: color 0.4s var(--ease), background 0.4s var(--ease); }
-        .setting-value::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: 0.7; }
-        .setting-value.on { color: var(--success); background: rgba(61, 220, 132, 0.1); }
-        .setting-value.on::before { opacity: 1; box-shadow: 0 0 8px rgba(61, 220, 132, 0.6); }
+        .setting-name {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .setting-desc {
+            font-size: 12px;
+            color: var(--hint);
+            line-height: 1.45;
+        }
+        .setting-value {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 5px 10px;
+            border-radius: 8px;
+            background: var(--bg-hover);
+            white-space: nowrap;
+            color: var(--hint);
+            transition: color 0.4s var(--ease), background 0.4s var(--ease);
+        }
+        .setting-value::before {
+            content: "";
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: currentColor;
+            opacity: 0.7;
+        }
+        .setting-value.on {
+            color: var(--success);
+            background: rgba(61, 220, 132, 0.1);
+        }
+        .setting-value.on::before {
+            opacity: 1;
+            box-shadow: 0 0 8px rgba(61, 220, 132, 0.6);
+        }
 
-        .hint-note { font-size: 12.5px; color: var(--hint); line-height: 1.55; padding: 12px 4px 0; text-align: center; }
+        .hint-note {
+            font-size: 12.5px;
+            color: var(--hint);
+            line-height: 1.55;
+            padding: 12px 4px 0;
+            text-align: center;
+        }
 
-        .referral-card { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 16px 16px; margin-bottom: 10px; animation: fadeUp 0.6s var(--ease) both; }
-        .ref-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 0; font-size: 14px; }
+        .referral-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 6px 16px 16px;
+            margin-bottom: 10px;
+            animation: fadeUp 0.6s var(--ease) both;
+        }
+        .ref-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 11px 0;
+            font-size: 14px;
+        }
         .ref-row + .ref-row { border-top: 1px solid var(--divider); }
         .ref-label { color: var(--hint); }
-        .ref-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .ref-value {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
 
-        .progress-wrap { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
-        .progress-info { display: flex; justify-content: space-between; font-size: 12px; color: var(--hint); margin-bottom: 10px; }
-        .progress-bar { height: 4px; background: var(--bg-hover); border-radius: 4px; overflow: hidden; }
-        .progress-fill { height: 100%; border-radius: 4px; width: 0%; background: linear-gradient(90deg, var(--accent) 0%, #7bb1ff 45%, var(--accent) 90%); background-size: 250% 100%; transition: width 1.1s var(--ease); animation: progressShimmer 3.5s linear infinite; }
+        .progress-wrap {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--divider);
+        }
+        .progress-info {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: var(--hint);
+            margin-bottom: 10px;
+        }
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-hover);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent) 0%, #7bb1ff 45%, var(--accent) 90%);
+            background-size: 250% 100%;
+            transition: width 1.1s var(--ease);
+            animation: progressShimmer 3.5s linear infinite;
+        }
 
-        .ref-link-block { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--divider); }
-        .ref-link-label { font-size: 12px; color: var(--hint); margin-bottom: 9px; }
-        .ref-link { display: flex; gap: 8px; align-items: center; background: var(--bg-hover); border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; overflow: hidden; }
-        .ref-link code { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: none; padding: 0; font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-secondary); }
-        .copy-btn { background: var(--accent); color: #fff; border: none; border-radius: 8px; padding: 6px 12px; font-size: 11px; font-weight: 600; cursor: pointer; flex-shrink: 0; font-family: inherit; transition: opacity 0.35s var(--ease), transform 0.35s var(--ease-spring); }
+        .ref-link-block {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid var(--divider);
+        }
+        .ref-link-label {
+            font-size: 12px;
+            color: var(--hint);
+            margin-bottom: 9px;
+        }
+        .ref-link {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            background: var(--bg-hover);
+            border: 1px solid transparent;
+            border-radius: 10px;
+            padding: 10px 12px;
+            overflow: hidden;
+        }
+        .ref-link code {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            background: none;
+            padding: 0;
+            font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+        .copy-btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            flex-shrink: 0;
+            font-family: inherit;
+            transition: opacity 0.35s var(--ease), transform 0.35s var(--ease-spring);
+        }
         .copy-btn:hover { opacity: 0.9; }
         .copy-btn:active { transform: scale(0.94); }
         .copy-btn.copied { background: var(--success); color: #0b1a12; }
@@ -264,7 +589,10 @@
             counter-increment: step;
             transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
         }
-        .steps-list li:hover { border-color: var(--border-hover); transform: translateX(3px); }
+        .steps-list li:hover {
+            border-color: var(--border-hover);
+            transform: translateX(3px);
+        }
         .steps-list li::before {
             content: counter(step);
             position: absolute;
@@ -318,11 +646,32 @@
         .contact-arrow { color: var(--hint); font-size: 18px; flex-shrink: 0; opacity: 0.5; transition: opacity 0.4s var(--ease), transform 0.4s var(--ease-spring), color 0.4s var(--ease); }
         .contact-card:hover .contact-arrow { opacity: 1; color: var(--accent); transform: translateX(4px); }
 
-        .faq-item { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px; overflow: hidden; animation: fadeUp 0.55s var(--ease) both; }
-        .faq-q { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; font-size: 13.5px; font-weight: 600; cursor: pointer; user-select: none; }
-        .faq-q svg { width: 14px; height: 14px; color: var(--hint); flex-shrink: 0; transition: transform 0.45s var(--ease-spring), color 0.4s var(--ease); }
+        .faq-item {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-bottom: 8px;
+            overflow: hidden;
+            animation: fadeUp 0.55s var(--ease) both;
+        }
+        .faq-q {
+            display: flex; justify-content: space-between; align-items: center;
+            gap: 12px; padding: 14px 16px;
+            font-size: 13.5px; font-weight: 600;
+            cursor: pointer; user-select: none;
+        }
+        .faq-q svg {
+            width: 14px; height: 14px; color: var(--hint);
+            flex-shrink: 0;
+            transition: transform 0.45s var(--ease-spring), color 0.4s var(--ease);
+        }
         .faq-item.open .faq-q svg { transform: rotate(180deg); color: var(--accent); }
-        .faq-a { max-height: 0; overflow: hidden; padding: 0 16px; font-size: 13px; color: var(--hint); line-height: 1.55; transition: max-height 0.5s var(--ease), padding 0.5s var(--ease), opacity 0.4s var(--ease); opacity: 0; }
+        .faq-a {
+            max-height: 0; overflow: hidden; padding: 0 16px;
+            font-size: 13px; color: var(--hint); line-height: 1.55;
+            transition: max-height 0.5s var(--ease), padding 0.5s var(--ease), opacity 0.4s var(--ease);
+            opacity: 0;
+        }
         .faq-item.open .faq-a { max-height: 260px; padding: 0 16px 14px; opacity: 1; }
 
         .skel {
@@ -343,21 +692,25 @@
         .skel-label { width: 90px; height: 10px; margin: 22px 0 12px 2px; border-radius: 5px; }
         .skel-settings { height: 220px; border-radius: var(--radius); }
 
-        #toast-container { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom)); z-index: 9998; display: flex; flex-direction: column; align-items: center; gap: 8px; pointer-events: none; padding: 0 18px; }
+        #toast-container {
+            position: fixed; left: 0; right: 0;
+            bottom: calc(20px + env(safe-area-inset-bottom));
+            z-index: 9998;
+            display: flex; flex-direction: column; align-items: center;
+            gap: 8px; pointer-events: none; padding: 0 18px;
+        }
         .toast {
             display: flex; align-items: center; gap: 9px;
             padding: 11px 16px;
             background: var(--bg-secondary);
             border: 1px solid var(--border-hover);
             border-radius: 12px;
-            color: var(--text);
-            font-size: 13px; font-weight: 500;
+            color: var(--text); font-size: 13px; font-weight: 500;
             backdrop-filter: blur(20px) saturate(180%);
             -webkit-backdrop-filter: blur(20px) saturate(180%);
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.25);
             animation: toastIn 0.4s var(--ease-spring) both;
-            max-width: 380px;
-            pointer-events: auto;
+            max-width: 380px; pointer-events: auto;
         }
         .toast.hide { opacity: 0; transform: translateY(12px) scale(0.96); transition: opacity 0.35s var(--ease), transform 0.35s var(--ease); }
         .toast svg { width: 16px; height: 16px; flex-shrink: 0; }
@@ -368,12 +721,26 @@
         .loader { display: flex; align-items: center; justify-content: center; padding: 60px 0; color: var(--hint); font-size: 13.5px; }
         .spinner { width: 16px; height: 16px; border: 1.5px solid var(--divider); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.9s linear infinite; margin-right: 10px; }
 
-        .error-box { padding: 22px; color: var(--hint); font-size: 13px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: var(--radius); margin-top: 8px; animation: fadeUp 0.55s var(--ease) both; }
+        .error-box {
+            padding: 22px; color: var(--hint); font-size: 13px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            margin-top: 8px;
+            animation: fadeUp 0.55s var(--ease) both;
+        }
         .error-title { color: var(--danger); font-weight: 600; margin-bottom: 6px; }
 
         .info-list { display: flex; flex-direction: column; gap: 12px; padding: 14px 0; }
         .info-item { display: flex; gap: 11px; font-size: 13.5px; line-height: 1.5; color: var(--text-secondary); animation: fadeUp 0.5s var(--ease) both; }
-        .info-num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 1px; }
+        .info-num {
+            flex-shrink: 0; width: 20px; height: 20px;
+            border-radius: 50%;
+            background: var(--accent-soft);
+            color: var(--accent);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700; margin-top: 1px;
+        }
 
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after {
@@ -502,7 +869,7 @@
 
         <div class="section-label" data-section="fun">
             <span>Развлечения</span>
-            <span class="count">5</span>
+            <span class="count">4</span>
         </div>
         <div class="command-card">
             <div class="command-name">.anim &lt;текст&gt;</div>
@@ -519,10 +886,6 @@
         <div class="command-card">
             <div class="command-name">.stoptroll</div>
             <div class="command-desc">Остановить троллинг в текущем чате.</div>
-        </div>
-        <div class="command-card">
-            <div class="command-name">.roll &lt;макс&gt;</div>
-            <div class="command-desc">Случайное число от 1 до указанного. Пример: <code>.roll 100</code></div>
         </div>
     </div>
 
@@ -630,6 +993,50 @@
             </div>
             <div class="contact-arrow">›</div>
         </a>
+
+        <div class="section-label">
+            <span>Частые вопросы</span>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q">
+                <span>Нужен ли Telegram Premium?</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+            <div class="faq-a">Нет, бот работает на обычном аккаунте. Premium не требуется.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q">
+                <span>Как быстро выдаются звёзды?</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+            <div class="faq-a">Администратор обрабатывает заявки вручную в течение 1–24 часов после достижения минимума в 15 звёзд.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q">
+                <span>Можно ли отключить бота?</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+            <div class="faq-a">Да, просто удалите бота из раздела «Автоматизация чатов» в настройках профиля.</div>
+        </div>
+
+        <div class="faq-item">
+            <div class="faq-q">
+                <span>Что будет с сохранёнными сообщениями?</span>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 12 15 18 9"/>
+                </svg>
+            </div>
+            <div class="faq-a">Они хранятся только локально у вас в чате. Бот не передаёт данные третьим лицам.</div>
+        </div>
 
         <div class="hint-note">
             Проект создан и поддерживается разработчиком @CryptoViktor
@@ -970,14 +1377,6 @@
                         </svg>
                         Обновить
                     </button>
-                    <button class="qa-btn" id="qaShare">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
-                            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
-                            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
-                        </svg>
-                        Поделиться
-                    </button>
                     <button class="qa-btn" id="qaSettings">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
                             <circle cx="12" cy="12" r="3"/>
@@ -1053,16 +1452,6 @@
                     try { await loadStats(); showToast('Данные обновлены', 'success'); }
                     catch { showToast('Не удалось обновить', 'error'); }
                     finally { refreshBtn.disabled = false; refreshBtn.style.opacity = ''; }
-                });
-            }
-            const shareBtn = document.getElementById('qaShare');
-            if (shareBtn) {
-                shareBtn.addEventListener('click', () => {
-                    const text = 'Попробуй XrayGram — удобный бот для Telegram!';
-                    const url = 'https://t.me/XrayGramRobot';
-                    if (navigator.share) navigator.share({ title: 'XrayGram', text, url }).catch(() => {});
-                    else if (tg?.openTelegramLink) tg.openTelegramLink(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`);
-                    else showToast('Скопируйте: ' + url, 'info');
                 });
             }
             const setBtn = document.getElementById('qaSettings');
@@ -1190,7 +1579,6 @@
             const MAX_TIME = 500;
             const MOVE_THRESHOLD = 12;
 
-            // Игнорируем старт с интерактивных элементов
             const IGNORE = 'button, a, input, textarea, select, .tab-btn, .tabs-scroll, .tabs-bar, .qa-btn, .copy-btn, .faq-q, .command-card, .contact-card, .action-btn, .info-num, .ref-link, .search-input';
 
             document.addEventListener('touchstart', (e) => {
@@ -1236,7 +1624,7 @@
             document.addEventListener('touchcancel', () => { tracking = false; }, { passive: true });
         })();
 
-        // ======================= ПРОСМОТР УДАЛЁННОГО ЧАТА =======================
+        // ======================= ПРОСМОТР КОПИИ УДАЛЁННОГО ЧАТА =======================
         function getChatIdFromUrl() {
             try {
                 const params = new URLSearchParams(window.location.search);
@@ -1248,7 +1636,7 @@
             return null;
         }
 
-        async function openDeletedChatModal(chatId) {
+        async function openChatCopy(chatId) {
             const overlay = document.createElement('div');
             Object.assign(overlay.style, {
                 position: 'fixed',
@@ -1290,10 +1678,10 @@
             });
             header.innerHTML = `
                 <div style="min-width:0;flex:1;">
-                    <div style="font-size:15px;font-weight:650;color:var(--text);" id="delChatTitle">Сохранённый чат</div>
-                    <div style="font-size:12px;color:var(--hint);margin-top:2px;" id="delChatSubtitle">Загрузка…</div>
+                    <div style="font-size:15px;font-weight:650;color:var(--text);" id="chatTitle">Копия чата</div>
+                    <div style="font-size:12px;color:var(--hint);margin-top:2px;" id="chatSub">Загрузка…</div>
                 </div>
-                <button id="delChatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">×</button>
+                <button id="chatClose" style="background:var(--bg-hover);border:none;width:32px;height:32px;border-radius:50%;color:var(--text);font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;">×</button>
             `;
 
             const body = document.createElement('div');
@@ -1321,7 +1709,7 @@
                 setTimeout(() => overlay.remove(), 400);
             }
 
-            header.querySelector('#delChatClose').addEventListener('click', close);
+            header.querySelector('#chatClose').addEventListener('click', close);
             overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
 
             try {
@@ -1335,14 +1723,12 @@
                 }
                 const data = await resp.json();
 
-                const titleEl = header.querySelector('#delChatTitle');
-                const subEl = header.querySelector('#delChatSubtitle');
+                const titleEl = header.querySelector('#chatTitle');
+                const subEl = header.querySelector('#chatSub');
 
                 if (data.is_chat_deleted) {
                     titleEl.textContent = '❌ Чат полностью удалён';
                     titleEl.style.color = 'var(--danger)';
-                } else {
-                    titleEl.textContent = '💬 Сохранённый чат';
                 }
                 subEl.textContent = `${data.sender_name} · ${data.count} сообщений`;
 
@@ -1354,12 +1740,9 @@
                 body.innerHTML = data.messages.map(m => {
                     const deleted = m.is_deleted;
                     const bg = deleted ? 'var(--bg-hover)' : 'var(--bg-secondary)';
-                    const borderColor = deleted ? 'var(--border)' : 'var(--border)';
-                    const textStyle = deleted
-                        ? 'text-decoration:line-through;opacity:0.65;'
-                        : '';
+                    const textStyle = deleted ? 'text-decoration:line-through;opacity:0.65;' : '';
                     return `
-                        <div style="background:${bg};border:1px solid ${borderColor};border-radius:12px;padding:12px 14px;margin-bottom:8px;">
+                        <div style="background:${bg};border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:8px;">
                             <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;align-items:center;">
                                 <span style="font-size:11.5px;font-weight:600;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(m.from)}</span>
                                 <span style="font-size:10.5px;color:var(--hint);flex-shrink:0;display:flex;gap:6px;align-items:center;">
@@ -1381,7 +1764,7 @@
         (function checkDeletedChatParam() {
             const chatId = getChatIdFromUrl();
             if (chatId) {
-                setTimeout(() => openDeletedChatModal(chatId), 500);
+                setTimeout(() => openChatCopy(chatId), 500);
             }
         })();
 
