@@ -51,94 +51,6 @@
             opacity: 0.6;
         }
 
-        /* ======================= ЗАГРУЗОЧНЫЙ ЭКРАН ======================= */
-        .splash {
-            position: fixed;
-            inset: 0;
-            z-index: 9999;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 22px;
-            background: radial-gradient(ellipse at center, #14141a 0%, #0a0a0c 70%);
-            transition: opacity 0.6s var(--ease), visibility 0.6s var(--ease);
-        }
-        .splash.hide {
-            opacity: 0;
-            visibility: hidden;
-            pointer-events: none;
-        }
-        .splash-logo {
-            position: relative;
-            width: 96px;
-            height: 96px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .splash-ring {
-            position: absolute;
-            inset: 0;
-            border-radius: 50%;
-            border: 1.5px solid rgba(58, 122, 254, 0.35);
-            animation: splashRing 2.4s ease-out infinite;
-        }
-        .splash-ring:nth-child(2) { animation-delay: 0.8s; }
-        .splash-ring:nth-child(3) { animation-delay: 1.6s; }
-        .splash-mark {
-            position: relative;
-            z-index: 1;
-            width: 62px;
-            height: 62px;
-            border-radius: 20px;
-            background: linear-gradient(135deg, var(--accent), #7bb1ff);
-            color: #fff;
-            font-size: 30px;
-            font-weight: 800;
-            letter-spacing: -0.05em;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 10px 40px rgba(58, 122, 254, 0.5);
-            animation: splashMark 2s ease-in-out infinite;
-        }
-        .splash-name {
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: -0.02em;
-            color: #fff;
-            opacity: 0.9;
-            animation: fadeIn 0.9s var(--ease) 0.2s both;
-        }
-        .splash-dots {
-            display: flex;
-            gap: 6px;
-        }
-        .splash-dots span {
-            width: 5px;
-            height: 5px;
-            border-radius: 50%;
-            background: var(--accent);
-            opacity: 0.35;
-            animation: splashDot 1.4s ease-in-out infinite;
-        }
-        .splash-dots span:nth-child(2) { animation-delay: 0.2s; }
-        .splash-dots span:nth-child(3) { animation-delay: 0.4s; }
-
-        @keyframes splashRing {
-            0%   { transform: scale(0.7); opacity: 0.7; }
-            100% { transform: scale(1.6); opacity: 0; }
-        }
-        @keyframes splashMark {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50%      { transform: translateY(-4px) scale(1.03); }
-        }
-        @keyframes splashDot {
-            0%, 100% { opacity: 0.25; transform: scale(0.9); }
-            50%      { opacity: 1; transform: scale(1.2); }
-        }
-
         /* ======================= АНИМАЦИИ ======================= */
         @keyframes fadeUp {
             from { opacity: 0; transform: translateY(8px); }
@@ -427,46 +339,6 @@
         .stat-label {
             font-size: 12px;
             color: var(--hint);
-        }
-
-        /* ======================= ДОСТИЖЕНИЯ ======================= */
-        .achievement-row {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 8px;
-        }
-        .achievement {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 6px;
-            padding: 14px 6px 12px;
-            background: var(--bg-secondary);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            animation: fadeUp 0.55s var(--ease) both;
-            transition: border-color 0.4s var(--ease), transform 0.4s var(--ease-spring);
-        }
-        .achievement.unlocked {
-            border-color: rgba(58, 122, 254, 0.25);
-            background: linear-gradient(180deg, rgba(58, 122, 254, 0.06), transparent);
-        }
-        .achievement.unlocked:hover {
-            transform: translateY(-2px);
-            border-color: rgba(58, 122, 254, 0.45);
-        }
-        .achievement.locked { opacity: 0.45; }
-        .ach-icon {
-            font-size: 22px;
-            filter: grayscale(0.6);
-            transition: filter 0.4s var(--ease);
-        }
-        .achievement.unlocked .ach-icon { filter: none; }
-        .ach-name {
-            font-size: 11px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            letter-spacing: -0.005em;
         }
 
         /* ======================= КАРТОЧКИ ======================= */
@@ -1121,23 +993,10 @@
                 animation-iteration-count: 1 !important;
                 transition-duration: 0.001ms !important;
             }
-            .splash { display: none; }
         }
     </style>
 </head>
 <body>
-
-    <!-- Загрузочный экран -->
-    <div class="splash" id="splash">
-        <div class="splash-logo">
-            <div class="splash-ring"></div>
-            <div class="splash-ring"></div>
-            <div class="splash-ring"></div>
-            <div class="splash-mark">X</div>
-        </div>
-        <div class="splash-name">XrayGram</div>
-        <div class="splash-dots"><span></span><span></span><span></span></div>
-    </div>
 
     <!-- Фон с частицами -->
     <canvas id="particles-canvas"></canvas>
@@ -1447,25 +1306,126 @@
     <script>
         // ======================= ЗАГРУЗОЧНЫЙ ЭКРАН =======================
         (function initSplash() {
-            const splash = document.getElementById('splash');
-            if (!splash) return;
-            const start = Date.now();
-            const MIN_SHOW = 900; // минимум показа, мс
-            const MAX_SHOW = 2500; // максимум, мс
+            if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
 
-            function hideSplash() {
-                const elapsed = Date.now() - start;
-                const wait = Math.max(0, MIN_SHOW - elapsed);
-                setTimeout(() => splash.classList.add('hide'), wait);
+            const MIN_SHOW = 1300;
+            const MAX_SHOW = 3200;
+            const IDLE_TARGET = 88;
+            const t0 = performance.now();
+
+            const splash = document.createElement('div');
+            Object.assign(splash.style, {
+                position: 'fixed',
+                inset: '0',
+                zIndex: '9999',
+                background: '#0f0f10',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: '1',
+                transition: 'opacity 550ms cubic-bezier(0.22, 1, 0.36, 1)',
+                willChange: 'opacity',
+            });
+
+            const inner = document.createElement('div');
+            Object.assign(inner.style, {
+                width: '168px',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+                opacity: '0',
+                transition: 'opacity 500ms cubic-bezier(0.22, 1, 0.36, 1)',
+            });
+
+            const label = document.createElement('div');
+            label.textContent = 'XrayGram';
+            Object.assign(label.style, {
+                fontFamily: 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace',
+                fontSize: '10.5px',
+                fontWeight: '500',
+                letterSpacing: '0.24em',
+                textTransform: 'uppercase',
+                color: '#8b8b93',
+                paddingLeft: '1px',
+            });
+
+            const track = document.createElement('div');
+            Object.assign(track.style, {
+                position: 'relative',
+                height: '1.5px',
+                width: '100%',
+                background: 'rgba(255, 255, 255, 0.07)',
+                borderRadius: '2px',
+                overflow: 'hidden',
+            });
+
+            const bar = document.createElement('div');
+            Object.assign(bar.style, {
+                height: '100%',
+                width: '0%',
+                background: '#ffffff',
+                borderRadius: '2px',
+                willChange: 'width',
+            });
+
+            track.appendChild(bar);
+            inner.appendChild(label);
+            inner.appendChild(track);
+            splash.appendChild(inner);
+            document.body.appendChild(splash);
+
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => { inner.style.opacity = '1'; });
+            });
+
+            let progress = 0;
+            let done = false;
+            let rafId;
+
+            function tick() {
+                if (done) return;
+                const remaining = IDLE_TARGET - progress;
+                if (remaining > 0.3) {
+                    progress += remaining * 0.06;
+                    bar.style.width = progress.toFixed(2) + '%';
+                    rafId = requestAnimationFrame(tick);
+                }
+            }
+            rafId = requestAnimationFrame(tick);
+
+            function finish() {
+                if (done) return;
+                done = true;
+                cancelAnimationFrame(rafId);
+
+                const from = progress;
+                const tStart = performance.now();
+                const DUR = 380;
+
+                function step(now) {
+                    const t = Math.min(1, (now - tStart) / DUR);
+                    const eased = 1 - Math.pow(1 - t, 3);
+                    bar.style.width = (from + (100 - from) * eased).toFixed(2) + '%';
+                    if (t < 1) {
+                        requestAnimationFrame(step);
+                    } else {
+                        setTimeout(() => {
+                            splash.style.opacity = '0';
+                            setTimeout(() => splash.remove(), 600);
+                        }, 220);
+                    }
+                }
+                requestAnimationFrame(step);
             }
 
-            // Прячем после загрузки окна (или по таймауту)
-            if (document.readyState === 'complete') {
-                hideSplash();
-            } else {
-                window.addEventListener('load', hideSplash);
+            function tryFinish() {
+                const wait = Math.max(0, MIN_SHOW - (performance.now() - t0));
+                setTimeout(finish, wait);
             }
-            setTimeout(() => splash.classList.add('hide'), MAX_SHOW);
+
+            if (document.readyState === 'complete') tryFinish();
+            else window.addEventListener('load', tryFinish);
+            setTimeout(finish, MAX_SHOW);
         })();
 
         // ======================= ФОН С ЧАСТИЦАМИ =======================
@@ -1625,21 +1585,7 @@
             let meta = `ID: ${user.id}`;
             if (user.username) meta = `@${escapeHtml(user.username)} · ${meta}`;
 
-            const messagesSaved = stats.messages_saved || 0;
             const isActive = (stats.active_connections || 0) > 0;
-
-            // Достижения
-            const achievements = [
-                { name: "Новичок", icon: "🌱", unlocked: messagesSaved >= 1 },
-                { name: "Активный", icon: "⚡", unlocked: messagesSaved >= 100 },
-                { name: "Про", icon: "🏆", unlocked: messagesSaved >= 1000 },
-            ];
-            const achHtml = achievements.map((a, i) => `
-                <div class="achievement ${a.unlocked ? 'unlocked' : 'locked'}" style="animation-delay: ${0.18 + i * 0.06}s">
-                    <div class="ach-icon">${a.icon}</div>
-                    <div class="ach-name">${a.name}</div>
-                </div>
-            `).join("");
 
             const statsCards = [
                 { value: stats.messages_saved || 0, label: "Сообщений сохранено" },
@@ -1696,9 +1642,6 @@
 
                 <div class="section-label"><span>Статистика</span></div>
                 <div class="stat-grid">${statCardsHtml}</div>
-
-                <div class="section-label"><span>Достижения</span></div>
-                <div class="achievement-row">${achHtml}</div>
             `;
         }
 
