@@ -135,6 +135,7 @@ class Database:
                 text TEXT,
                 files TEXT,
                 is_temporary BOOLEAN DEFAULT 0,
+                is_deleted BOOLEAN DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (bc_id, msg_id)
             )
@@ -189,6 +190,8 @@ class Database:
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
+        if "is_deleted" not in msg_cols:
+            cursor.execute("ALTER TABLE messages ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
 
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
@@ -206,13 +209,13 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_chat ON messages(user_id, chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_deleted_chats_user ON deleted_chats(user_id)")
         self.conn.commit()
 
     def _init_referral_tables(self):
         cur = self.ref_conn.cursor()
-
         cur.execute("""
             CREATE TABLE IF NOT EXISTS referral_relations (
                 user_id INTEGER PRIMARY KEY,
@@ -244,50 +247,10 @@ class Database:
                 edited_count INTEGER DEFAULT 0
             )
         """)
-
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_referrer ON referral_events(referrer_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
         self.ref_conn.commit()
-
-    def auto_backup(self) -> str:
-        try:
-            if not os.path.exists(REFERRAL_DB_PATH):
-                return ""
-            ts = time.strftime("%Y%m%d_%H%M%S")
-            backup_path = os.path.join(BACKUP_DIR, f"referrals_{ts}.db")
-
-            src = sqlite3.connect(REFERRAL_DB_PATH)
-            dst = sqlite3.connect(backup_path)
-            with dst:
-                src.backup(dst)
-            src.close()
-            dst.close()
-
-            backups = sorted(
-                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")]
-            )
-            while len(backups) > BACKUP_KEEP:
-                old = backups.pop(0)
-                try:
-                    os.remove(os.path.join(BACKUP_DIR, old))
-                except Exception:
-                    pass
-
-            logger.info(f"[BACKUP] Создан бэкап: {backup_path}")
-            return backup_path
-        except Exception as e:
-            logger.error(f"[BACKUP] Ошибка: {e}")
-            return ""
-
-    def list_backups(self) -> list:
-        try:
-            return sorted(
-                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")],
-                reverse=True
-            )
-        except Exception:
-            return []
 
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
@@ -350,7 +313,10 @@ class Database:
     def get_user_messages_saved(self, user_id: int) -> int:
         try:
             cur = self.conn.cursor()
-            cur.execute("SELECT COUNT(*) AS c FROM messages WHERE user_id = ?", (user_id,))
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND COALESCE(is_deleted, 0) = 0",
+                (user_id,)
+            )
             row = cur.fetchone()
             return int(row["c"] or 0)
         except Exception:
@@ -365,6 +331,7 @@ class Database:
         except Exception:
             return 0
 
+    # ---------- Реферальная система ----------
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -410,34 +377,6 @@ class Database:
             self.ref_conn.commit()
         except Exception as e:
             logger.error(f"[DB] mark_referral_credited: {e}")
-
-    def count_referrals_today(self, referrer_id: int) -> int:
-        try:
-            cur = self.ref_conn.cursor()
-            cur.execute("""
-                SELECT COUNT(*) AS c FROM referral_events
-                WHERE referrer_id = ?
-                  AND created_at >= datetime('now', '-1 day')
-            """, (referrer_id,))
-            return int(cur.fetchone()["c"] or 0)
-        except Exception:
-            return 0
-
-    def seconds_since_last_referral(self, referrer_id: int) -> float:
-        try:
-            cur = self.ref_conn.cursor()
-            cur.execute("""
-                SELECT created_at FROM referral_events
-                WHERE referrer_id = ?
-                ORDER BY created_at DESC LIMIT 1
-            """, (referrer_id,))
-            row = cur.fetchone()
-            if row is None:
-                return 1e9
-            cur.execute("SELECT (julianday('now') - julianday(?)) * 86400.0 AS s", (row["created_at"],))
-            return float(cur.fetchone()["s"] or 0)
-        except Exception:
-            return 1e9
 
     def log_referral_event(self, referrer_id: int, invited_id: int):
         try:
@@ -515,7 +454,6 @@ class Database:
                 LEFT JOIN referral_balances rb ON rb.user_id = t.user_id
             """)
             ref_rows = cur.fetchall()
-
             result = []
             main_cur = self.conn.cursor()
             for r in ref_rows:
@@ -524,10 +462,8 @@ class Database:
                 awarded = float(r["awarded_stars"] or 0)
                 invited_total = int(r["invited_total"] or 0)
                 invited_credited = int(r["invited_credited"] or 0)
-
                 if invited_total == 0 and pending == 0 and awarded == 0:
                     continue
-
                 main_cur.execute(
                     "SELECT username, first_name, last_name FROM users WHERE user_id = ?",
                     (uid,)
@@ -543,7 +479,6 @@ class Database:
                     "invited_total": invited_total,
                     "invited_credited": invited_credited,
                 })
-
             result.sort(key=lambda x: (x["pending_stars"], x["invited_credited"]), reverse=True)
             return result
         except Exception as e:
@@ -563,6 +498,7 @@ class Database:
         except Exception as e:
             logger.error(f"[DB] mark_stars_awarded: {e}")
 
+    # ---------- Настройки ----------
     def get_scam_check(self, user_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT scam_check FROM user_settings WHERE user_id = ?", (user_id,))
@@ -622,6 +558,7 @@ class Database:
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
+    # ---------- Подключения ----------
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -653,6 +590,7 @@ class Database:
         """)
         return cursor.fetchall()
 
+    # ---------- Удалённые чаты ----------
     def get_user_chats(self, user_id):
         try:
             cursor = self.conn.cursor()
@@ -676,6 +614,17 @@ class Database:
         except Exception as e:
             logger.error(f"[DB] mark_chat_deleted: {e}")
 
+    def unmark_chat_deleted(self, user_id, chat_id):
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                "DELETE FROM deleted_chats WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id)
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] unmark_chat_deleted: {e}")
+
     def is_chat_deleted(self, user_id, chat_id):
         try:
             cursor = self.conn.cursor()
@@ -698,16 +647,68 @@ class Database:
         except Exception:
             return []
 
+    # ---------- Сообщения ----------
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None,
                      is_temporary=False, chat_id=None):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
         cursor.execute("""
-            INSERT OR REPLACE INTO messages
-            (bc_id, msg_id, user_id, chat_id, fullname, text, files, is_temporary)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (bc_id, msg_id, user_id, chat_id, fullname, text, files_json, is_temporary))
+            INSERT INTO messages
+            (bc_id, msg_id, user_id, chat_id, fullname, text, files, is_temporary, is_deleted)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+            ON CONFLICT(bc_id, msg_id) DO UPDATE SET
+                user_id = excluded.user_id,
+                chat_id = excluded.chat_id,
+                fullname = excluded.fullname,
+                text = excluded.text,
+                files = excluded.files,
+                is_temporary = excluded.is_temporary
+        """, (bc_id, msg_id, user_id, chat_id, fullname, text, files_json, 1 if is_temporary else 0))
         self.conn.commit()
+
+    def mark_message_deleted(self, bc_id, msg_id):
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "UPDATE messages SET is_deleted = 1 WHERE bc_id = ? AND msg_id = ?",
+            (bc_id, msg_id)
+        )
+        self.conn.commit()
+
+    def count_all_messages(self, user_id: int, chat_id: int) -> int:
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id)
+            )
+            return int(cur.fetchone()["c"] or 0)
+        except Exception:
+            return 0
+
+    def count_active_messages(self, user_id: int, chat_id: int) -> int:
+        try:
+            cur = self.conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ? AND COALESCE(is_deleted, 0) = 0",
+                (user_id, chat_id)
+            )
+            return int(cur.fetchone()["c"] or 0)
+        except Exception:
+            return 0
+
+    def get_chat_messages(self, user_id: int, chat_id: int) -> list:
+        try:
+            cur = self.conn.cursor()
+            cur.execute("""
+                SELECT msg_id, fullname, text, files, is_temporary, is_deleted, created_at
+                FROM messages
+                WHERE user_id = ? AND chat_id = ?
+                ORDER BY msg_id ASC
+            """, (user_id, chat_id))
+            return cur.fetchall()
+        except Exception as e:
+            logger.error(f"[DB] get_chat_messages: {e}")
+            return []
 
     def update_message_text(self, bc_id, msg_id, new_text):
         cursor = self.conn.cursor()
@@ -748,6 +749,7 @@ class Database:
         row = cursor.fetchone()
         return row["chat_id"] if row else None
 
+    # ---------- Mute ----------
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -768,6 +770,7 @@ class Database:
         cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
         return [row["chat_id"] for row in cursor.fetchall()]
 
+    # ---------- TTT ----------
     def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -834,11 +837,6 @@ class Database:
     def get_connections_count(self):
         cursor = self.conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM connections")
-        return cursor.fetchone()[0]
-
-    def get_muted_chats_count(self):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM muted_chats")
         return cursor.fetchone()[0]
 
     def close(self):
