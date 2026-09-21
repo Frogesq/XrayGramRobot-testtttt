@@ -2,6 +2,7 @@ import sqlite3
 import json
 import os
 import logging
+import shutil
 import time
 
 logger = logging.getLogger(__name__)
@@ -10,7 +11,11 @@ DATA_DIR = "/app/data"
 os.makedirs(DATA_DIR, exist_ok=True)
 DB_PATH = os.path.join(DATA_DIR, "messages.db")
 REFERRAL_DB_PATH = os.path.join(DATA_DIR, "referrals.db")
+BACKUP_DIR = os.path.join(DATA_DIR, "backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
+REFERRAL_DAILY_LIMIT = 20
+REFERRAL_MIN_INTERVAL = 60
 BACKUP_KEEP = 5
 
 
@@ -34,17 +39,47 @@ def _is_valid_sqlite(path):
         return False
 
 
+def _try_recover(path):
+    try:
+        backup_path = f"{path}.broken.{int(time.time())}"
+        shutil.copy2(path, backup_path)
+        new_path = f"{path}.recovered"
+        conn_src = sqlite3.connect(path)
+        conn_dst = sqlite3.connect(new_path)
+        with conn_dst:
+            for line in conn_src.iterdump():
+                try:
+                    conn_dst.execute(line)
+                except Exception:
+                    pass
+        conn_src.close()
+        conn_dst.close()
+        if os.path.exists(new_path) and os.path.getsize(new_path) > 0:
+            os.replace(new_path, path)
+            return True
+    except Exception as e:
+        logger.error(f"[DB] Не удалось восстановить: {e}")
+    return False
+
+
 def _ensure_valid_db(path):
     if not os.path.exists(path):
         return
+    size = os.path.getsize(path)
     if _is_valid_sqlite(path):
         return
-    size = os.path.getsize(path)
     if size < 100:
         try:
             os.remove(path)
         except Exception:
             pass
+        return
+    if _try_recover(path):
+        return
+    try:
+        os.remove(path)
+    except Exception:
+        pass
 
 
 def _enable_wal(conn):
@@ -72,7 +107,9 @@ class Database:
         self._init_tables()
         self._init_referral_tables()
 
-    # ---------- ИНИЦИАЛИЗАЦИЯ ----------
+    # ================================================================
+    # ОСНОВНАЯ БД (messages.db)
+    # ================================================================
     def _init_tables(self):
         cursor = self.conn.cursor()
 
@@ -101,7 +138,6 @@ class Database:
                 text TEXT,
                 files TEXT,
                 is_temporary BOOLEAN DEFAULT 0,
-                is_deleted BOOLEAN DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (bc_id, msg_id)
             )
@@ -133,35 +169,50 @@ class Database:
             )
         """)
 
-        # Миграции
+        # Миграции user_settings
+        cursor.execute("PRAGMA table_info(user_settings)")
+        cols = [row["name"] for row in cursor.fetchall()]
+        if "scam_check" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN scam_check BOOLEAN DEFAULT 0")
+        if "text_mode" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN text_mode TEXT DEFAULT 'off'")
+        if "translate_to" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN translate_to TEXT DEFAULT 'off'")
+        if "online_mode" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
+
+        # Миграция messages
         cursor.execute("PRAGMA table_info(messages)")
         msg_cols = [row["name"] for row in cursor.fetchall()]
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
-        if "is_deleted" not in msg_cols:
-            cursor.execute("ALTER TABLE messages ADD COLUMN is_deleted BOOLEAN DEFAULT 0")
 
-        cursor.execute("PRAGMA table_info(user_settings)")
-        set_cols = [row["name"] for row in cursor.fetchall()]
-        if "scam_check" not in set_cols:
-            cursor.execute("ALTER TABLE user_settings ADD COLUMN scam_check BOOLEAN DEFAULT 0")
-        if "text_mode" not in set_cols:
-            cursor.execute("ALTER TABLE user_settings ADD COLUMN text_mode TEXT DEFAULT 'off'")
-        if "translate_to" not in set_cols:
-            cursor.execute("ALTER TABLE user_settings ADD COLUMN translate_to TEXT DEFAULT 'off'")
-        if "online_mode" not in set_cols:
-            cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
+        # Legacy-колонки в users (оставлены для совместимости, не используются)
+        cursor.execute("PRAGMA table_info(users)")
+        user_cols = [row["name"] for row in cursor.fetchall()]
+        if "referrer_id" not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER DEFAULT NULL")
+        if "referral_credited" not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN referral_credited INTEGER DEFAULT 0")
+        if "pending_stars" not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN pending_stars REAL DEFAULT 0")
+        if "awarded_stars" not in user_cols:
+            cursor.execute("ALTER TABLE users ADD COLUMN awarded_stars REAL DEFAULT 0")
 
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_bc_id ON connections(bc_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_connections_user_id ON connections(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_bc_id_msg_id ON messages(bc_id, msg_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
-        cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_chat ON messages(user_id, chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
         self.conn.commit()
 
+    # ================================================================
+    # РЕФЕРАЛЬНАЯ БД (referrals.db)
+    # ================================================================
     def _init_referral_tables(self):
         cur = self.ref_conn.cursor()
+
         cur.execute("""
             CREATE TABLE IF NOT EXISTS referral_relations (
                 user_id INTEGER PRIMARY KEY,
@@ -186,6 +237,7 @@ class Database:
                 UNIQUE(invited_id)
             )
         """)
+        # ---- Статистика пользователя ----
         cur.execute("""
             CREATE TABLE IF NOT EXISTS user_stats (
                 user_id INTEGER PRIMARY KEY,
@@ -193,11 +245,91 @@ class Database:
                 edited_count INTEGER DEFAULT 0
             )
         """)
+
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_referrer ON referral_events(referrer_id)")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
         self.ref_conn.commit()
 
-    # ---------- ПОЛЬЗОВАТЕЛИ ----------
+        # Одноразовая миграция из старой схемы users
+        try:
+            cur.execute("SELECT COUNT(*) AS c FROM referral_relations")
+            rel_count = cur.fetchone()["c"]
+            cur.execute("SELECT COUNT(*) AS c FROM referral_balances")
+            bal_count = cur.fetchone()["c"]
+            if rel_count == 0 and bal_count == 0:
+                main_cur = self.conn.cursor()
+                main_cur.execute("""
+                    SELECT user_id, referrer_id, referral_credited,
+                           COALESCE(pending_stars,0) AS ps, COALESCE(awarded_stars,0) AS as_
+                    FROM users
+                    WHERE referrer_id IS NOT NULL
+                       OR COALESCE(pending_stars,0) > 0
+                       OR COALESCE(awarded_stars,0) > 0
+                """)
+                migrated_rel = 0
+                migrated_bal = 0
+                for row in main_cur.fetchall():
+                    uid = row["user_id"]
+                    if row["referrer_id"] is not None:
+                        cur.execute(
+                            "INSERT OR IGNORE INTO referral_relations (user_id, referrer_id, credited) VALUES (?, ?, ?)",
+                            (uid, row["referrer_id"], row["referral_credited"] or 0)
+                        )
+                        migrated_rel += 1
+                    if row["ps"] > 0 or row["as_"] > 0:
+                        cur.execute(
+                            "INSERT OR IGNORE INTO referral_balances (user_id, pending_stars, awarded_stars) VALUES (?, ?, ?)",
+                            (uid, row["ps"], row["as_"])
+                        )
+                        migrated_bal += 1
+                if migrated_rel or migrated_bal:
+                    logger.info(f"[DB] Миграция рефералов: связей {migrated_rel}, балансов {migrated_bal}")
+                self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] Ошибка миграции рефералов: {e}")
+
+    # ============ БЭКАПЫ ============
+    def auto_backup(self) -> str:
+        try:
+            if not os.path.exists(REFERRAL_DB_PATH):
+                return ""
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            backup_path = os.path.join(BACKUP_DIR, f"referrals_{ts}.db")
+
+            src = sqlite3.connect(REFERRAL_DB_PATH)
+            dst = sqlite3.connect(backup_path)
+            with dst:
+                src.backup(dst)
+            src.close()
+            dst.close()
+
+            backups = sorted(
+                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")]
+            )
+            while len(backups) > BACKUP_KEEP:
+                old = backups.pop(0)
+                try:
+                    os.remove(os.path.join(BACKUP_DIR, old))
+                except Exception:
+                    pass
+
+            logger.info(f"[BACKUP] Создан бэкап: {backup_path}")
+            return backup_path
+        except Exception as e:
+            logger.error(f"[BACKUP] Ошибка: {e}")
+            return ""
+
+    def list_backups(self) -> list:
+        try:
+            return sorted(
+                [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")],
+                reverse=True
+            )
+        except Exception:
+            return []
+
+    # ============ ПОЛЬЗОВАТЕЛИ ============
     def register_user(self, user_id, username, first_name, last_name=""):
         cursor = self.conn.cursor()
         cursor.execute("""
@@ -226,7 +358,7 @@ class Database:
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
-    # ---------- СТАТИСТИКА ----------
+    # ============ СТАТИСТИКА ПОЛЬЗОВАТЕЛЯ ============
     def increment_stat(self, user_id: int, field: str):
         if field not in ("deleted_count", "edited_count"):
             return
@@ -252,17 +384,16 @@ class Database:
             if row is None:
                 return {"deleted": 0, "edited": 0}
             return {"deleted": int(row["d"] or 0), "edited": int(row["e"] or 0)}
-        except Exception:
+        except Exception as e:
+            logger.error(f"[DB] get_user_stats: {e}")
             return {"deleted": 0, "edited": 0}
 
     def get_user_messages_saved(self, user_id: int) -> int:
         try:
             cur = self.conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND COALESCE(is_deleted, 0) = 0",
-                (user_id,)
-            )
-            return int(cur.fetchone()["c"] or 0)
+            cur.execute("SELECT COUNT(*) AS c FROM messages WHERE user_id = ?", (user_id,))
+            row = cur.fetchone()
+            return int(row["c"] or 0)
         except Exception:
             return 0
 
@@ -270,11 +401,12 @@ class Database:
         try:
             cur = self.conn.cursor()
             cur.execute("SELECT COUNT(*) AS c FROM connections WHERE user_id = ?", (user_id,))
-            return int(cur.fetchone()["c"] or 0)
+            row = cur.fetchone()
+            return int(row["c"] or 0)
         except Exception:
             return 0
 
-    # ---------- РЕФЕРАЛЫ ----------
+    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -289,7 +421,8 @@ class Database:
             )
             self.ref_conn.commit()
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"[DB] set_referrer_if_empty: {e}")
             return False
 
     def get_referrer(self, user_id: int):
@@ -317,8 +450,47 @@ class Database:
             cur = self.ref_conn.cursor()
             cur.execute("UPDATE referral_relations SET credited = 1 WHERE user_id = ?", (user_id,))
             self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] mark_referral_credited: {e}")
+
+    def count_referrals_today(self, referrer_id: int) -> int:
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                SELECT COUNT(*) AS c FROM referral_events
+                WHERE referrer_id = ?
+                  AND created_at >= datetime('now', '-1 day')
+            """, (referrer_id,))
+            return int(cur.fetchone()["c"] or 0)
         except Exception:
-            pass
+            return 0
+
+    def seconds_since_last_referral(self, referrer_id: int) -> float:
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                SELECT created_at FROM referral_events
+                WHERE referrer_id = ?
+                ORDER BY created_at DESC LIMIT 1
+            """, (referrer_id,))
+            row = cur.fetchone()
+            if row is None:
+                return 1e9
+            cur.execute("SELECT (julianday('now') - julianday(?)) * 86400.0 AS s", (row["created_at"],))
+            return float(cur.fetchone()["s"] or 0)
+        except Exception:
+            return 1e9
+
+    def log_referral_event(self, referrer_id: int, invited_id: int):
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute(
+                "INSERT OR IGNORE INTO referral_events (referrer_id, invited_id) VALUES (?, ?)",
+                (referrer_id, invited_id)
+            )
+            self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] log_referral_event: {e}")
 
     def add_pending_stars(self, user_id: int, amount: float):
         try:
@@ -329,8 +501,8 @@ class Database:
                     pending_stars = COALESCE(referral_balances.pending_stars, 0) + ?
             """, (user_id, float(amount), float(amount)))
             self.ref_conn.commit()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"[DB] add_pending_stars: {e}")
 
     def get_user_stars(self, user_id: int) -> dict:
         try:
@@ -385,33 +557,55 @@ class Database:
                 LEFT JOIN referral_balances rb ON rb.user_id = t.user_id
             """)
             ref_rows = cur.fetchall()
+
             result = []
             main_cur = self.conn.cursor()
             for r in ref_rows:
                 uid = r["user_id"]
-                if (int(r["invited_total"] or 0) == 0 and
-                    float(r["pending_stars"] or 0) == 0 and
-                    float(r["awarded_stars"] or 0) == 0):
+                pending = float(r["pending_stars"] or 0)
+                awarded = float(r["awarded_stars"] or 0)
+                invited_total = int(r["invited_total"] or 0)
+                invited_credited = int(r["invited_credited"] or 0)
+
+                if invited_total == 0 and pending == 0 and awarded == 0:
                     continue
-                main_cur.execute("SELECT username, first_name, last_name FROM users WHERE user_id = ?", (uid,))
+
+                main_cur.execute(
+                    "SELECT username, first_name, last_name FROM users WHERE user_id = ?",
+                    (uid,)
+                )
                 u = main_cur.fetchone()
                 result.append({
                     "user_id": uid,
                     "username": u["username"] if u else None,
                     "first_name": u["first_name"] if u else None,
                     "last_name": u["last_name"] if u else None,
-                    "pending_stars": float(r["pending_stars"] or 0),
-                    "awarded_stars": float(r["awarded_stars"] or 0),
-                    "invited_total": int(r["invited_total"] or 0),
-                    "invited_credited": int(r["invited_credited"] or 0),
+                    "pending_stars": pending,
+                    "awarded_stars": awarded,
+                    "invited_total": invited_total,
+                    "invited_credited": invited_credited,
                 })
+
             result.sort(key=lambda x: (x["pending_stars"], x["invited_credited"]), reverse=True)
             return result
         except Exception as e:
             logger.error(f"[DB] get_all_referrers: {e}")
             return []
 
-    # ---------- НАСТРОЙКИ ----------
+    def mark_stars_awarded(self, user_id: int):
+        try:
+            cur = self.ref_conn.cursor()
+            cur.execute("""
+                UPDATE referral_balances
+                SET awarded_stars = COALESCE(awarded_stars, 0) + COALESCE(pending_stars, 0),
+                    pending_stars = 0
+                WHERE user_id = ?
+            """, (user_id,))
+            self.ref_conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] mark_stars_awarded: {e}")
+
+    # ============ НАСТРОЙКИ ============
     def get_scam_check(self, user_id: int) -> bool:
         cursor = self.conn.cursor()
         cursor.execute("SELECT scam_check FROM user_settings WHERE user_id = ?", (user_id,))
@@ -471,7 +665,7 @@ class Database:
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
 
-    # ---------- ПОДКЛЮЧЕНИЯ ----------
+    # ============ ПОДКЛЮЧЕНИЯ ============
     def set_connection(self, bc_id, user_id):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO connections (bc_id, user_id) VALUES (?, ?)", (bc_id, user_id))
@@ -503,75 +697,17 @@ class Database:
         """)
         return cursor.fetchall()
 
-    # ---------- СООБЩЕНИЯ ----------
+    # ============ СООБЩЕНИЯ ============
     def save_message(self, bc_id, msg_id, user_id, fullname, text, files_list=None,
                      is_temporary=False, chat_id=None):
         cursor = self.conn.cursor()
         files_json = json.dumps(files_list) if files_list else None
         cursor.execute("""
-            INSERT INTO messages
-            (bc_id, msg_id, user_id, chat_id, fullname, text, files, is_temporary, is_deleted)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
-            ON CONFLICT(bc_id, msg_id) DO UPDATE SET
-                user_id = excluded.user_id,
-                chat_id = excluded.chat_id,
-                fullname = excluded.fullname,
-                text = excluded.text,
-                files = excluded.files,
-                is_temporary = excluded.is_temporary
-        """, (bc_id, msg_id, user_id, chat_id, fullname, text, files_json, 1 if is_temporary else 0))
+            INSERT OR REPLACE INTO messages
+            (bc_id, msg_id, user_id, chat_id, fullname, text, files, is_temporary)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (bc_id, msg_id, user_id, chat_id, fullname, text, files_json, is_temporary))
         self.conn.commit()
-
-    def mark_message_deleted(self, bc_id, msg_id):
-        cursor = self.conn.cursor()
-        cursor.execute(
-            "UPDATE messages SET is_deleted = 1 WHERE bc_id = ? AND msg_id = ?",
-            (bc_id, msg_id)
-        )
-        self.conn.commit()
-
-    def get_message(self, bc_id, msg_id):
-        cursor = self.conn.cursor()
-        cursor.execute("SELECT * FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
-        return cursor.fetchone()
-
-    def count_all_messages(self, user_id: int, chat_id: int) -> int:
-        """Всего сообщений из чата (включая удалённые)."""
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ?",
-                (user_id, chat_id)
-            )
-            return int(cur.fetchone()["c"] or 0)
-        except Exception:
-            return 0
-
-    def count_active_messages(self, user_id: int, chat_id: int) -> int:
-        """Только не удалённые сообщения из чата."""
-        try:
-            cur = self.conn.cursor()
-            cur.execute(
-                "SELECT COUNT(*) AS c FROM messages WHERE user_id = ? AND chat_id = ? AND COALESCE(is_deleted, 0) = 0",
-                (user_id, chat_id)
-            )
-            return int(cur.fetchone()["c"] or 0)
-        except Exception:
-            return 0
-
-    def get_chat_messages(self, user_id: int, chat_id: int) -> list:
-        try:
-            cur = self.conn.cursor()
-            cur.execute("""
-                SELECT msg_id, fullname, text, files, is_temporary, is_deleted, created_at
-                FROM messages
-                WHERE user_id = ? AND chat_id = ?
-                ORDER BY msg_id ASC
-            """, (user_id, chat_id))
-            return cur.fetchall()
-        except Exception as e:
-            logger.error(f"[DB] get_chat_messages: {e}")
-            return []
 
     def update_message_text(self, bc_id, msg_id, new_text):
         cursor = self.conn.cursor()
@@ -583,6 +719,26 @@ class Database:
         cursor.execute("UPDATE messages SET fullname = ? WHERE bc_id = ? AND msg_id = ?", (new_fullname, bc_id, msg_id))
         self.conn.commit()
 
+    def get_message(self, bc_id, msg_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
+        return cursor.fetchone()
+
+    def delete_message(self, bc_id, msg_id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM messages WHERE bc_id = ? AND msg_id = ?", (bc_id, msg_id))
+        self.conn.commit()
+
+    def get_messages_by_user(self, user_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM messages WHERE user_id = ? ORDER BY created_at DESC", (user_id,))
+        return cursor.fetchall()
+
+    def get_messages_by_chat(self, bc_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM messages WHERE bc_id = ? ORDER BY created_at DESC", (bc_id,))
+        return cursor.fetchall()
+
     def get_last_chat_for_bc(self, bc_id):
         cursor = self.conn.cursor()
         cursor.execute(
@@ -592,7 +748,7 @@ class Database:
         row = cursor.fetchone()
         return row["chat_id"] if row else None
 
-    # ---------- MUTE ----------
+    # ============ MUTE ============
     def add_muted_chat(self, user_id: int, chat_id: int):
         cursor = self.conn.cursor()
         cursor.execute("INSERT OR IGNORE INTO muted_chats (user_id, chat_id) VALUES (?, ?)", (user_id, chat_id))
@@ -607,6 +763,86 @@ class Database:
         cursor = self.conn.cursor()
         cursor.execute("SELECT 1 FROM muted_chats WHERE user_id = ? AND chat_id = ?", (user_id, chat_id))
         return cursor.fetchone() is not None
+
+    def get_muted_chats(self, user_id: int):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT chat_id FROM muted_chats WHERE user_id = ?", (user_id,))
+        return [row["chat_id"] for row in cursor.fetchall()]
+
+    # ============ TTT ============
+    def save_ttt_game(self, chat_id, board, turn, player_x, player_o, game_id):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT OR REPLACE INTO ttt_games (chat_id, board, turn, player_x, player_o, game_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (chat_id, json.dumps(board), turn, player_x, player_o, game_id))
+        self.conn.commit()
+
+    def get_ttt_game(self, chat_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "chat_id": row["chat_id"],
+                "board": json.loads(row["board"]),
+                "turn": row["turn"],
+                "player_x": row["player_x"],
+                "player_o": row["player_o"],
+                "game_id": row["game_id"]
+            }
+        return None
+
+    def delete_ttt_game(self, chat_id):
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM ttt_games WHERE chat_id = ?", (chat_id,))
+        self.conn.commit()
+
+    def update_ttt_game(self, chat_id, board, turn):
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE ttt_games SET board = ?, turn = ? WHERE chat_id = ?", (json.dumps(board), turn, chat_id))
+        self.conn.commit()
+
+    def update_ttt_player_o(self, chat_id, player_o):
+        cursor = self.conn.cursor()
+        cursor.execute("UPDATE ttt_games SET player_o = ? WHERE chat_id = ?", (player_o, chat_id))
+        self.conn.commit()
+
+    def get_ttt_game_by_id(self, chat_id, game_id):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM ttt_games WHERE chat_id = ? AND game_id = ?", (chat_id, game_id))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "chat_id": row["chat_id"],
+                "board": json.loads(row["board"]),
+                "turn": row["turn"],
+                "player_x": row["player_x"],
+                "player_o": row["player_o"],
+                "game_id": row["game_id"]
+            }
+        return None
+
+    # ============ СТАТИСТИКА ОБЩАЯ ============
+    def get_users_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM users")
+        return cursor.fetchone()[0]
+
+    def get_messages_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM messages")
+        return cursor.fetchone()[0]
+
+    def get_connections_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM connections")
+        return cursor.fetchone()[0]
+
+    def get_muted_chats_count(self):
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM muted_chats")
+        return cursor.fetchone()[0]
 
     def close(self):
         try:
