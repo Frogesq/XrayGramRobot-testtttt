@@ -470,7 +470,7 @@
             box-shadow: 0 0 8px rgba(61, 220, 132, 0.6);
         }
 
-        /* --- Editor (приветствие / away) --- */
+        /* --- Editor (приветствие / away / AI) --- */
         .editor-toggle-row {
             display: flex;
             align-items: center;
@@ -1525,6 +1525,23 @@
                 <div class="section-label"><span>Основные</span></div>
                 <div class="card">${mainHtml}</div>
 
+                <div class="section-label"><span>AI Ассистент</span></div>
+                <div class="card editor">
+                    <div class="editor-toggle-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Автоответы через AI</div>
+                            <div class="setting-desc">Бот будет сам отвечать собеседникам</div>
+                        </div>
+                        <div class="toggle-switch ${s.ai_enabled ? 'on' : ''}" id="toggleAi"></div>
+                    </div>
+                    <textarea class="editor-textarea" id="aiPrompt" maxlength="2000"
+                        placeholder="Ты вежливый ассистент...">${escapeHtml(s.ai_prompt || '')}</textarea>
+                    <div class="editor-hint">
+                        Промт — инструкция для AI. Опиши, как он должен отвечать клиентам.
+                    </div>
+                    <button class="save-btn" id="saveAiPrompt">Сохранить промт</button>
+                </div>
+
                 <div class="section-label"><span>Приветствие</span></div>
                 <div class="card editor">
                     <div class="editor-toggle-row">
@@ -1563,6 +1580,35 @@
         }
 
         function bindSettingsActions() {
+            const tgAi = document.getElementById('toggleAi');
+            if (tgAi) tgAi.addEventListener('click', async () => {
+                const newState = !tgAi.classList.contains('on');
+                tgAi.classList.toggle('on');
+                try {
+                    await saveSettings('ai_enabled', newState, '');
+                    showToast(newState ? 'AI включён' : 'AI выключен', 'success');
+                } catch (e) {
+                    tgAi.classList.toggle('on');
+                    showToast('Ошибка: ' + e.message, 'error');
+                }
+            });
+
+            const saveAi = document.getElementById('saveAiPrompt');
+            if (saveAi) saveAi.addEventListener('click', async () => {
+                const text = (document.getElementById('aiPrompt').value || '').trim();
+                if (!text) {
+                    showToast('Введите промт', 'error');
+                    return;
+                }
+                try {
+                    await saveSettings('ai_prompt', false, text);
+                    flashButton(saveAi);
+                    showToast('Промт сохранён', 'success');
+                } catch (e) {
+                    showToast('Ошибка: ' + e.message, 'error');
+                }
+            });
+
             const tg1 = document.getElementById('toggleGreeting');
             if (tg1) tg1.addEventListener('click', () => tg1.classList.toggle('on'));
 
