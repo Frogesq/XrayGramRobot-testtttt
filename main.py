@@ -632,7 +632,7 @@ def subscription_keyboard():
 
 
 def instruction_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def admin_panel_keyboard():
@@ -641,7 +641,7 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt", style="primary")],
         [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections", style="primary")],
         [InlineKeyboardButton(text="⭐ Рефералы", callback_data="ref_admin", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -656,19 +656,19 @@ def cancel_settings_input_keyboard():
 
 
 def back_to_admin_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад в админ-панель", callback_data="back_to_admin", style="primary", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def commands_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def profile_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def referral_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def get_settings_text():
@@ -680,13 +680,13 @@ def get_settings_text():
 
 def settings_keyboard(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Проверка на СКАМ/СПАМ", callback_data="scam_check_menu", style="primary")],
-        [InlineKeyboardButton(text="Режим текста", callback_data="text_mode_menu", style="primary")],
-        [InlineKeyboardButton(text="Авто перевод", callback_data="translate_menu", style="primary")],
-        [InlineKeyboardButton(text="Онлайн мод", callback_data="online_mode_menu", style="primary")],
-        [InlineKeyboardButton(text="Приветствие", callback_data="greeting_menu", style="primary")],
-        [InlineKeyboardButton(text="Нет на месте", callback_data="away_menu", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text="Проверка на СКАМ/СПАМ", callback_data="scam_check_menu")],
+        [InlineKeyboardButton(text="Режим текста", callback_data="text_mode_menu")],
+        [InlineKeyboardButton(text="Авто перевод", callback_data="translate_menu")],
+        [InlineKeyboardButton(text="Онлайн мод", callback_data="online_mode_menu")],
+        [InlineKeyboardButton(text="Приветствие", callback_data="greeting_menu")],
+        [InlineKeyboardButton(text="Нет на месте", callback_data="away_menu")],
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -695,8 +695,8 @@ def scam_check_menu_keyboard(user_id: int):
     on = db.get_scam_check(user_id)
     status = "Включена" if on else "Выключена"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_scam_check", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_scam_check")],
+        [InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -717,8 +717,8 @@ def online_mode_menu_keyboard(user_id: int):
     on = db.get_online_mode(user_id)
     status = "Включён" if on else "Выключён"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_online_mode", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_online_mode")],
+        [InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -737,10 +737,10 @@ def greeting_menu_keyboard(user_id: int):
     on = db.get_greeting_enabled(user_id)
     status = "Включено" if on else "Выключено"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_greeting", style="primary")],
-        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_greeting_text", style="primary")],
-        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_greeting_text", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_greeting")],
+        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_greeting_text")],
+        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_greeting_text")],
+        [InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -764,10 +764,10 @@ def away_menu_keyboard(user_id: int):
     on = db.get_away_enabled(user_id)
     status = "Включён" if on else "Выключен"
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_away", style="primary")],
-        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_away_text", style="primary")],
-        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_away_text", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_away")],
+        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_away_text")],
+        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_away_text")],
+        [InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -798,8 +798,8 @@ def text_mode_keyboard(user_id: int):
     buttons = []
     for mode_id, mode_name in modes:
         marker = "✅ " if mode_id == current else ""
-        buttons.append([InlineKeyboardButton(text=f"{marker}{mode_name}", callback_data=f"set_text_mode_{mode_id}", style="primary")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
+        buttons.append([InlineKeyboardButton(text=f"{marker}{mode_name}", callback_data=f"set_text_mode_{mode_id}")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -808,8 +808,8 @@ def translate_keyboard(user_id: int):
     buttons = []
     for lang_code, lang_name in TRANSLATE_LANGS.items():
         marker = "✅ " if lang_code == current else ""
-        buttons.append([InlineKeyboardButton(text=f"{marker}{lang_name}", callback_data=f"set_translate_{lang_code}", style="primary")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
+        buttons.append([InlineKeyboardButton(text=f"{marker}{lang_name}", callback_data=f"set_translate_{lang_code}")])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
