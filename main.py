@@ -158,6 +158,7 @@ B XrayGramGPT 1.0 лучший подход полныпроблем модел�
 RANVIK_API_BASE = "https://api.ranvik.ru/v1"
 RANVIK_MODEL = "deepseek-v4-flash"
 
+
 class RanvikAPI:
     def __init__(self, api_key: str, model: str = RANVIK_MODEL):
         self.api_key = api_key
@@ -218,6 +219,7 @@ class RanvikAPI:
                 formatted += p.strip() + "\n\n"
         formatted += "─\nБот - @XrayGramRobot"
         return formatted
+
 
 ranvik_api = RanvikAPI(RANVIK_API_KEY)
 
@@ -507,16 +509,22 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}
 
+# ============ ТРОТТЛИНГ ДЛЯ "НЕТ НА МЕСТЕ" ============
+_away_throttle = {}          # (user_id, chat_id) -> timestamp последнего away
+AWAY_THROTTLE_SECONDS = 3600 # 1 час между away-сообщениями в один чат
+
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
     ".anim", ".ttt", ".gn", ".troll", ".stoptroll",
 )
+
 
 def premium(text: str) -> str:
     for emoji, emoji_id in PREMIUM_EMOJI.items():
         if emoji in text and emoji_id and str(emoji_id).isdigit():
             text = text.replace(emoji, f'<tg-emoji emoji-id="{emoji_id}">{emoji}</tg-emoji>')
     return text
+
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -541,10 +549,18 @@ if os.path.exists(os.path.join(MINI_APP_DIR, "index.html")):
 else:
     logger.warning("❌ Mini App index.html НЕ найден")
 
+
 class BroadcastStates(StatesGroup):
     waiting_for_content = State()
 
+
+class SettingsInputStates(StatesGroup):
+    waiting_greeting_text = State()
+    waiting_away_text = State()
+
+
 ttt_games = {}
+
 
 def ttt_board_to_text(board):
     res = ""
@@ -555,12 +571,14 @@ def ttt_board_to_text(board):
         res += "\n"
     return res.strip()
 
+
 def ttt_check_winner(board):
     win = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]]
     for combo in win:
         if board[combo[0]] == board[combo[1]] == board[combo[2]] and board[combo[0]] != " ":
             return board[combo[0]]
     return None if " " in board else "draw"
+
 
 def ttt_keyboard(board, game_id):
     kb = []
@@ -576,6 +594,7 @@ def ttt_keyboard(board, game_id):
     kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data=f"ttt_end_{game_id}", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
     msg = await message.answer("<i>⏳ Анимация...</i>", parse_mode="HTML")
     cur = ""
@@ -587,6 +606,7 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             pass
         await asyncio.sleep(delay)
     await asyncio.sleep(0.5)
+
 
 def main_menu_keyboard(is_admin: bool = False):
     kb = [
@@ -605,13 +625,16 @@ def main_menu_keyboard(is_admin: bool = False):
         kb.append([InlineKeyboardButton(text="Админ панель", callback_data="admin_panel", icon_custom_emoji_id="5257965174979042426")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
 
+
 def subscription_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📢 Подписаться на канал", url="https://t.me/NovoeTelegram")]
     ])
 
+
 def instruction_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
 
 def admin_panel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -622,20 +645,52 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
 
+
 def cancel_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_broadcast", style="danger")]])
+
+
+def cancel_settings_input_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_settings_input", style="danger")
+    ]])
+
 
 def back_to_admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]])
 
+
 def commands_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
 
 def profile_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
 
+
 def referral_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+
+
+def get_settings_text():
+    return premium(
+        "<b>⚙️ Настройки</b>\n\n"
+        "<b>Проверка на СКАМ/СПАМ</b>\n"
+        "Проверяет собеседников через Telegram и SpamProtection API.\n\n"
+        "<b>Режим текста</b>\n"
+        "Автоматически редактирует ваши сообщения по выбранному стилю.\n\n"
+        "<b>Авто перевод</b>\n"
+        "Переводит входящие сообщения на выбранный язык.\n\n"
+        "<b>Онлайн мод</b>\n"
+        "Ваш аккаунт постоянно в статусе «в сети».\n\n"
+        "<b>Приветствие</b>\n"
+        "Один раз отправится новому собеседнику при первом сообщении. "
+        "Поддерживает <code>{name}</code> — подставит имя собеседника.\n\n"
+        "<b>Нет на месте</b>\n"
+        "Автоматически отправится собеседнику, пока вы не в сети "
+        "(не чаще 1 раза в час на каждый чат)."
+    )
+
 
 def settings_keyboard(user_id: int):
     enabled = db.get_scam_check(user_id)
@@ -646,13 +701,24 @@ def settings_keyboard(user_id: int):
     translate_name = TRANSLATE_LANGS.get(translate, "Выкл")
     online = db.get_online_mode(user_id)
     online_status = "✅ Вкл" if online else "❌ Выкл"
+
+    greet_on = db.get_greeting_enabled(user_id)
+    greet_status = "✅ Вкл" if greet_on else "❌ Выкл"
+    away_on = db.get_away_enabled(user_id)
+    away_status = "✅ Вкл" if away_on else "❌ Выкл"
+
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
         [InlineKeyboardButton(text=f"Режим текста: {mode_name}", callback_data="text_mode_menu", style="primary")],
         [InlineKeyboardButton(text=f"Авто перевод: {translate_name}", callback_data="translate_menu", style="primary")],
         [InlineKeyboardButton(text=f"Онлайн мод: {online_status}", callback_data="toggle_online_mode", style="primary")],
+        [InlineKeyboardButton(text=f"Приветствие: {greet_status}", callback_data="toggle_greeting", style="primary")],
+        [InlineKeyboardButton(text="✏️ Текст приветствия", callback_data="edit_greeting_text", style="primary")],
+        [InlineKeyboardButton(text=f"Нет на месте: {away_status}", callback_data="toggle_away", style="primary")],
+        [InlineKeyboardButton(text="✏️ Текст «Нет на месте»", callback_data="edit_away_text", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
+
 
 def text_mode_keyboard(user_id: int):
     current = db.get_text_mode(user_id)
@@ -670,6 +736,7 @@ def text_mode_keyboard(user_id: int):
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 def translate_keyboard(user_id: int):
     current = db.get_translate_to(user_id)
     buttons = []
@@ -679,6 +746,7 @@ def translate_keyboard(user_id: int):
     buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 async def is_subscribed(user_id: int) -> bool:
     try:
         chat = await bot.get_chat(CHANNEL_USERNAME)
@@ -686,6 +754,7 @@ async def is_subscribed(user_id: int) -> bool:
         return member.status in ["member", "administrator", "creator"]
     except:
         return True
+
 
 _sub_cache = {}
 _sub_notified = {}
@@ -875,6 +944,10 @@ async def api_settings(request):
             "translate_to": translate,
             "translate_name": TRANSLATE_LANGS.get(translate, "Выкл"),
             "online_mode": bool(db.get_online_mode(user_id)),
+            "greeting_enabled": bool(db.get_greeting_enabled(user_id)),
+            "greeting_text": db.get_greeting_text(user_id),
+            "away_enabled": bool(db.get_away_enabled(user_id)),
+            "away_text": db.get_away_text(user_id),
         })
     except Exception as e:
         logger.error(f"[MINI_APP] Ошибка в api_settings: {e}")
@@ -1623,20 +1696,7 @@ async def referral_menu(callback: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data == "settings")
 async def show_settings(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    text = premium(
-        "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
-        "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
-        "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
-    )
-    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "toggle_scam_check")
@@ -1646,20 +1706,7 @@ async def toggle_scam_check(callback: types.CallbackQuery):
     db.set_scam_check(user_id, new_state)
     status = "включена" if new_state else "выключена"
     await callback.answer(f"Проверка на СКАМ/СПАМ {status}", show_alert=True)
-    text = premium(
-        "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
-        "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
-        "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
-    )
-    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
 
 @dp.callback_query(lambda c: c.data == "toggle_online_mode")
 async def toggle_online_mode(callback: types.CallbackQuery):
@@ -1668,20 +1715,169 @@ async def toggle_online_mode(callback: types.CallbackQuery):
     db.set_online_mode(user_id, new_state)
     status = "включён" if new_state else "выключен"
     await callback.answer(f"Онлайн мод {status}", show_alert=True)
-    text = premium(
-        "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Когда включено, бот проверяет каждого собеседника, который вам пишет:\n"
-        "• встроенные флаги Telegram (SCAM/FAKE)\n"
-        "• базу SpamProtection API\n\n"
-        "<b>Режим текста</b>\n"
-        "Бот автоматически редактирует ваши собственные сообщения, применяя выбранный стиль (жирный, курсив, скрытый, пикми, uwu и т.д.).\n\n"
-        "<b>Авто перевод</b>\n"
-        "Бот присылает вам в лс перевод входящих сообщений на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети»."
+    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+
+# ============ ПРИВЕТСТВИЕ И «НЕТ НА МЕСТЕ» ============
+DEFAULT_GREETING = "Здравствуйте! Спасибо за сообщение. Отвечу при первой возможности."
+DEFAULT_AWAY = "Я сейчас не в сети. Отвечу при первой возможности."
+
+
+@dp.callback_query(lambda c: c.data == "toggle_greeting")
+async def toggle_greeting(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_greeting_enabled(user_id)
+    db.set_greeting_enabled(user_id, new_state)
+    if new_state and not db.get_greeting_text(user_id):
+        db.set_greeting_text(user_id, DEFAULT_GREETING)
+    status = "включено" if new_state else "выключено"
+    await callback.answer(f"Приветствие {status}", show_alert=True)
+    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "toggle_away")
+async def toggle_away(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_away_enabled(user_id)
+    db.set_away_enabled(user_id, new_state)
+    if new_state and not db.get_away_text(user_id):
+        db.set_away_text(user_id, DEFAULT_AWAY)
+    status = "включён" if new_state else "выключен"
+    await callback.answer(f"Режим «Нет на месте» {status}", show_alert=True)
+    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "edit_greeting_text")
+async def edit_greeting_text(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    current = db.get_greeting_text(user_id) or "(текст не задан)"
+    await state.set_state(SettingsInputStates.waiting_greeting_text)
+    try:
+        await callback.message.edit_text(
+            premium(
+                "<b>✏️ Изменение текста приветствия</b>\n\n"
+                f"<b>Текущий текст:</b>\n{html.escape(current)}\n\n"
+                "<b>Отправьте новый текст.</b>\n\n"
+                "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
+                "<code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, "
+                "<code>&lt;tg-spoiler&gt;</code>, <code>&lt;code&gt;</code>.\n\n"
+                "Поддерживается <code>{name}</code> — подставит имя собеседника."
+            ),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    except Exception:
+        await bot.send_message(
+            user_id,
+            premium("<b>✏️ Отправьте новый текст приветствия.</b>\n\nПоддерживается <code>{name}</code>."),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "edit_away_text")
+async def edit_away_text(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    current = db.get_away_text(user_id) or "(текст не задан)"
+    await state.set_state(SettingsInputStates.waiting_away_text)
+    try:
+        await callback.message.edit_text(
+            premium(
+                "<b>✏️ Изменение текста «Нет на месте»</b>\n\n"
+                f"<b>Текущий текст:</b>\n{html.escape(current)}\n\n"
+                "<b>Отправьте новый текст.</b>\n\n"
+                "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
+                "<code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, "
+                "<code>&lt;tg-spoiler&gt;</code>, <code>&lt;code&gt;</code>.\n\n"
+                "Поддерживается <code>{name}</code> — подставит имя собеседника."
+            ),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    except Exception:
+        await bot.send_message(
+            user_id,
+            premium("<b>✏️ Отправьте новый текст «Нет на месте».</b>\n\nПоддерживается <code>{name}</code>."),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "cancel_settings_input")
+async def cancel_settings_input(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await bot.send_message(
+        user_id,
+        get_settings_text(),
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(user_id)
     )
-    await safe_edit_or_send(callback.message, text, settings_keyboard(user_id))
+    await callback.answer("Отменено")
+
+
+@dp.message(StateFilter(SettingsInputStates.waiting_greeting_text))
+async def process_greeting_text(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_text = (message.text or "").strip()
+    if not new_text:
+        await message.answer(premium("<b>❌ Отправьте текст сообщением.</b>"), parse_mode="HTML")
+        return
+    if len(new_text) > 1000:
+        await message.answer(premium("<b>❌ Слишком длинный текст (макс. 1000 символов).</b>"), parse_mode="HTML")
+        return
+    db.set_greeting_text(user_id, new_text)
+    if not db.get_greeting_enabled(user_id):
+        db.set_greeting_enabled(user_id, True)
+    await state.clear()
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await message.answer(
+        premium(
+            "<b>✅ Текст приветствия сохранён.</b>\n\n"
+            f"<b>Предпросмотр:</b>\n{new_text}\n\n"
+            "<i>Приветствие включено. Оно отправится один раз новому собеседнику.</i>"
+        ),
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(user_id)
+    )
+
+
+@dp.message(StateFilter(SettingsInputStates.waiting_away_text))
+async def process_away_text(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_text = (message.text or "").strip()
+    if not new_text:
+        await message.answer(premium("<b>❌ Отправьте текст сообщением.</b>"), parse_mode="HTML")
+        return
+    if len(new_text) > 1000:
+        await message.answer(premium("<b>❌ Слишком длинный текст (макс. 1000 символов).</b>"), parse_mode="HTML")
+        return
+    db.set_away_text(user_id, new_text)
+    if not db.get_away_enabled(user_id):
+        db.set_away_enabled(user_id, True)
+    await state.clear()
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await message.answer(
+        premium(
+            "<b>✅ Текст «Нет на месте» сохранён.</b>\n\n"
+            f"<b>Предпросмотр:</b>\n{new_text}\n\n"
+            "<i>Режим включён. Отправляется при входящих, не чаще раза в час.</i>"
+        ),
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(user_id)
+    )
+
 
 @dp.callback_query(lambda c: c.data == "text_mode_menu")
 async def text_mode_menu(callback: types.CallbackQuery):
@@ -2110,6 +2306,50 @@ async def handle_business_message(message: types.Message):
     chat_id = message.chat.id
     sender_id = message.from_user.id if message.from_user else None
     is_owner = (sender_id == user_id)
+
+    # ============ ПРИВЕТСТВИЕ И «НЕТ НА МЕСТЕ» ============
+    if not is_owner and sender_id and message.text and not message.text.startswith('.'):
+        # --- Приветствие (один раз на чат) ---
+        try:
+            if db.get_greeting_enabled(user_id) and not db.was_chat_greeted(user_id, chat_id):
+                greet_text = db.get_greeting_text(user_id)
+                if greet_text:
+                    if "{name}" in greet_text:
+                        peer_name = message.from_user.first_name or "друг"
+                        greet_text = greet_text.replace("{name}", html.escape(peer_name))
+                    await bot.send_message(
+                        chat_id,
+                        greet_text,
+                        business_connection_id=bc_id,
+                        parse_mode="HTML"
+                    )
+                    db.mark_chat_greeted(user_id, chat_id)
+                    logger.info(f"[GREETING] Отправлено в чат {chat_id}")
+        except Exception as e:
+            logger.error(f"[GREETING] Ошибка: {e}")
+
+        # --- «Нет на месте» (не чаще 1 раза в час на чат) ---
+        try:
+            if db.get_away_enabled(user_id):
+                now_ts = time.time()
+                key = (user_id, chat_id)
+                last_sent = _away_throttle.get(key, 0)
+                if now_ts - last_sent >= AWAY_THROTTLE_SECONDS:
+                    away_text = db.get_away_text(user_id)
+                    if away_text:
+                        if "{name}" in away_text:
+                            peer_name = message.from_user.first_name or "друг"
+                            away_text = away_text.replace("{name}", html.escape(peer_name))
+                        await bot.send_message(
+                            chat_id,
+                            away_text,
+                            business_connection_id=bc_id,
+                            parse_mode="HTML"
+                        )
+                        _away_throttle[key] = now_ts
+                        logger.info(f"[AWAY] Отправлено в чат {chat_id}")
+        except Exception as e:
+            logger.error(f"[AWAY] Ошибка: {e}")
 
     if not is_owner and sender_id and db.get_scam_check(user_id):
         try:
