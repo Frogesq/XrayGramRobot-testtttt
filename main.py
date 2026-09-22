@@ -509,9 +509,8 @@ TROLL_MESSAGES = [
 
 troll_tasks = {}
 
-# ============ ТРОТТЛИНГ ДЛЯ "НЕТ НА МЕСТЕ" ============
-_away_throttle = {}          # (user_id, chat_id) -> timestamp последнего away
-AWAY_THROTTLE_SECONDS = 3600 # 1 час между away-сообщениями в один чат
+_away_throttle = {}
+AWAY_THROTTLE_SECONDS = 3600
 
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
@@ -675,49 +674,116 @@ def referral_keyboard():
 def get_settings_text():
     return premium(
         "<b>⚙️ Настройки</b>\n\n"
-        "<b>Проверка на СКАМ/СПАМ</b>\n"
-        "Проверяет собеседников через Telegram и SpamProtection API.\n\n"
-        "<b>Режим текста</b>\n"
-        "Автоматически редактирует ваши сообщения по выбранному стилю.\n\n"
-        "<b>Авто перевод</b>\n"
-        "Переводит входящие сообщения на выбранный язык.\n\n"
-        "<b>Онлайн мод</b>\n"
-        "Ваш аккаунт постоянно в статусе «в сети».\n\n"
-        "<b>Приветствие</b>\n"
-        "Один раз отправится новому собеседнику при первом сообщении. "
-        "Поддерживает <code>{name}</code> — подставит имя собеседника.\n\n"
-        "<b>Нет на месте</b>\n"
-        "Автоматически отправится собеседнику, пока вы не в сети "
-        "(не чаще 1 раза в час на каждый чат)."
+        "Выберите пункт, чтобы настроить его отдельно."
     )
 
 
 def settings_keyboard(user_id: int):
-    enabled = db.get_scam_check(user_id)
-    status = "✅ Вкл" if enabled else "❌ Выкл"
-    mode = db.get_text_mode(user_id)
-    mode_name = MODE_NAMES.get(mode, "Выкл")
-    translate = db.get_translate_to(user_id)
-    translate_name = TRANSLATE_LANGS.get(translate, "Выкл")
-    online = db.get_online_mode(user_id)
-    online_status = "✅ Вкл" if online else "❌ Выкл"
-
-    greet_on = db.get_greeting_enabled(user_id)
-    greet_status = "✅ Вкл" if greet_on else "❌ Выкл"
-    away_on = db.get_away_enabled(user_id)
-    away_status = "✅ Вкл" if away_on else "❌ Выкл"
-
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=f"Проверка на СКАМ/СПАМ: {status}", callback_data="toggle_scam_check", style="primary")],
-        [InlineKeyboardButton(text=f"Режим текста: {mode_name}", callback_data="text_mode_menu", style="primary")],
-        [InlineKeyboardButton(text=f"Авто перевод: {translate_name}", callback_data="translate_menu", style="primary")],
-        [InlineKeyboardButton(text=f"Онлайн мод: {online_status}", callback_data="toggle_online_mode", style="primary")],
-        [InlineKeyboardButton(text=f"Приветствие: {greet_status}", callback_data="toggle_greeting", style="primary")],
-        [InlineKeyboardButton(text="✏️ Текст приветствия", callback_data="edit_greeting_text", style="primary")],
-        [InlineKeyboardButton(text=f"Нет на месте: {away_status}", callback_data="toggle_away", style="primary")],
-        [InlineKeyboardButton(text="✏️ Текст «Нет на месте»", callback_data="edit_away_text", style="primary")],
+        [InlineKeyboardButton(text="🛡 Проверка на СКАМ/СПАМ", callback_data="scam_check_menu", style="primary")],
+        [InlineKeyboardButton(text="✏️ Режим текста", callback_data="text_mode_menu", style="primary")],
+        [InlineKeyboardButton(text="🌐 Авто перевод", callback_data="translate_menu", style="primary")],
+        [InlineKeyboardButton(text="👤 Онлайн мод", callback_data="online_mode_menu", style="primary")],
+        [InlineKeyboardButton(text="💬 Приветствие", callback_data="greeting_menu", style="primary")],
+        [InlineKeyboardButton(text="💤 Нет на месте", callback_data="away_menu", style="primary")],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
     ])
+
+
+# ---- Подменю: Проверка на СКАМ/СПАМ ----
+def scam_check_menu_keyboard(user_id: int):
+    on = db.get_scam_check(user_id)
+    status = "✅ Включена" if on else "❌ Выключена"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_scam_check", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+    ])
+
+
+def get_scam_check_menu_text(user_id):
+    on = db.get_scam_check(user_id)
+    return premium(
+        "<b>🛡 Проверка на СКАМ/СПАМ</b>\n\n"
+        f"<b>Статус:</b> {'✅ Включена' if on else '❌ Выключена'}\n\n"
+        "Когда включено, бот проверяет каждого нового собеседника:\n"
+        "• по встроенным флагам Telegram (SCAM/FAKE)\n"
+        "• по базе SpamProtection API\n\n"
+        "Если собеседник помечен как скамер — вы получите уведомление."
+    )
+
+
+# ---- Подменю: Онлайн мод ----
+def online_mode_menu_keyboard(user_id: int):
+    on = db.get_online_mode(user_id)
+    status = "✅ Включён" if on else "❌ Выключён"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_online_mode", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+    ])
+
+
+def get_online_mode_menu_text(user_id):
+    on = db.get_online_mode(user_id)
+    return premium(
+        "<b>👤 Онлайн мод</b>\n\n"
+        f"<b>Статус:</b> {'✅ Включён' if on else '❌ Выключён'}\n\n"
+        "Когда включено, ваш аккаунт постоянно находится в статусе «в сети».\n\n"
+        "<i>Бот будет периодически отправлять «печатает...» в последний активный чат.</i>"
+    )
+
+
+# ---- Подменю: Приветствие ----
+def greeting_menu_keyboard(user_id: int):
+    on = db.get_greeting_enabled(user_id)
+    status = "✅ Включено" if on else "❌ Выключено"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_greeting", style="primary")],
+        [InlineKeyboardButton(text="✏️ Изменить текст", callback_data="edit_greeting_text", style="primary")],
+        [InlineKeyboardButton(text="🔄 Сбросить на стандартный", callback_data="reset_greeting_text", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+    ])
+
+
+def get_greeting_menu_text(user_id):
+    on = db.get_greeting_enabled(user_id)
+    text = db.get_greeting_text(user_id) or "(не задан)"
+    return premium(
+        "<b>💬 Приветствие</b>\n\n"
+        f"<b>Статус:</b> {'✅ Включено' if on else '❌ Выключено'}\n\n"
+        "Отправляется один раз новому собеседнику при его первом сообщении.\n\n"
+        f"<b>Текущий текст:</b>\n<blockquote>{html.escape(text)}</blockquote>\n\n"
+        "<b>Поддерживается:</b>\n"
+        "• <code>{name}</code> — подставит имя собеседника\n"
+        "• HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, <code>&lt;u&gt;</code>, "
+        "<code>&lt;s&gt;</code>, <code>&lt;tg-spoiler&gt;</code>, <code>&lt;code&gt;</code>"
+    )
+
+
+# ---- Подменю: Нет на месте ----
+def away_menu_keyboard(user_id: int):
+    on = db.get_away_enabled(user_id)
+    status = "✅ Включён" if on else "❌ Выключен"
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_away", style="primary")],
+        [InlineKeyboardButton(text="✏️ Изменить текст", callback_data="edit_away_text", style="primary")],
+        [InlineKeyboardButton(text="🔄 Сбросить на стандартный", callback_data="reset_away_text", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+    ])
+
+
+def get_away_menu_text(user_id):
+    on = db.get_away_enabled(user_id)
+    text = db.get_away_text(user_id) or "(не задан)"
+    return premium(
+        "<b>💤 Нет на месте</b>\n\n"
+        f"<b>Статус:</b> {'✅ Включён' if on else '❌ Выключен'}\n\n"
+        "Автоматически отправляется собеседникам, пока вы не в сети.\n"
+        "Не чаще <b>1 раза в час</b> на каждый чат.\n\n"
+        f"<b>Текущий текст:</b>\n<blockquote>{html.escape(text)}</blockquote>\n\n"
+        "<b>Поддерживается:</b>\n"
+        "• <code>{name}</code> — подставит имя собеседника\n"
+        "• HTML-разметка"
+    )
 
 
 def text_mode_keyboard(user_id: int):
@@ -954,12 +1020,61 @@ async def api_settings(request):
         return web.json_response({"error": str(e)}, status=500)
 
 
+async def api_settings_update(request):
+    """POST /api/settings/update — сохранение greeting/away из Mini App."""
+    init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
+
+    if not init_data:
+        return web.json_response({"error": "no_init_data"}, status=401)
+
+    user = _validate_init_data(init_data)
+    if not user:
+        return web.json_response({"error": "invalid_init_data"}, status=401)
+
+    user_id = int(user.get("id", 0))
+    if not user_id:
+        return web.json_response({"error": "no_user"}, status=400)
+
+    try:
+        data = await request.json()
+    except Exception:
+        return web.json_response({"error": "invalid_json"}, status=400)
+
+    field = data.get("field")
+    enabled = bool(data.get("enabled", False))
+    text = (data.get("text") or "").strip()
+
+    if len(text) > 1000:
+        return web.json_response({"error": "text_too_long"}, status=400)
+
+    try:
+        if field == "greeting":
+            if enabled and not text:
+                # если включаем и текста нет — ставим дефолт
+                text = "Здравствуйте! Спасибо за сообщение. Отвечу при первой возможности."
+            db.set_greeting_enabled(user_id, enabled)
+            db.set_greeting_text(user_id, text)
+        elif field == "away":
+            if enabled and not text:
+                text = "Я сейчас не в сети. Отвечу при первой возможности."
+            db.set_away_enabled(user_id, enabled)
+            db.set_away_text(user_id, text)
+        else:
+            return web.json_response({"error": "invalid_field"}, status=400)
+    except Exception as e:
+        logger.error(f"[MINI_APP] Ошибка сохранения: {e}")
+        return web.json_response({"error": str(e)}, status=500)
+
+    return web.json_response({"ok": True})
+
+
 async def mini_app_server():
     try:
         app = web.Application()
         app.router.add_get("/", serve_index)
         app.router.add_get("/api/stats", api_stats)
         app.router.add_get("/api/settings", api_settings)
+        app.router.add_post("/api/settings/update", api_settings_update)
         app.router.add_get("/{name}", serve_static)
 
         port = int(os.getenv("PORT", "3000"))
@@ -1699,6 +1814,15 @@ async def show_settings(callback: types.CallbackQuery):
     await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
     await callback.answer()
 
+
+# ===== Подменю: Проверка на СКАМ/СПАМ =====
+@dp.callback_query(lambda c: c.data == "scam_check_menu")
+async def scam_check_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_scam_check_menu_text(user_id), scam_check_menu_keyboard(user_id))
+    await callback.answer()
+
+
 @dp.callback_query(lambda c: c.data == "toggle_scam_check")
 async def toggle_scam_check(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -1706,7 +1830,16 @@ async def toggle_scam_check(callback: types.CallbackQuery):
     db.set_scam_check(user_id, new_state)
     status = "включена" if new_state else "выключена"
     await callback.answer(f"Проверка на СКАМ/СПАМ {status}", show_alert=True)
-    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, get_scam_check_menu_text(user_id), scam_check_menu_keyboard(user_id))
+
+
+# ===== Подменю: Онлайн мод =====
+@dp.callback_query(lambda c: c.data == "online_mode_menu")
+async def online_mode_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_online_mode_menu_text(user_id), online_mode_menu_keyboard(user_id))
+    await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "toggle_online_mode")
 async def toggle_online_mode(callback: types.CallbackQuery):
@@ -1715,11 +1848,19 @@ async def toggle_online_mode(callback: types.CallbackQuery):
     db.set_online_mode(user_id, new_state)
     status = "включён" if new_state else "выключен"
     await callback.answer(f"Онлайн мод {status}", show_alert=True)
-    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, get_online_mode_menu_text(user_id), online_mode_menu_keyboard(user_id))
 
-# ============ ПРИВЕТСТВИЕ И «НЕТ НА МЕСТЕ» ============
+
+# ===== Подменю: Приветствие =====
 DEFAULT_GREETING = "Здравствуйте! Спасибо за сообщение. Отвечу при первой возможности."
 DEFAULT_AWAY = "Я сейчас не в сети. Отвечу при первой возможности."
+
+
+@dp.callback_query(lambda c: c.data == "greeting_menu")
+async def greeting_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_greeting_menu_text(user_id), greeting_menu_keyboard(user_id))
+    await callback.answer()
 
 
 @dp.callback_query(lambda c: c.data == "toggle_greeting")
@@ -1731,19 +1872,15 @@ async def toggle_greeting(callback: types.CallbackQuery):
         db.set_greeting_text(user_id, DEFAULT_GREETING)
     status = "включено" if new_state else "выключено"
     await callback.answer(f"Приветствие {status}", show_alert=True)
-    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+    await safe_edit_or_send(callback.message, get_greeting_menu_text(user_id), greeting_menu_keyboard(user_id))
 
 
-@dp.callback_query(lambda c: c.data == "toggle_away")
-async def toggle_away(callback: types.CallbackQuery):
+@dp.callback_query(lambda c: c.data == "reset_greeting_text")
+async def reset_greeting_text(callback: types.CallbackQuery):
     user_id = callback.from_user.id
-    new_state = not db.get_away_enabled(user_id)
-    db.set_away_enabled(user_id, new_state)
-    if new_state and not db.get_away_text(user_id):
-        db.set_away_text(user_id, DEFAULT_AWAY)
-    status = "включён" if new_state else "выключен"
-    await callback.answer(f"Режим «Нет на месте» {status}", show_alert=True)
-    await safe_edit_or_send(callback.message, get_settings_text(), settings_keyboard(user_id))
+    db.set_greeting_text(user_id, DEFAULT_GREETING)
+    await callback.answer("Текст сброшен на стандартный", show_alert=True)
+    await safe_edit_or_send(callback.message, get_greeting_menu_text(user_id), greeting_menu_keyboard(user_id))
 
 
 @dp.callback_query(lambda c: c.data == "edit_greeting_text")
@@ -1755,7 +1892,7 @@ async def edit_greeting_text(callback: types.CallbackQuery, state: FSMContext):
         await callback.message.edit_text(
             premium(
                 "<b>✏️ Изменение текста приветствия</b>\n\n"
-                f"<b>Текущий текст:</b>\n{html.escape(current)}\n\n"
+                f"<b>Текущий текст:</b>\n<blockquote>{html.escape(current)}</blockquote>\n\n"
                 "<b>Отправьте новый текст.</b>\n\n"
                 "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
                 "<code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, "
@@ -1773,52 +1910,6 @@ async def edit_greeting_text(callback: types.CallbackQuery, state: FSMContext):
             reply_markup=cancel_settings_input_keyboard()
         )
     await callback.answer()
-
-
-@dp.callback_query(lambda c: c.data == "edit_away_text")
-async def edit_away_text(callback: types.CallbackQuery, state: FSMContext):
-    user_id = callback.from_user.id
-    current = db.get_away_text(user_id) or "(текст не задан)"
-    await state.set_state(SettingsInputStates.waiting_away_text)
-    try:
-        await callback.message.edit_text(
-            premium(
-                "<b>✏️ Изменение текста «Нет на месте»</b>\n\n"
-                f"<b>Текущий текст:</b>\n{html.escape(current)}\n\n"
-                "<b>Отправьте новый текст.</b>\n\n"
-                "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
-                "<code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, "
-                "<code>&lt;tg-spoiler&gt;</code>, <code>&lt;code&gt;</code>.\n\n"
-                "Поддерживается <code>{name}</code> — подставит имя собеседника."
-            ),
-            parse_mode="HTML",
-            reply_markup=cancel_settings_input_keyboard()
-        )
-    except Exception:
-        await bot.send_message(
-            user_id,
-            premium("<b>✏️ Отправьте новый текст «Нет на месте».</b>\n\nПоддерживается <code>{name}</code>."),
-            parse_mode="HTML",
-            reply_markup=cancel_settings_input_keyboard()
-        )
-    await callback.answer()
-
-
-@dp.callback_query(lambda c: c.data == "cancel_settings_input")
-async def cancel_settings_input(callback: types.CallbackQuery, state: FSMContext):
-    await state.clear()
-    user_id = callback.from_user.id
-    try:
-        await callback.message.delete()
-    except Exception:
-        pass
-    await bot.send_message(
-        user_id,
-        get_settings_text(),
-        parse_mode="HTML",
-        reply_markup=settings_keyboard(user_id)
-    )
-    await callback.answer("Отменено")
 
 
 @dp.message(StateFilter(SettingsInputStates.waiting_greeting_text))
@@ -1842,12 +1933,69 @@ async def process_greeting_text(message: types.Message, state: FSMContext):
     await message.answer(
         premium(
             "<b>✅ Текст приветствия сохранён.</b>\n\n"
-            f"<b>Предпросмотр:</b>\n{new_text}\n\n"
-            "<i>Приветствие включено. Оно отправится один раз новому собеседнику.</i>"
+            f"<b>Предпросмотр:</b>\n<blockquote>{new_text}</blockquote>\n\n"
+            "<i>Приветствие включено.</i>"
         ),
         parse_mode="HTML",
-        reply_markup=settings_keyboard(user_id)
+        reply_markup=greeting_menu_keyboard(user_id)
     )
+
+
+# ===== Подменю: Нет на месте =====
+@dp.callback_query(lambda c: c.data == "away_menu")
+async def away_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_away_menu_text(user_id), away_menu_keyboard(user_id))
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "toggle_away")
+async def toggle_away(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_away_enabled(user_id)
+    db.set_away_enabled(user_id, new_state)
+    if new_state and not db.get_away_text(user_id):
+        db.set_away_text(user_id, DEFAULT_AWAY)
+    status = "включён" if new_state else "выключен"
+    await callback.answer(f"Режим «Нет на месте» {status}", show_alert=True)
+    await safe_edit_or_send(callback.message, get_away_menu_text(user_id), away_menu_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "reset_away_text")
+async def reset_away_text(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    db.set_away_text(user_id, DEFAULT_AWAY)
+    await callback.answer("Текст сброшен на стандартный", show_alert=True)
+    await safe_edit_or_send(callback.message, get_away_menu_text(user_id), away_menu_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "edit_away_text")
+async def edit_away_text(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    current = db.get_away_text(user_id) or "(текст не задан)"
+    await state.set_state(SettingsInputStates.waiting_away_text)
+    try:
+        await callback.message.edit_text(
+            premium(
+                "<b>✏️ Изменение текста «Нет на месте»</b>\n\n"
+                f"<b>Текущий текст:</b>\n<blockquote>{html.escape(current)}</blockquote>\n\n"
+                "<b>Отправьте новый текст.</b>\n\n"
+                "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
+                "<code>&lt;u&gt;</code>, <code>&lt;s&gt;</code>, "
+                "<code>&lt;tg-spoiler&gt;</code>, <code>&lt;code&gt;</code>.\n\n"
+                "Поддерживается <code>{name}</code> — подставит имя собеседника."
+            ),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    except Exception:
+        await bot.send_message(
+            user_id,
+            premium("<b>✏️ Отправьте новый текст «Нет на месте».</b>\n\nПоддерживается <code>{name}</code>."),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    await callback.answer()
 
 
 @dp.message(StateFilter(SettingsInputStates.waiting_away_text))
@@ -1871,14 +2019,32 @@ async def process_away_text(message: types.Message, state: FSMContext):
     await message.answer(
         premium(
             "<b>✅ Текст «Нет на месте» сохранён.</b>\n\n"
-            f"<b>Предпросмотр:</b>\n{new_text}\n\n"
-            "<i>Режим включён. Отправляется при входящих, не чаще раза в час.</i>"
+            f"<b>Предпросмотр:</b>\n<blockquote>{new_text}</blockquote>\n\n"
+            "<i>Режим включён.</i>"
         ),
         parse_mode="HTML",
-        reply_markup=settings_keyboard(user_id)
+        reply_markup=away_menu_keyboard(user_id)
     )
 
 
+@dp.callback_query(lambda c: c.data == "cancel_settings_input")
+async def cancel_settings_input(callback: types.CallbackQuery, state: FSMContext):
+    await state.clear()
+    user_id = callback.from_user.id
+    try:
+        await callback.message.delete()
+    except Exception:
+        pass
+    await bot.send_message(
+        user_id,
+        get_settings_text(),
+        parse_mode="HTML",
+        reply_markup=settings_keyboard(user_id)
+    )
+    await callback.answer("Отменено")
+
+
+# ===== Режим текста =====
 @dp.callback_query(lambda c: c.data == "text_mode_menu")
 async def text_mode_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -2309,7 +2475,6 @@ async def handle_business_message(message: types.Message):
 
     # ============ ПРИВЕТСТВИЕ И «НЕТ НА МЕСТЕ» ============
     if not is_owner and sender_id and message.text and not message.text.startswith('.'):
-        # --- Приветствие (один раз на чат) ---
         try:
             if db.get_greeting_enabled(user_id) and not db.was_chat_greeted(user_id, chat_id):
                 greet_text = db.get_greeting_text(user_id)
@@ -2328,7 +2493,6 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[GREETING] Ошибка: {e}")
 
-        # --- «Нет на месте» (не чаще 1 раза в час на чат) ---
         try:
             if db.get_away_enabled(user_id):
                 now_ts = time.time()
