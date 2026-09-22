@@ -165,7 +165,19 @@ class Database:
                 scam_check BOOLEAN DEFAULT 0,
                 text_mode TEXT DEFAULT 'off',
                 translate_to TEXT DEFAULT 'off',
-                online_mode BOOLEAN DEFAULT 0
+                online_mode BOOLEAN DEFAULT 0,
+                greeting_enabled BOOLEAN DEFAULT 0,
+                greeting_text TEXT DEFAULT '',
+                away_enabled BOOLEAN DEFAULT 0,
+                away_text TEXT DEFAULT ''
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS greeted_chats (
+                user_id INTEGER,
+                chat_id INTEGER,
+                greeted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, chat_id)
             )
         """)
 
@@ -180,6 +192,14 @@ class Database:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN translate_to TEXT DEFAULT 'off'")
         if "online_mode" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN online_mode BOOLEAN DEFAULT 0")
+        if "greeting_enabled" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN greeting_enabled BOOLEAN DEFAULT 0")
+        if "greeting_text" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN greeting_text TEXT DEFAULT ''")
+        if "away_enabled" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN away_enabled BOOLEAN DEFAULT 0")
+        if "away_text" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN away_text TEXT DEFAULT ''")
 
         # Миграция messages
         cursor.execute("PRAGMA table_info(messages)")
@@ -205,14 +225,11 @@ class Database:
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_user_id ON messages(user_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_messages_chat_id ON messages(chat_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_muted_chats_user_id ON muted_chats(user_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_greeted_user_chat ON greeted_chats(user_id, chat_id)")
         self.conn.commit()
 
-    # ================================================================
-    # РЕФЕРАЛЬНАЯ БД (referrals.db)
-    # ================================================================
     def _init_referral_tables(self):
         cur = self.ref_conn.cursor()
-
         cur.execute("""
             CREATE TABLE IF NOT EXISTS referral_relations (
                 user_id INTEGER PRIMARY KEY,
@@ -237,7 +254,6 @@ class Database:
                 UNIQUE(invited_id)
             )
         """)
-        # ---- Статистика пользователя ----
         cur.execute("""
             CREATE TABLE IF NOT EXISTS user_stats (
                 user_id INTEGER PRIMARY KEY,
@@ -245,7 +261,6 @@ class Database:
                 edited_count INTEGER DEFAULT 0
             )
         """)
-
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_relations_referrer ON referral_relations(referrer_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_referrer ON referral_events(referrer_id)")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
@@ -296,14 +311,12 @@ class Database:
                 return ""
             ts = time.strftime("%Y%m%d_%H%M%S")
             backup_path = os.path.join(BACKUP_DIR, f"referrals_{ts}.db")
-
             src = sqlite3.connect(REFERRAL_DB_PATH)
             dst = sqlite3.connect(backup_path)
             with dst:
                 src.backup(dst)
             src.close()
             dst.close()
-
             backups = sorted(
                 [f for f in os.listdir(BACKUP_DIR) if f.startswith("referrals_") and f.endswith(".db")]
             )
@@ -313,7 +326,6 @@ class Database:
                     os.remove(os.path.join(BACKUP_DIR, old))
                 except Exception:
                     pass
-
             logger.info(f"[BACKUP] Создан бэкап: {backup_path}")
             return backup_path
         except Exception as e:
@@ -355,6 +367,7 @@ class Database:
         cursor.execute("DELETE FROM muted_chats WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM connections WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM user_settings WHERE user_id = ?", (user_id,))
+        cursor.execute("DELETE FROM greeted_chats WHERE user_id = ?", (user_id,))
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
@@ -557,7 +570,6 @@ class Database:
                 LEFT JOIN referral_balances rb ON rb.user_id = t.user_id
             """)
             ref_rows = cur.fetchall()
-
             result = []
             main_cur = self.conn.cursor()
             for r in ref_rows:
@@ -566,10 +578,8 @@ class Database:
                 awarded = float(r["awarded_stars"] or 0)
                 invited_total = int(r["invited_total"] or 0)
                 invited_credited = int(r["invited_credited"] or 0)
-
                 if invited_total == 0 and pending == 0 and awarded == 0:
                     continue
-
                 main_cur.execute(
                     "SELECT username, first_name, last_name FROM users WHERE user_id = ?",
                     (uid,)
@@ -585,7 +595,6 @@ class Database:
                     "invited_total": invited_total,
                     "invited_credited": invited_credited,
                 })
-
             result.sort(key=lambda x: (x["pending_stars"], x["invited_credited"]), reverse=True)
             return result
         except Exception as e:
@@ -664,6 +673,110 @@ class Database:
             ON CONFLICT(user_id) DO UPDATE SET online_mode = excluded.online_mode
         """, (user_id, 1 if enabled else 0))
         self.conn.commit()
+
+    # ---- Приветствие ----
+    def get_greeting_enabled(self, user_id: int) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT greeting_enabled FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return bool(row["greeting_enabled"]) if row and row["greeting_enabled"] is not None else False
+        except Exception:
+            return False
+
+    def set_greeting_enabled(self, user_id: int, enabled: bool):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, greeting_enabled) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET greeting_enabled = excluded.greeting_enabled
+        """, (user_id, 1 if enabled else 0))
+        self.conn.commit()
+
+    def get_greeting_text(self, user_id: int) -> str:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT greeting_text FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return (row["greeting_text"] if row and row["greeting_text"] else "") or ""
+        except Exception:
+            return ""
+
+    def set_greeting_text(self, user_id: int, text: str):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, greeting_text) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET greeting_text = excluded.greeting_text
+        """, (user_id, text))
+        self.conn.commit()
+
+    # ---- Нет на месте ----
+    def get_away_enabled(self, user_id: int) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT away_enabled FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return bool(row["away_enabled"]) if row and row["away_enabled"] is not None else False
+        except Exception:
+            return False
+
+    def set_away_enabled(self, user_id: int, enabled: bool):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, away_enabled) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET away_enabled = excluded.away_enabled
+        """, (user_id, 1 if enabled else 0))
+        self.conn.commit()
+
+    def get_away_text(self, user_id: int) -> str:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT away_text FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return (row["away_text"] if row and row["away_text"] else "") or ""
+        except Exception:
+            return ""
+
+    def set_away_text(self, user_id: int, text: str):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, away_text) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET away_text = excluded.away_text
+        """, (user_id, text))
+        self.conn.commit()
+
+    # ---- Отслеживание приветствий ----
+    def was_chat_greeted(self, user_id: int, chat_id: int) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(
+                "SELECT 1 FROM greeted_chats WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id)
+            )
+            return cursor.fetchone() is not None
+        except Exception:
+            return False
+
+    def mark_chat_greeted(self, user_id: int, chat_id: int):
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(
+                "INSERT OR IGNORE INTO greeted_chats (user_id, chat_id) VALUES (?, ?)",
+                (user_id, chat_id)
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] mark_chat_greeted: {e}")
+
+    def reset_chat_greeted(self, user_id: int, chat_id: int):
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute(
+                "DELETE FROM greeted_chats WHERE user_id = ? AND chat_id = ?",
+                (user_id, chat_id)
+            )
+            self.conn.commit()
+        except Exception as e:
+            logger.error(f"[DB] reset_chat_greeted: {e}")
 
     # ============ ПОДКЛЮЧЕНИЯ ============
     def set_connection(self, bc_id, user_id):
