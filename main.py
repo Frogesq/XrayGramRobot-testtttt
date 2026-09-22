@@ -56,32 +56,22 @@ BOT_USERNAME = "XrayGramRobot"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
-# ============ ЛУЧШИЕ РАБОТАЮЩИЕ БЕСПЛАТНЫЕ МОДЕЛИ (сентябрь 2026) ============
+# ============ ЛУЧШИЕ РАБОТАЮЩИЕ БЕСПЛАТНЫЕ МОДЕЛИ ============
 FREE_MODELS = {
-    # === ТОП-1 (рекомендуемые) ===
     "auto_free": "openrouter/free",
-    "nemotron_30b": "nvidia/nemotron-3-nano-30b-a3b:free",
     "step_35_flash": "stepfun/step-3.5-flash:free",
     "qwen3_32b": "qwen/qwen3-32b:free",
     "llama_70b": "meta-llama/llama-3.3-70b-instruct:free",
     "deepseek_r1": "deepseek/deepseek-r1-0528:free",
-
-    # === Средние ===
     "gemma_27b": "google/gemma-3-27b-it:free",
     "qwen3_coder": "qwen/qwen3-coder:free",
     "qwen3_next_80b": "qwen/qwen3-next-80b-a3b-instruct:free",
     "glm_45_air": "z-ai/glm-4.5-air:free",
-    "trinity_large": "arcee-ai/trinity-large-preview:free",
-    "trinity_mini": "arcee-ai/trinity-mini:free",
-    "gpt_oss_120b": "openai/gpt-oss-120b:free",
-    "gpt_oss_20b": "openai/gpt-oss-20b:free",
-    "nemotron_super": "nvidia/nemotron-3-super-120b-a12b:free",
     "minimax_m25": "minimax/minimax-m2.5:free",
     "hermes_3_405b": "nousresearch/hermes-3-llama-3.1-405b:free",
 }
 MODEL_NAMES = {
     "openrouter/free": "Авто (Free Router)",
-    "nvidia/nemotron-3-nano-30b-a3b:free": "Nemotron 30B",
     "stepfun/step-3.5-flash:free": "Step 3.5 Flash",
     "qwen/qwen3-32b:free": "Qwen3 32B",
     "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
@@ -90,17 +80,16 @@ MODEL_NAMES = {
     "qwen/qwen3-coder:free": "Qwen3 Coder",
     "qwen/qwen3-next-80b-a3b-instruct:free": "Qwen3 Next 80B",
     "z-ai/glm-4.5-air:free": "GLM 4.5 Air",
-    "arcee-ai/trinity-large-preview:free": "Trinity Large",
-    "arcee-ai/trinity-mini:free": "Trinity Mini",
-    "openai/gpt-oss-120b:free": "GPT-OSS 120B",
-    "openai/gpt-oss-20b:free": "GPT-OSS 20B",
-    "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron Super 120B",
     "minimax/minimax-m2.5:free": "MiniMax M2.5",
     "nousresearch/hermes-3-llama-3.1-405b:free": "Hermes 3 405B",
 }
 DEFAULT_AI_MODEL = "openrouter/free"
-DEFAULT_AI_PROMPT = "Ты вежливый и полезный ассистент. Отвечай кратко и по делу на русском языке. Не используй markdown, не пиши лишние пояснения."
-# ===========================================================================
+DEFAULT_AI_PROMPT = (
+    "Ты вежливый и полезный ассистент. Отвечай кратко и по делу на русском языке. "
+    "Не используй markdown, не пиши лишние пояснения. "
+    "Не добавляй в ответ служебные метки вроде 'User Safety: safe', 'Safety: safe' — отвечай обычным текстом."
+)
+# ===========================================================
 
 SYSTEM_PROMPT = """Ты только что был создан: "Кодером @CryptoViktor".
 
@@ -657,6 +646,46 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
     await asyncio.sleep(0.5)
 
 
+def _clean_ai_answer(text: str) -> str:
+    """Убирает служебные метки модерации, которые добавляют некоторые free-модели."""
+    if not text:
+        return text
+    cleaned = text.strip()
+
+    # Убираем строки вида "User Safety: safe", "Safety: safe", "[Safety: safe]" и т.п.
+    lines = cleaned.split('\n')
+    result_lines = []
+    for line in lines:
+        low = line.lower().strip()
+        # Отсекаем короткие технические метки
+        if ('safety' in low or 'moderation' in low or 'flagged' in low) and len(low) < 60:
+            continue
+        result_lines.append(line)
+    cleaned = '\n'.join(result_lines).strip()
+
+    # Дополнительно регексы для меток в конце
+    patterns = [
+        r'\n*\s*\[?\s*user\s+safety\s*:\s*\w+\s*\]?\s*$',
+        r'\n*\s*\[?\s*safety\s*:\s*\w+\s*\]?\s*$',
+        r'\n*\s*\[?\s*moderation\s*:\s*\w+\s*\]?\s*$',
+        r'\n*\s*\[?\s*content\s+safety\s*:\s*\w+\s*\]?\s*$',
+        r'\n*\s*\[?\s*flagged\s*:\s*\w+\s*\]?\s*$',
+    ]
+    for p in patterns:
+        cleaned = re.sub(p, '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
+
+    # На случай, если метка в начале
+    start_patterns = [
+        r'^\s*\[?\s*user\s+safety\s*:\s*\w+\s*\]?\s*\n*',
+        r'^\s*\[?\s*safety\s*:\s*\w+\s*\]?\s*\n*',
+        r'^\s*\[?\s*moderation\s*:\s*\w+\s*\]?\s*\n*',
+    ]
+    for p in start_patterns:
+        cleaned = re.sub(p, '', cleaned, flags=re.IGNORECASE)
+
+    return cleaned.strip()
+
+
 def _ai_request(model: str, prompt: str, user_message: str) -> tuple[bool, str]:
     """Один запрос к OpenRouter. Возвращает (успех, текст)."""
     if not OPENROUTER_API_KEY:
@@ -683,7 +712,9 @@ def _ai_request(model: str, prompt: str, user_message: str) -> tuple[bool, str]:
             if "choices" in data and data["choices"]:
                 answer = data["choices"][0]["message"]["content"]
                 if answer:
-                    return True, answer.strip()
+                    cleaned = _clean_ai_answer(answer)
+                    if cleaned:
+                        return True, cleaned
         else:
             logger.error(f"[AI] {model} HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
