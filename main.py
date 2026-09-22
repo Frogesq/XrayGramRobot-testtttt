@@ -632,7 +632,7 @@ def subscription_keyboard():
 
 
 def instruction_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def admin_panel_keyboard():
@@ -641,7 +641,7 @@ def admin_panel_keyboard():
         [InlineKeyboardButton(text="📄 Список пользователей (txt)", callback_data="users_txt", style="primary")],
         [InlineKeyboardButton(text="🔗 Активные подключения", callback_data="active_connections", style="primary")],
         [InlineKeyboardButton(text="⭐ Рефералы", callback_data="ref_admin", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -656,19 +656,19 @@ def cancel_settings_input_keyboard():
 
 
 def back_to_admin_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад в админ-панель", callback_data="back_to_admin", style="primary", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def commands_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def profile_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def referral_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]])
+    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
 
 
 def get_settings_text():
@@ -680,31 +680,31 @@ def get_settings_text():
 
 def settings_keyboard(user_id: int):
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛡 Проверка на СКАМ/СПАМ", callback_data="scam_check_menu", style="primary")],
-        [InlineKeyboardButton(text="✏️ Режим текста", callback_data="text_mode_menu", style="primary")],
-        [InlineKeyboardButton(text="🌐 Авто перевод", callback_data="translate_menu", style="primary")],
-        [InlineKeyboardButton(text="👤 Онлайн мод", callback_data="online_mode_menu", style="primary")],
-        [InlineKeyboardButton(text="💬 Приветствие", callback_data="greeting_menu", style="primary")],
-        [InlineKeyboardButton(text="💤 Нет на месте", callback_data="away_menu", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger")]
+        [InlineKeyboardButton(text="Проверка на СКАМ/СПАМ", callback_data="scam_check_menu", style="primary")],
+        [InlineKeyboardButton(text="Режим текста", callback_data="text_mode_menu", style="primary")],
+        [InlineKeyboardButton(text="Авто перевод", callback_data="translate_menu", style="primary")],
+        [InlineKeyboardButton(text="Онлайн мод", callback_data="online_mode_menu", style="primary")],
+        [InlineKeyboardButton(text="Приветствие", callback_data="greeting_menu", style="primary")],
+        [InlineKeyboardButton(text="Нет на месте", callback_data="away_menu", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
 # ---- Подменю: Проверка на СКАМ/СПАМ ----
 def scam_check_menu_keyboard(user_id: int):
     on = db.get_scam_check(user_id)
-    status = "✅ Включена" if on else "❌ Выключена"
+    status = "Включена" if on else "Выключена"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_scam_check", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
 def get_scam_check_menu_text(user_id):
     on = db.get_scam_check(user_id)
     return premium(
-        "<b>🛡 Проверка на СКАМ/СПАМ</b>\n\n"
-        f"<b>Статус:</b> {'✅ Включена' if on else '❌ Выключена'}\n\n"
+        "<b>Проверка на СКАМ/СПАМ</b>\n\n"
+        f"<b>Статус:</b> {'Включена' if on else 'Выключена'}\n\n"
         "Когда включено, бот проверяет каждого нового собеседника:\n"
         "• по встроенным флагам Telegram (SCAM/FAKE)\n"
         "• по базе SpamProtection API\n\n"
@@ -715,18 +715,18 @@ def get_scam_check_menu_text(user_id):
 # ---- Подменю: Онлайн мод ----
 def online_mode_menu_keyboard(user_id: int):
     on = db.get_online_mode(user_id)
-    status = "✅ Включён" if on else "❌ Выключён"
+    status = "Включён" if on else "Выключён"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_online_mode", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
 def get_online_mode_menu_text(user_id):
     on = db.get_online_mode(user_id)
     return premium(
-        "<b>👤 Онлайн мод</b>\n\n"
-        f"<b>Статус:</b> {'✅ Включён' if on else '❌ Выключён'}\n\n"
+        "<b>Онлайн мод</b>\n\n"
+        f"<b>Статус:</b> {'Включён' if on else 'Выключён'}\n\n"
         "Когда включено, ваш аккаунт постоянно находится в статусе «в сети».\n\n"
         "<i>Бот будет периодически отправлять «печатает...» в последний активный чат.</i>"
     )
@@ -735,12 +735,12 @@ def get_online_mode_menu_text(user_id):
 # ---- Подменю: Приветствие ----
 def greeting_menu_keyboard(user_id: int):
     on = db.get_greeting_enabled(user_id)
-    status = "✅ Включено" if on else "❌ Выключено"
+    status = "Включено" if on else "Выключено"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_greeting", style="primary")],
-        [InlineKeyboardButton(text="✏️ Изменить текст", callback_data="edit_greeting_text", style="primary")],
-        [InlineKeyboardButton(text="🔄 Сбросить на стандартный", callback_data="reset_greeting_text", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_greeting_text", style="primary")],
+        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_greeting_text", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -748,8 +748,8 @@ def get_greeting_menu_text(user_id):
     on = db.get_greeting_enabled(user_id)
     text = db.get_greeting_text(user_id) or "(не задан)"
     return premium(
-        "<b>💬 Приветствие</b>\n\n"
-        f"<b>Статус:</b> {'✅ Включено' if on else '❌ Выключено'}\n\n"
+        "<b>Приветствие</b>\n\n"
+        f"<b>Статус:</b> {'Включено' if on else 'Выключено'}\n\n"
         "Отправляется один раз новому собеседнику при его первом сообщении.\n\n"
         f"<b>Текущий текст:</b>\n<blockquote>{html.escape(text)}</blockquote>\n\n"
         "<b>Поддерживается:</b>\n"
@@ -762,12 +762,12 @@ def get_greeting_menu_text(user_id):
 # ---- Подменю: Нет на месте ----
 def away_menu_keyboard(user_id: int):
     on = db.get_away_enabled(user_id)
-    status = "✅ Включён" if on else "❌ Выключен"
+    status = "Включён" if on else "Выключен"
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_away", style="primary")],
-        [InlineKeyboardButton(text="✏️ Изменить текст", callback_data="edit_away_text", style="primary")],
-        [InlineKeyboardButton(text="🔄 Сбросить на стандартный", callback_data="reset_away_text", style="primary")],
-        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")]
+        [InlineKeyboardButton(text="Изменить текст", callback_data="edit_away_text", style="primary")],
+        [InlineKeyboardButton(text="Сбросить на стандартный", callback_data="reset_away_text", style="primary")],
+        [InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
 
@@ -775,8 +775,8 @@ def get_away_menu_text(user_id):
     on = db.get_away_enabled(user_id)
     text = db.get_away_text(user_id) or "(не задан)"
     return premium(
-        "<b>💤 Нет на месте</b>\n\n"
-        f"<b>Статус:</b> {'✅ Включён' if on else '❌ Выключен'}\n\n"
+        "<b>Нет на месте</b>\n\n"
+        f"<b>Статус:</b> {'Включён' if on else 'Выключен'}\n\n"
         "Автоматически отправляется собеседникам, пока вы не в сети.\n"
         "Не чаще <b>1 раза в час</b> на каждый чат.\n\n"
         f"<b>Текущий текст:</b>\n<blockquote>{html.escape(text)}</blockquote>\n\n"
@@ -799,7 +799,7 @@ def text_mode_keyboard(user_id: int):
     for mode_id, mode_name in modes:
         marker = "✅ " if mode_id == current else ""
         buttons.append([InlineKeyboardButton(text=f"{marker}{mode_name}", callback_data=f"set_text_mode_{mode_id}", style="primary")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -809,7 +809,7 @@ def translate_keyboard(user_id: int):
     for lang_code, lang_name in TRANSLATE_LANGS.items():
         marker = "✅ " if lang_code == current else ""
         buttons.append([InlineKeyboardButton(text=f"{marker}{lang_name}", callback_data=f"set_translate_{lang_code}", style="primary")])
-    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger")])
+    buttons.append([InlineKeyboardButton(text="⬅️ Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -1050,7 +1050,6 @@ async def api_settings_update(request):
     try:
         if field == "greeting":
             if enabled and not text:
-                # если включаем и текста нет — ставим дефолт
                 text = "Здравствуйте! Спасибо за сообщение. Отвечу при первой возможности."
             db.set_greeting_enabled(user_id, enabled)
             db.set_greeting_text(user_id, text)
@@ -1891,7 +1890,7 @@ async def edit_greeting_text(callback: types.CallbackQuery, state: FSMContext):
     try:
         await callback.message.edit_text(
             premium(
-                "<b>✏️ Изменение текста приветствия</b>\n\n"
+                "<b>Изменение текста приветствия</b>\n\n"
                 f"<b>Текущий текст:</b>\n<blockquote>{html.escape(current)}</blockquote>\n\n"
                 "<b>Отправьте новый текст.</b>\n\n"
                 "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
@@ -1905,7 +1904,7 @@ async def edit_greeting_text(callback: types.CallbackQuery, state: FSMContext):
     except Exception:
         await bot.send_message(
             user_id,
-            premium("<b>✏️ Отправьте новый текст приветствия.</b>\n\nПоддерживается <code>{name}</code>."),
+            premium("<b>Отправьте новый текст приветствия.</b>\n\nПоддерживается <code>{name}</code>."),
             parse_mode="HTML",
             reply_markup=cancel_settings_input_keyboard()
         )
@@ -1977,7 +1976,7 @@ async def edit_away_text(callback: types.CallbackQuery, state: FSMContext):
     try:
         await callback.message.edit_text(
             premium(
-                "<b>✏️ Изменение текста «Нет на месте»</b>\n\n"
+                "<b>Изменение текста «Нет на месте»</b>\n\n"
                 f"<b>Текущий текст:</b>\n<blockquote>{html.escape(current)}</blockquote>\n\n"
                 "<b>Отправьте новый текст.</b>\n\n"
                 "Можно использовать HTML: <code>&lt;b&gt;</code>, <code>&lt;i&gt;</code>, "
@@ -1991,7 +1990,7 @@ async def edit_away_text(callback: types.CallbackQuery, state: FSMContext):
     except Exception:
         await bot.send_message(
             user_id,
-            premium("<b>✏️ Отправьте новый текст «Нет на месте».</b>\n\nПоддерживается <code>{name}</code>."),
+            premium("<b>Отправьте новый текст «Нет на месте».</b>\n\nПоддерживается <code>{name}</code>."),
             parse_mode="HTML",
             reply_markup=cancel_settings_input_keyboard()
         )
@@ -2049,12 +2048,12 @@ async def cancel_settings_input(callback: types.CallbackQuery, state: FSMContext
 async def text_mode_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     text = premium(
-        "<b>✏️ Режим текста</b>\n\n"
+        "<b>Режим текста</b>\n\n"
         "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
         "<b>HTML-стили:</b>\n"
         "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
         "<b>Специальные стили:</b>\n"
-        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
+        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи\n"
         "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
         "• <b>Широкий</b> — пробелы между буквами\n"
         "• <b>КАПС</b> — всё капсом\n"
@@ -2074,12 +2073,12 @@ async def set_text_mode(callback: types.CallbackQuery):
     db.set_text_mode(user_id, mode)
     await callback.answer(f"Режим: {MODE_NAMES[mode]}", show_alert=True)
     text = premium(
-        "<b>✏️ Режим текста</b>\n\n"
+        "<b>Режим текста</b>\n\n"
         "Выберите стиль, который бот будет применять к вашим сообщениям в чатах.\n\n"
         "<b>HTML-стили:</b>\n"
         "• Жирный, Курсив, Подчёркнутый, Зачёркнутый, Скрытый, Жирный курсив, Моноширинный, Код, Цитата\n\n"
         "<b>Специальные стили:</b>\n"
-        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи ✨💖\n"
+        "• <b>Пикми</b> — милый стиль с уменьшительно-ласкательными словами и эмодзи\n"
         "• <b>UwU</b> — замены букв и смайлики owo uwu :3\n"
         "• <b>Широкий</b> — пробелы между буквами\n"
         "• <b>КАПС</b> — всё капсом\n"
@@ -2092,7 +2091,7 @@ async def set_text_mode(callback: types.CallbackQuery):
 async def translate_menu(callback: types.CallbackQuery):
     user_id = callback.from_user.id
     text = premium(
-        "<b>🌐 Авто перевод</b>\n\n"
+        "<b>Авто перевод</b>\n\n"
         "Выберите язык, на который бот будет переводить входящие сообщения от ваших собеседников."
     )
     await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
@@ -2108,7 +2107,7 @@ async def set_translate(callback: types.CallbackQuery):
     db.set_translate_to(user_id, lang)
     await callback.answer(f"Авто перевод: {TRANSLATE_LANGS[lang]}", show_alert=True)
     text = premium(
-        "<b>🌐 Авто перевод</b>\n\n"
+        "<b>Авто перевод</b>\n\n"
         "Выберите язык, на который бот будет переводить входящие сообщения от ваших собеседников."
     )
     await safe_edit_or_send(callback.message, text, translate_keyboard(user_id))
