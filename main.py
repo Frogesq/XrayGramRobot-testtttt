@@ -53,6 +53,26 @@ MINI_APP_URL = "https://xraygram.bothost.tech"
 CHANNEL_USERNAME = "@NovoeTelegram"
 BOT_USERNAME = "XrayGramRobot"
 
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+FREE_MODELS = {
+    "gemini_flash": "google/gemini-2.0-flash-exp:free",
+    "llama_70b": "meta-llama/llama-3.3-70b-instruct:free",
+    "deepseek": "deepseek/deepseek-chat:free",
+    "qwen_72b": "qwen/qwen-2.5-72b-instruct:free",
+    "mistral_small": "mistralai/mistral-small-24b-instruct-2501:free",
+}
+MODEL_NAMES = {
+    "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
+    "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
+    "deepseek/deepseek-chat:free": "DeepSeek Chat",
+    "qwen/qwen-2.5-72b-instruct:free": "Qwen 2.5 72B",
+    "mistralai/mistral-small-24b-instruct-2501:free": "Mistral Small",
+}
+DEFAULT_AI_MODEL = "google/gemini-2.0-flash-exp:free"
+DEFAULT_AI_PROMPT = "Ты вежливый и полезный ассистент. Отвечай кратко и по делу на русском языке. Не используй markdown, не пиши лишние пояснения."
+
 SYSTEM_PROMPT = """Ты только что был создан: "Кодером @CryptoViktor".
 
 Ты не DeepSeek, не ChatGPT. Ты "XrayGramGPT 1.0".
@@ -556,6 +576,7 @@ class BroadcastStates(StatesGroup):
 class SettingsInputStates(StatesGroup):
     waiting_greeting_text = State()
     waiting_away_text = State()
+    waiting_ai_prompt = State()
 
 
 ttt_games = {}
@@ -605,6 +626,46 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             pass
         await asyncio.sleep(delay)
     await asyncio.sleep(0.5)
+
+
+def get_ai_response_sync(user_id: int, user_message: str) -> str:
+    if not OPENROUTER_API_KEY:
+        logger.warning("[AI] OPENROUTER_API_KEY не задан")
+        return ""
+    prompt = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
+    model = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+    try:
+        headers = {
+            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": MINI_APP_URL,
+            "X-Title": "XrayGram",
+        }
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": prompt},
+                {"role": "user", "content": user_message},
+            ],
+            "max_tokens": 800,
+            "temperature": 0.7,
+        }
+        resp = requests.post(OPENROUTER_URL, headers=headers, json=payload, timeout=60)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "choices" in data and data["choices"]:
+                answer = data["choices"][0]["message"]["content"]
+                if answer:
+                    return answer.strip()
+        else:
+            logger.error(f"[AI] OpenRouter HTTP {resp.status_code}: {resp.text[:200]}")
+    except Exception as e:
+        logger.error(f"[AI] Ошибка запроса: {e}")
+    return ""
+
+
+async def get_ai_response(user_id: int, user_message: str) -> str:
+    return await asyncio.to_thread(get_ai_response_sync, user_id, user_message)
 
 
 def main_menu_keyboard(is_admin: bool = False):
@@ -686,6 +747,7 @@ def settings_keyboard(user_id: int):
         [InlineKeyboardButton(text="Онлайн мод", callback_data="online_mode_menu")],
         [InlineKeyboardButton(text="Приветствие", callback_data="greeting_menu")],
         [InlineKeyboardButton(text="Нет на месте", callback_data="away_menu")],
+        [InlineKeyboardButton(text="AI Ассистент", callback_data="ai_menu")],
         [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]
     ])
 
@@ -783,6 +845,61 @@ def get_away_menu_text(user_id):
         "<b>Поддерживается:</b>\n"
         "• <code>{name}</code> — подставит имя собеседника\n"
         "• HTML-разметка"
+    )
+
+
+# ---- Подменю: AI Ассистент ----
+def ai_menu_keyboard(user_id: int):
+    on = db.get_ai_enabled(user_id)
+    status = "Включён" if on else "Выключен"
+    model_id = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+    model_name = MODEL_NAMES.get(model_id, model_id)
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=f"Статус: {status}", callback_data="toggle_ai")],
+        [InlineKeyboardButton(text="Изменить промт", callback_data="edit_ai_prompt")],
+        [InlineKeyboardButton(text=f"Модель: {model_name}", callback_data="ai_model_menu")],
+        [InlineKeyboardButton(text="Назад", callback_data="settings", style="danger", icon_custom_emoji_id="5877536313623711363")]
+    ])
+
+
+def get_ai_menu_text(user_id):
+    on = db.get_ai_enabled(user_id)
+    prompt = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
+    model_id = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+    model_name = MODEL_NAMES.get(model_id, model_id)
+    return premium(
+        "<b>AI Ассистент</b>\n\n"
+        f"<b>Статус:</b> {'Включён' if on else 'Выключен'}\n"
+        f"<b>Модель:</b> {html.escape(model_name)}\n\n"
+        "Когда включено, бот автоматически отвечает на входящие сообщения "
+        "от ваших собеседников с помощью AI.\n\n"
+        f"<b>Текущий промт:</b>\n<blockquote>{html.escape(prompt)}</blockquote>"
+    )
+
+
+def ai_model_menu_keyboard(user_id: int):
+    current = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+    buttons = []
+    for key, model_id in FREE_MODELS.items():
+        marker = "✅ " if model_id == current else ""
+        name = MODEL_NAMES.get(model_id, model_id)
+        buttons.append([InlineKeyboardButton(
+            text=f"{marker}{name}",
+            callback_data=f"set_ai_model_{key}"
+        )])
+    buttons.append([InlineKeyboardButton(text="Назад", callback_data="ai_menu", style="danger", icon_custom_emoji_id="5877536313623711363")])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def get_ai_model_menu_text():
+    return premium(
+        "<b>Выбор AI-модели</b>\n\n"
+        "Все модели <b>бесплатные</b> через OpenRouter.\n\n"
+        "• <b>Gemini 2.0 Flash</b> — быстрая, умная, универсальная\n"
+        "• <b>Llama 3.3 70B</b> — мощная, хороша для сложных задач\n"
+        "• <b>DeepSeek Chat</b> — сильна в рассуждениях\n"
+        "• <b>Qwen 2.5 72B</b> — многоязычная\n"
+        "• <b>Mistral Small</b> — лёгкая и быстрая"
     )
 
 
@@ -1014,6 +1131,9 @@ async def api_settings(request):
             "greeting_text": db.get_greeting_text(user_id),
             "away_enabled": bool(db.get_away_enabled(user_id)),
             "away_text": db.get_away_text(user_id),
+            "ai_enabled": bool(db.get_ai_enabled(user_id)),
+            "ai_prompt": db.get_ai_prompt(user_id),
+            "ai_model": db.get_ai_model(user_id),
         })
     except Exception as e:
         logger.error(f"[MINI_APP] Ошибка в api_settings: {e}")
@@ -1021,7 +1141,6 @@ async def api_settings(request):
 
 
 async def api_settings_update(request):
-    """POST /api/settings/update — сохранение greeting/away из Mini App."""
     init_data = request.headers.get("X-Init-Data", "") or request.headers.get("x-init-data", "")
 
     if not init_data:
@@ -1044,7 +1163,7 @@ async def api_settings_update(request):
     enabled = bool(data.get("enabled", False))
     text = (data.get("text") or "").strip()
 
-    if len(text) > 1000:
+    if len(text) > 2000:
         return web.json_response({"error": "text_too_long"}, status=400)
 
     try:
@@ -1058,6 +1177,19 @@ async def api_settings_update(request):
                 text = "Я сейчас не в сети. Отвечу при первой возможности."
             db.set_away_enabled(user_id, enabled)
             db.set_away_text(user_id, text)
+        elif field == "ai_prompt":
+            db.set_ai_prompt(user_id, text)
+        elif field == "ai_enabled":
+            db.set_ai_enabled(user_id, enabled)
+            if enabled:
+                if not db.get_ai_prompt(user_id):
+                    db.set_ai_prompt(user_id, DEFAULT_AI_PROMPT)
+                if not db.get_ai_model(user_id):
+                    db.set_ai_model(user_id, DEFAULT_AI_MODEL)
+        elif field == "ai_model":
+            if text not in FREE_MODELS.values():
+                return web.json_response({"error": "invalid_model"}, status=400)
+            db.set_ai_model(user_id, text)
         else:
             return web.json_response({"error": "invalid_field"}, status=400)
     except Exception as e:
@@ -2026,6 +2158,105 @@ async def process_away_text(message: types.Message, state: FSMContext):
     )
 
 
+# ===== Подменю: AI Ассистент =====
+@dp.callback_query(lambda c: c.data == "ai_menu")
+async def ai_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_ai_menu_text(user_id), ai_menu_keyboard(user_id))
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data == "toggle_ai")
+async def toggle_ai(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    new_state = not db.get_ai_enabled(user_id)
+    db.set_ai_enabled(user_id, new_state)
+    if new_state:
+        if not db.get_ai_prompt(user_id):
+            db.set_ai_prompt(user_id, DEFAULT_AI_PROMPT)
+        if not db.get_ai_model(user_id):
+            db.set_ai_model(user_id, DEFAULT_AI_MODEL)
+    status = "включён" if new_state else "выключен"
+    await callback.answer(f"AI Ассистент {status}", show_alert=True)
+    await safe_edit_or_send(callback.message, get_ai_menu_text(user_id), ai_menu_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "ai_model_menu")
+async def ai_model_menu(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    await safe_edit_or_send(callback.message, get_ai_model_menu_text(), ai_model_menu_keyboard(user_id))
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data.startswith("set_ai_model_"))
+async def set_ai_model(callback: types.CallbackQuery):
+    user_id = callback.from_user.id
+    key = callback.data.replace("set_ai_model_", "")
+    model_id = FREE_MODELS.get(key)
+    if not model_id:
+        await callback.answer("❌ Неизвестная модель.", show_alert=True)
+        return
+    db.set_ai_model(user_id, model_id)
+    model_name = MODEL_NAMES.get(model_id, model_id)
+    await callback.answer(f"Модель: {model_name}", show_alert=True)
+    await safe_edit_or_send(callback.message, get_ai_menu_text(user_id), ai_menu_keyboard(user_id))
+
+
+@dp.callback_query(lambda c: c.data == "edit_ai_prompt")
+async def edit_ai_prompt(callback: types.CallbackQuery, state: FSMContext):
+    user_id = callback.from_user.id
+    current = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
+    await state.set_state(SettingsInputStates.waiting_ai_prompt)
+    try:
+        await callback.message.edit_text(
+            premium(
+                "<b>Изменение промта AI-ассистента</b>\n\n"
+                f"<b>Текущий промт:</b>\n<blockquote>{html.escape(current)}</blockquote>\n\n"
+                "<b>Отправьте новый текст.</b>\n\n"
+                "Промт — это инструкция для AI. Например:\n"
+                "<i>«Ты — вежливый менеджер магазина. Отвечай кратко. "
+                "Не обещай скидок. Если не знаешь — предложи связаться с менеджером.»</i>\n\n"
+                "Максимум 2000 символов."
+            ),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    except Exception:
+        await bot.send_message(
+            user_id,
+            premium("<b>Отправьте новый промт для AI.</b>"),
+            parse_mode="HTML",
+            reply_markup=cancel_settings_input_keyboard()
+        )
+    await callback.answer()
+
+
+@dp.message(StateFilter(SettingsInputStates.waiting_ai_prompt))
+async def process_ai_prompt(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    new_text = (message.text or "").strip()
+    if not new_text:
+        await message.answer(premium("<b>❌ Отправьте текст сообщением.</b>"), parse_mode="HTML")
+        return
+    if len(new_text) > 2000:
+        await message.answer(premium("<b>❌ Слишком длинный промт (макс. 2000 символов).</b>"), parse_mode="HTML")
+        return
+    db.set_ai_prompt(user_id, new_text)
+    await state.clear()
+    try:
+        await message.delete()
+    except Exception:
+        pass
+    await message.answer(
+        premium(
+            "<b>✅ Промт сохранён.</b>\n\n"
+            f"<b>Новый промт:</b>\n<blockquote>{html.escape(new_text)}</blockquote>"
+        ),
+        parse_mode="HTML",
+        reply_markup=ai_menu_keyboard(user_id)
+    )
+
+
 @dp.callback_query(lambda c: c.data == "cancel_settings_input")
 async def cancel_settings_input(callback: types.CallbackQuery, state: FSMContext):
     await state.clear()
@@ -2513,6 +2744,24 @@ async def handle_business_message(message: types.Message):
                         logger.info(f"[AWAY] Отправлено в чат {chat_id}")
         except Exception as e:
             logger.error(f"[AWAY] Ошибка: {e}")
+
+    # ============ AI АССИСТЕНТ ============
+    if not is_owner and sender_id and message.text and not message.text.startswith('.'):
+        if db.get_ai_enabled(user_id):
+            try:
+                ai_answer = await get_ai_response(user_id, message.text)
+                if ai_answer:
+                    await bot.send_message(
+                        chat_id,
+                        ai_answer,
+                        business_connection_id=bc_id,
+                        parse_mode="HTML"
+                    )
+                    logger.info(f"[AI] Ответ отправлен в чат {chat_id}")
+                else:
+                    logger.warning(f"[AI] Пустой ответ для {user_id}")
+            except Exception as e:
+                logger.error(f"[AI] Ошибка: {e}")
 
     if not is_owner and sender_id and db.get_scam_check(user_id):
         try:
