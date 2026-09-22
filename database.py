@@ -169,7 +169,10 @@ class Database:
                 greeting_enabled BOOLEAN DEFAULT 0,
                 greeting_text TEXT DEFAULT '',
                 away_enabled BOOLEAN DEFAULT 0,
-                away_text TEXT DEFAULT ''
+                away_text TEXT DEFAULT '',
+                ai_enabled BOOLEAN DEFAULT 0,
+                ai_prompt TEXT DEFAULT '',
+                ai_model TEXT DEFAULT ''
             )
         """)
         cursor.execute("""
@@ -200,6 +203,12 @@ class Database:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN away_enabled BOOLEAN DEFAULT 0")
         if "away_text" not in cols:
             cursor.execute("ALTER TABLE user_settings ADD COLUMN away_text TEXT DEFAULT ''")
+        if "ai_enabled" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN ai_enabled BOOLEAN DEFAULT 0")
+        if "ai_prompt" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN ai_prompt TEXT DEFAULT ''")
+        if "ai_model" not in cols:
+            cursor.execute("ALTER TABLE user_settings ADD COLUMN ai_model TEXT DEFAULT ''")
 
         # Миграция messages
         cursor.execute("PRAGMA table_info(messages)")
@@ -207,7 +216,7 @@ class Database:
         if "chat_id" not in msg_cols:
             cursor.execute("ALTER TABLE messages ADD COLUMN chat_id INTEGER")
 
-        # Legacy-колонки в users (оставлены для совместимости, не используются)
+        # Legacy-колонки в users
         cursor.execute("PRAGMA table_info(users)")
         user_cols = [row["name"] for row in cursor.fetchall()]
         if "referrer_id" not in user_cols:
@@ -266,7 +275,6 @@ class Database:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_referral_events_created ON referral_events(created_at)")
         self.ref_conn.commit()
 
-        # Одноразовая миграция из старой схемы users
         try:
             cur.execute("SELECT COUNT(*) AS c FROM referral_relations")
             rel_count = cur.fetchone()["c"]
@@ -371,7 +379,7 @@ class Database:
         cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
         self.conn.commit()
 
-    # ============ СТАТИСТИКА ПОЛЬЗОВАТЕЛЯ ============
+    # ============ СТАТИСТИКА ============
     def increment_stat(self, user_id: int, field: str):
         if field not in ("deleted_count", "edited_count"):
             return
@@ -419,7 +427,7 @@ class Database:
         except Exception:
             return 0
 
-    # ============ РЕФЕРАЛЬНАЯ СИСТЕМА ============
+    # ============ РЕФЕРАЛЫ ============
     def set_referrer_if_empty(self, user_id: int, referrer_id: int) -> bool:
         if user_id == referrer_id:
             return False
@@ -742,6 +750,58 @@ class Database:
             INSERT INTO user_settings (user_id, away_text) VALUES (?, ?)
             ON CONFLICT(user_id) DO UPDATE SET away_text = excluded.away_text
         """, (user_id, text))
+        self.conn.commit()
+
+    # ---- AI Ассистент ----
+    def get_ai_enabled(self, user_id: int) -> bool:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT ai_enabled FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return bool(row["ai_enabled"]) if row and row["ai_enabled"] is not None else False
+        except Exception:
+            return False
+
+    def set_ai_enabled(self, user_id: int, enabled: bool):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, ai_enabled) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET ai_enabled = excluded.ai_enabled
+        """, (user_id, 1 if enabled else 0))
+        self.conn.commit()
+
+    def get_ai_prompt(self, user_id: int) -> str:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT ai_prompt FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return (row["ai_prompt"] if row and row["ai_prompt"] else "") or ""
+        except Exception:
+            return ""
+
+    def set_ai_prompt(self, user_id: int, text: str):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, ai_prompt) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET ai_prompt = excluded.ai_prompt
+        """, (user_id, text))
+        self.conn.commit()
+
+    def get_ai_model(self, user_id: int) -> str:
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("SELECT ai_model FROM user_settings WHERE user_id = ?", (user_id,))
+            row = cursor.fetchone()
+            return (row["ai_model"] if row and row["ai_model"] else "") or ""
+        except Exception:
+            return ""
+
+    def set_ai_model(self, user_id: int, model: str):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_settings (user_id, ai_model) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET ai_model = excluded.ai_model
+        """, (user_id, model))
         self.conn.commit()
 
     # ---- Отслеживание приветствий ----
