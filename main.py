@@ -56,22 +56,51 @@ BOT_USERNAME = "XrayGramRobot"
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# ============ ЛУЧШИЕ РАБОТАЮЩИЕ БЕСПЛАТНЫЕ МОДЕЛИ (сентябрь 2026) ============
 FREE_MODELS = {
-    "gemini_flash": "google/gemini-2.0-flash-exp:free",
+    # === ТОП-1 (рекомендуемые) ===
+    "auto_free": "openrouter/free",
+    "nemotron_30b": "nvidia/nemotron-3-nano-30b-a3b:free",
+    "step_35_flash": "stepfun/step-3.5-flash:free",
+    "qwen3_32b": "qwen/qwen3-32b:free",
     "llama_70b": "meta-llama/llama-3.3-70b-instruct:free",
-    "deepseek": "deepseek/deepseek-chat:free",
-    "qwen_72b": "qwen/qwen-2.5-72b-instruct:free",
-    "mistral_small": "mistralai/mistral-small-24b-instruct-2501:free",
+    "deepseek_r1": "deepseek/deepseek-r1-0528:free",
+
+    # === Средние ===
+    "gemma_27b": "google/gemma-3-27b-it:free",
+    "qwen3_coder": "qwen/qwen3-coder:free",
+    "qwen3_next_80b": "qwen/qwen3-next-80b-a3b-instruct:free",
+    "glm_45_air": "z-ai/glm-4.5-air:free",
+    "trinity_large": "arcee-ai/trinity-large-preview:free",
+    "trinity_mini": "arcee-ai/trinity-mini:free",
+    "gpt_oss_120b": "openai/gpt-oss-120b:free",
+    "gpt_oss_20b": "openai/gpt-oss-20b:free",
+    "nemotron_super": "nvidia/nemotron-3-super-120b-a12b:free",
+    "minimax_m25": "minimax/minimax-m2.5:free",
+    "hermes_3_405b": "nousresearch/hermes-3-llama-3.1-405b:free",
 }
 MODEL_NAMES = {
-    "google/gemini-2.0-flash-exp:free": "Gemini 2.0 Flash",
+    "openrouter/free": "Авто (Free Router)",
+    "nvidia/nemotron-3-nano-30b-a3b:free": "Nemotron 30B",
+    "stepfun/step-3.5-flash:free": "Step 3.5 Flash",
+    "qwen/qwen3-32b:free": "Qwen3 32B",
     "meta-llama/llama-3.3-70b-instruct:free": "Llama 3.3 70B",
-    "deepseek/deepseek-chat:free": "DeepSeek Chat",
-    "qwen/qwen-2.5-72b-instruct:free": "Qwen 2.5 72B",
-    "mistralai/mistral-small-24b-instruct-2501:free": "Mistral Small",
+    "deepseek/deepseek-r1-0528:free": "DeepSeek R1",
+    "google/gemma-3-27b-it:free": "Gemma 3 27B",
+    "qwen/qwen3-coder:free": "Qwen3 Coder",
+    "qwen/qwen3-next-80b-a3b-instruct:free": "Qwen3 Next 80B",
+    "z-ai/glm-4.5-air:free": "GLM 4.5 Air",
+    "arcee-ai/trinity-large-preview:free": "Trinity Large",
+    "arcee-ai/trinity-mini:free": "Trinity Mini",
+    "openai/gpt-oss-120b:free": "GPT-OSS 120B",
+    "openai/gpt-oss-20b:free": "GPT-OSS 20B",
+    "nvidia/nemotron-3-super-120b-a12b:free": "Nemotron Super 120B",
+    "minimax/minimax-m2.5:free": "MiniMax M2.5",
+    "nousresearch/hermes-3-llama-3.1-405b:free": "Hermes 3 405B",
 }
-DEFAULT_AI_MODEL = "google/gemini-2.0-flash-exp:free"
+DEFAULT_AI_MODEL = "openrouter/free"
 DEFAULT_AI_PROMPT = "Ты вежливый и полезный ассистент. Отвечай кратко и по делу на русском языке. Не используй markdown, не пиши лишние пояснения."
+# ===========================================================================
 
 SYSTEM_PROMPT = """Ты только что был создан: "Кодером @CryptoViktor".
 
@@ -628,12 +657,10 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
     await asyncio.sleep(0.5)
 
 
-def get_ai_response_sync(user_id: int, user_message: str) -> str:
+def _ai_request(model: str, prompt: str, user_message: str) -> tuple[bool, str]:
+    """Один запрос к OpenRouter. Возвращает (успех, текст)."""
     if not OPENROUTER_API_KEY:
-        logger.warning("[AI] OPENROUTER_API_KEY не задан")
-        return ""
-    prompt = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
-    model = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+        return False, ""
     try:
         headers = {
             "Authorization": f"Bearer {OPENROUTER_API_KEY}",
@@ -656,11 +683,36 @@ def get_ai_response_sync(user_id: int, user_message: str) -> str:
             if "choices" in data and data["choices"]:
                 answer = data["choices"][0]["message"]["content"]
                 if answer:
-                    return answer.strip()
+                    return True, answer.strip()
         else:
-            logger.error(f"[AI] OpenRouter HTTP {resp.status_code}: {resp.text[:200]}")
+            logger.error(f"[AI] {model} HTTP {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
-        logger.error(f"[AI] Ошибка запроса: {e}")
+        logger.error(f"[AI] {model} ошибка запроса: {e}")
+    return False, ""
+
+
+def get_ai_response_sync(user_id: int, user_message: str) -> str:
+    if not OPENROUTER_API_KEY:
+        logger.warning("[AI] OPENROUTER_API_KEY не задан")
+        return ""
+    prompt = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
+    primary = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+
+    # Пробуем выбранную модель, затем — авто-роутер, затем перебор free-моделей
+    candidates = [primary]
+    if primary != "openrouter/free":
+        candidates.append("openrouter/free")
+    for mid in FREE_MODELS.values():
+        if mid not in candidates:
+            candidates.append(mid)
+
+    for model in candidates:
+        ok, text = _ai_request(model, prompt, user_message)
+        if ok:
+            if model != primary:
+                logger.info(f"[AI] Fallback сработал: {primary} → {model}")
+            return text
+    logger.error("[AI] Все модели недоступны")
     return ""
 
 
@@ -879,14 +931,22 @@ def get_ai_menu_text(user_id):
 
 def ai_model_menu_keyboard(user_id: int):
     current = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
+    keys = list(FREE_MODELS.keys())
     buttons = []
-    for key, model_id in FREE_MODELS.items():
-        marker = "✅ " if model_id == current else ""
-        name = MODEL_NAMES.get(model_id, model_id)
-        buttons.append([InlineKeyboardButton(
-            text=f"{marker}{name}",
-            callback_data=f"set_ai_model_{key}"
-        )])
+    for i in range(0, len(keys), 2):
+        row = []
+        for j in range(2):
+            if i + j >= len(keys):
+                break
+            key = keys[i + j]
+            model_id = FREE_MODELS[key]
+            marker = "✅ " if model_id == current else ""
+            name = MODEL_NAMES.get(model_id, model_id)
+            row.append(InlineKeyboardButton(
+                text=f"{marker}{name}",
+                callback_data=f"set_ai_model_{key}"
+            ))
+        buttons.append(row)
     buttons.append([InlineKeyboardButton(text="Назад", callback_data="ai_menu", style="danger", icon_custom_emoji_id="5877536313623711363")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
@@ -894,12 +954,11 @@ def ai_model_menu_keyboard(user_id: int):
 def get_ai_model_menu_text():
     return premium(
         "<b>Выбор AI-модели</b>\n\n"
-        "Все модели <b>бесплатные</b> через OpenRouter.\n\n"
-        "• <b>Gemini 2.0 Flash</b> — быстрая, умная, универсальная\n"
-        "• <b>Llama 3.3 70B</b> — мощная, хороша для сложных задач\n"
-        "• <b>DeepSeek Chat</b> — сильна в рассуждениях\n"
-        "• <b>Qwen 2.5 72B</b> — многоязычная\n"
-        "• <b>Mistral Small</b> — лёгкая и быстрая"
+        "<b>Авто (Free Router)</b> — рекомендую. OpenRouter сам выберет лучшую доступную "
+        "бесплатную модель и переключится при сбое.\n\n"
+        "Остальные — конкретные модели. Все <code>:free</code> — бесплатные, "
+        "но могут внезапно пропасть (404).\n\n"
+        "<i>Если конкретная модель не работает — переключись на «Авто».</i>"
     )
 
 
