@@ -552,7 +552,7 @@ AWAY_THROTTLE_SECONDS = 3600
 
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
-    ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".snos",
+    ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".id",
 )
 
 
@@ -644,61 +644,6 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             pass
         await asyncio.sleep(delay)
     await asyncio.sleep(0.5)
-
-
-async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None = None):
-    """Визуальная шуточная анимация 'сноса'. Никаких реальных действий с аккаунтами не выполняет."""
-    stages = [
-        ("🔎", "Поиск цели", 8),
-        ("📡", "Проверка подключений", 17),
-        ("⚡", "Запуск процесса", 31),
-        ("📨", "Задействование почтовых шлюзов", 54),
-        ("👤", "Подключение аккаунтов", 73),
-        ("💥", "Финальная обработка", 91),
-        ("✅", "Процесс завершён", 100),
-    ]
-    emails = random.randint(3, 18)
-    accounts = random.randint(2, 12)
-
-    try:
-        msg = await bot.send_message(
-            chat_id,
-            premium("<b>💥 ВИЗУАЛЬНЫЙ СНОС АККАУНТА</b>\n\n🔎 Запуск процесса..."),
-            parse_mode="HTML",
-            business_connection_id=bc_id
-        )
-    except Exception:
-        msg = await message.answer(
-            premium("<b>💥 ВИЗУАЛЬНЫЙ СНОС АККАУНТА</b>\n\n🔎 Запуск процесса..."),
-            parse_mode="HTML"
-        )
-
-    for icon, stage, progress in stages:
-        bar_len = 12
-        filled = round(bar_len * progress / 100)
-        bar = "█" * filled + "░" * (bar_len - filled)
-        text = (
-            "<b>💥 ВИЗУАЛЬНЫЙ СНОС АККАУНТА</b>\n\n"
-            f"{icon} {stage}\n"
-            f"<code>[{bar}] {progress}%</code>"
-        )
-        try:
-            await msg.edit_text(premium(text), parse_mode="HTML")
-        except Exception:
-            pass
-        await asyncio.sleep(0.55)
-
-    final_text = (
-        "<b>💥 ВИЗУАЛЬНЫЙ СНОС АККАУНТА ЗАВЕРШЁН</b>\n\n"
-        "📊 <b>Статистика процесса:</b>\n"
-        f"📨 Задействовано почт: <b>{emails}</b>\n"
-        f"👤 Задействовано аккаунтов: <b>{accounts}</b>\n\n"
-        "✅ Визуальный процесс завершён."
-    )
-    try:
-        await msg.edit_text(premium(final_text), parse_mode="HTML")
-    except Exception:
-        pass
 
 
 def _clean_ai_answer(text: str) -> str:
@@ -2000,7 +1945,8 @@ async def show_commands(callback: types.CallbackQuery):
         "🔄 .anim &lt;текст&gt; – анимация текста.\n"
         "❌⭕ .ttt – начать игру в крестики-нолики.\n"
         "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
-        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)</blockquote>\n\n"
+        "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
+        "🆔 .id – показать ваш Telegram ID.</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
@@ -2010,7 +1956,8 @@ async def show_commands(callback: types.CallbackQuery):
         ".ttt\n"
         ".gn Как дела?\n"
         ".troll\n"
-        ".stoptroll</blockquote>\n\n"
+        ".stoptroll\n"
+        ".id</blockquote>\n\n"
         "❓ Остались вопросы? Пишите @SupXrayGramRobot."
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
@@ -3037,6 +2984,14 @@ async def handle_business_message(message: types.Message):
         except Exception as e:
             logger.error(f"[CMD] Не удалось удалить команду: {e}")
 
+        if text == ".id":
+            await bot.send_message(
+                user_id,
+                premium(f"<b>🆔 Ваш Telegram ID:</b> <code>{user_id}</code>"),
+                parse_mode="HTML"
+            )
+            return
+
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
 
@@ -3111,10 +3066,6 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, premium("<b>❌ Напишите текст для анимации!\nПример: .anim Привет мир!</b>"), parse_mode="HTML")
                 return
             await animate_text(chat_id, anim_text, message)
-            return
-
-        if text == ".snos":
-            await animate_snos(chat_id, message, bc_id)
             return
 
         if text == ".ttt":
