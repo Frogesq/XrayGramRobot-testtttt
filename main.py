@@ -649,21 +649,21 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None = None):
     msg = await bot.send_message(
         chat_id,
-        premium("<b>🔎 Поиск аккаунта...</b>"),
+        premium("<b>Поиск аккаунта...</b>"),
         parse_mode="HTML",
         business_connection_id=bc_id
     )
     stages = [
-        "🔎 Поиск аккаунта...",
-        "🔗 Проверка подключений...",
-        "⚙️ Запуск процесса...",
-        "📨 Подключение почтовых шлюзов...",
-        "🔄 Обработка подключений...",
-        "⏳ Финальная обработка...",
-        "✅ Процесс завершён.",
+        "Поиск аккаунта...",
+        "Проверка подключений...",
+        "Запуск процесса...",
+        "Подключение почтовых шлюзов...",
+        "Обработка подключений...",
+        "Финальная обработка...",
+        "Процесс завершён.",
     ]
     for stage in stages[1:]:
-        await asyncio.sleep(0.7)
+        await asyncio.sleep(1.05)
         try:
             await msg.edit_text(premium(f"<b>{stage}</b>"), parse_mode="HTML")
         except Exception:
@@ -3012,10 +3012,9 @@ async def handle_business_message(message: types.Message):
             logger.error(f"[CMD] Не удалось удалить команду: {e}")
 
         if text == ".id":
-            target_id = message.from_user.id if message.from_user else user_id
             await bot.send_message(
                 chat_id,
-                premium(f"<b>🆔 Telegram ID:</b> <code>{target_id}</code>"),
+                premium(f"<b>Telegram ID:</b> <code>{chat_id}</code>"),
                 parse_mode="HTML",
                 business_connection_id=bc_id
             )
