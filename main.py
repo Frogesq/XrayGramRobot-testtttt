@@ -3272,9 +3272,12 @@ async def handle_edited_business_message(message: types.Message):
     files = old_data["files"]
     files_list = json.loads(files) if files else []
 
-    content_lines = []
+        content_lines = []
+    if old_text:
+        content_lines.append("Было:")
+        content_lines.append(f"<blockquote>«{html.escape(old_text)}»</blockquote>")
     if new_text:
-        content_lines.append("Сообщение:")
+        content_lines.append("Стало:")
         content_lines.append(f"<blockquote>«{html.escape(new_text)}»</blockquote>")
 
     notif_text = _build_notif(
