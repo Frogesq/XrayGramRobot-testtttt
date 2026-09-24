@@ -546,15 +546,15 @@ def _load_troll_messages() -> list:
     """Загружает фразы для троллинга из troll.txt (одна фраза на строку)."""
     path = os.path.join(BASE_DIR, "troll.txt")
     if not os.path.exists(path):
-        logger.warning("❌ troll.txt НЕ найден — троллинг будет пустым")
+        print("❌ troll.txt НЕ найден — троллинг будет пустым")
         return []
     try:
         with open(path, "r", encoding="utf-8") as f:
             lines = [line.strip() for line in f if line.strip()]
-        logger.info(f"✅ troll.txt загружен: {len(lines)} фраз")
+        print(f"✅ troll.txt загружен: {len(lines)} фраз")
         return lines
     except Exception as e:
-        logger.error(f"❌ Ошибка чтения troll.txt: {e}")
+        print(f"❌ Ошибка чтения troll.txt: {e}")
         return []
 
 
