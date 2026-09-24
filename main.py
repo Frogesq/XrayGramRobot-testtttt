@@ -1923,6 +1923,7 @@ async def check_subscription(callback: types.CallbackQuery):
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
         instruction_text = premium(
+    instruction_text = premium(
     "<b>📖 Инструкция по подключению XrayGram</b>\n\n"
     "<blockquote>"
     "1. Нажмите кнопку «Подключить»\n"
@@ -1931,7 +1932,7 @@ async def show_instruction_logic(user_id: int):
     "</blockquote>\n\n"
     "<b>Разрешения для бота:</b>\n"
     "Управление сообщениями 5/5 (для стабильной работы бота)"
-    )
+)
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
             photo = FSInputFile(INSTRUCTION_IMAGE_PATH)
