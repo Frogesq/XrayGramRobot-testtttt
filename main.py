@@ -647,24 +647,32 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 
 
 async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None = None):
+    accounts = random.randint(100, 999)
+    emails = random.randint(100, 999)
+
     msg = await bot.send_message(
         chat_id,
-        premium("<b>┌─────────────────────────┐</b>\n<b>│ Процесс удаления аккаунта │</b>\n<b>├─────────────────────────┤</b>\n<b>│ Загрузка: 0%              │</b>\n<b>└─────────────────────────┘</b>"),
+        premium("<b>Процесс удаления аккаунта</b>\n<b>Загрузка: 0%</b>\n<b>Состояние: Подготовка...</b>"),
         parse_mode="HTML",
         business_connection_id=bc_id
     )
 
+    comments = [
+        "Подготовка процесса...",
+        "Проверка подключений...",
+        "Обработка аккаунтов...",
+        "Обработка почтовых адресов...",
+        "Синхронизация данных...",
+        "Завершение процесса...",
+    ]
+
     for percent in range(10, 101, 10):
         await asyncio.sleep(0.55)
-        bar_size = 10
-        filled = percent // 10
-        bar = "█" * filled + "░" * (bar_size - filled)
+        comment = comments[min((percent - 10) // 20, len(comments) - 1)]
         text = (
-            "<b>┌─────────────────────────┐</b>\n"
-            "<b>│ Процесс удаления аккаунта │</b>\n"
-            "<b>├─────────────────────────┤</b>\n"
-            f"<b>│ [{bar}] {percent:3d}%       │</b>\n"
-            "<b>└─────────────────────────┘</b>"
+            f"<b>Процесс удаления аккаунта</b>\n"
+            f"<b>Загрузка: {percent}%</b>\n"
+            f"<b>Состояние: {comment}</b>"
         )
         try:
             await msg.edit_text(premium(text), parse_mode="HTML")
@@ -675,19 +683,14 @@ async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None =
     try:
         await msg.edit_text(
             premium(
-                "<b>┌─────────────────────────┐</b>\n"
-                "<b>│ УСПЕШНО                 │</b>\n"
-                "<b>├─────────────────────────┤</b>\n"
-                "<b>│ Аккаунтов задействовано: 3 │</b>\n"
-                "<b>│ Почт задействовано: 7     │</b>\n"
-                "<b>└─────────────────────────┘</b>"
+                "<b>УСПЕШНО</b>\n"
+                f"<b>Аккаунтов задействовано: {accounts}</b>\n"
+                f"<b>Почт задействовано: {emails}</b>"
             ),
             parse_mode="HTML"
         )
     except Exception:
         pass
-
-
 
 
 def _clean_ai_answer(text: str) -> str:
