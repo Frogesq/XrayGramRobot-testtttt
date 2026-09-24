@@ -2048,7 +2048,7 @@ async def unmute_callback(callback: types.CallbackQuery):
 async def show_commands(callback: types.CallbackQuery):
     commands_text = premium(
         "<b>📋 Список доступных команд</b>\n\n"
-        "<blockquote>.mute – заглушить чат. (.unmute чтобы размутить)\n"
+        ".mute – заглушить чат. (.unmute чтобы размутить)\n"
         ".spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
         ".duel – начать дуэль с собеседником.\n"
         ".anim &lt;текст&gt; – анимация текста.\n"
