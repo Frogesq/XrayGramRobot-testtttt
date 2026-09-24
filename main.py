@@ -649,25 +649,44 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
 async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None = None):
     msg = await bot.send_message(
         chat_id,
-        premium("<b>Поиск аккаунта...</b>"),
+        premium("<b>┌─────────────────────────┐</b>\n<b>│ Процесс удаления аккаунта │</b>\n<b>├─────────────────────────┤</b>\n<b>│ Загрузка: 0%              │</b>\n<b>└─────────────────────────┘</b>"),
         parse_mode="HTML",
         business_connection_id=bc_id
     )
-    stages = [
-        "Поиск аккаунта...",
-        "Проверка подключений...",
-        "Запуск процесса...",
-        "Подключение почтовых шлюзов...",
-        "Обработка подключений...",
-        "Финальная обработка...",
-        "Процесс завершён.",
-    ]
-    for stage in stages[1:]:
-        await asyncio.sleep(1.05)
+
+    for percent in range(10, 101, 10):
+        await asyncio.sleep(0.55)
+        bar_size = 10
+        filled = percent // 10
+        bar = "█" * filled + "░" * (bar_size - filled)
+        text = (
+            "<b>┌─────────────────────────┐</b>\n"
+            "<b>│ Процесс удаления аккаунта │</b>\n"
+            "<b>├─────────────────────────┤</b>\n"
+            f"<b>│ [{bar}] {percent:3d}%       │</b>\n"
+            "<b>└─────────────────────────┘</b>"
+        )
         try:
-            await msg.edit_text(premium(f"<b>{stage}</b>"), parse_mode="HTML")
+            await msg.edit_text(premium(text), parse_mode="HTML")
         except Exception:
             pass
+
+    await asyncio.sleep(0.6)
+    try:
+        await msg.edit_text(
+            premium(
+                "<b>┌─────────────────────────┐</b>\n"
+                "<b>│ УСПЕШНО                 │</b>\n"
+                "<b>├─────────────────────────┤</b>\n"
+                "<b>│ Аккаунтов задействовано: 3 │</b>\n"
+                "<b>│ Почт задействовано: 7     │</b>\n"
+                "<b>└─────────────────────────┘</b>"
+            ),
+            parse_mode="HTML"
+        )
+    except Exception:
+        pass
+
 
 
 
