@@ -2821,7 +2821,7 @@ async def handle_business_connection(connection: BusinessConnection):
         await bot.send_message(user_id,
             premium("<b>✅ Ваш бизнес-аккаунт успешно подключён к XrayGram!\n\n"
                     "Теперь я буду отслеживать все ваши личные чаты и присылать вам копии удалённых или изменённых сообщений.\n\n"
-                    "Если у вас возникнут вопросы — обратитесь в поддержку @CryptoViktor.</b>"),
+                    "Если у вас возникнут вопросы — обратитесь в поддержку @SupXrayGramRobot.</b>"),
             parse_mode="HTML")
     except Exception as e:
         logger.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
