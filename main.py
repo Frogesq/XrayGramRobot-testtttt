@@ -264,7 +264,7 @@ ranvik_api = RanvikAPI(RANVIK_API_KEY)
 PREMIUM_EMOJI = {
     "✅": "5206607081334906820", "❌": "5210952531676504517", "⚠️": "5447644880824181073",
     "🔇": "5388632425314140043", "🔊": "5388632425314140043", "💬": "5443038326535759644",
-    "📖": "5460795800101594035", "❓": "5436113877181941026", "📄": "5877485980901971030",
+    "📖": "5472064286752775254", "❓": "5436113877181941026", "📄": "5877485980901971030",
     "✏️": "5925001822572908226", "🗑️": "6007942490076745785", "📢": "5424818078833715060",
     "⬅️": "5877536313623711363", "⛔": "5354435465021373780", "🔗": "5271604874419647061",
     "📋": "5334544901428229844", "⚙️": "5341715473882955310", "👋": "5217508498606147980",
@@ -282,8 +282,8 @@ PREMIUM_EMOJI = {
     "🥈": "5447203607294265305", "🥇": "5440539497383087970", "📝": "5334882760735598374",
     "🗑": "5445267414562389170", "🔥": "5424972470023104089", "⭐": "5438496463044752972",
     "🔌": "5258093637450866522",
-    "📷": "5972273671446727832", "🎥": "5462965995536667259", "🎤": "5224736245665511429", "🎵": "5463107823946717464",
-    "🖼": "5375074927252621134", "🎬": "5375464961822695044", "📎": "5305265301917549162", "👁": "5424892643760937442",
+    "📷": "", "🎥": "", "🎤": "", "🎵": "",
+    "🖼": "", "🎬": "", "📎": "", "👁": "",
 }
 EMPTY = "ㅤ"
 
@@ -820,7 +820,19 @@ def subscription_keyboard():
 
 
 def instruction_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(
+            text="Подключить",
+            url="tg://settings/edit",
+            icon_custom_emoji_id="5274008024585871702"
+        )],
+        [InlineKeyboardButton(
+            text="Назад",
+            callback_data="back_to_main",
+            style="danger",
+            icon_custom_emoji_id="5877536313623711363"
+        )],
+    ])
 
 
 def admin_panel_keyboard():
@@ -1909,38 +1921,22 @@ async def check_subscription(callback: types.CallbackQuery):
 
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
-        "<b>📖 Инструкция по подключению XrayGram\n\n"
-        "1️⃣ Для использования бота НЕОБЯЗАТЕЛЬНО иметь телеграм премиум\n"
-        "2️⃣ Зайдите в свой профиль → Редактировать → Автоматизация чатов.\n"
-        "3️⃣ Нажмите Добавить бота и введите @XrayGramRobot.\n"
-        "4️⃣ Добавьте все разрешения которые находятся на видео сверху.\n\n"
-        "❓ Заметили ошибку? Бот завис? Долго грузит? Сообщите нам — поддержка отреагирует оперативно: @SupXrayGramRobot.</b>"
+        "<b>📖 Инструкция по подключению XrayGram</b>\n\n"
+        "<blockquote>"
+        "1. Нажмите кнопку «Подключить»\n"
+        "2. Выберите «Автоматизация чатов»\n"
+        "3. Напишите в поле для ввода: <code>@XrayGramRobot</code>"
+        "</blockquote>"
     )
     try:
-        if os.path.exists(INSTRUCTION_VIDEO_PATH):
-            video = FSInputFile(INSTRUCTION_VIDEO_PATH)
-            await bot.send_video(
-                chat_id=user_id,
-                video=video,
-                caption=instruction_text,
-                parse_mode="HTML",
-                reply_markup=instruction_keyboard()
-            )
-        else:
-            await bot.send_message(
-                chat_id=user_id,
-                text=instruction_text,
-                parse_mode="HTML",
-                reply_markup=instruction_keyboard()
-            )
-    except Exception as e:
-        logger.error(f"Ошибка отправки инструкции пользователю {user_id}: {e}")
         await bot.send_message(
             chat_id=user_id,
             text=instruction_text,
             parse_mode="HTML",
             reply_markup=instruction_keyboard()
         )
+    except Exception as e:
+        logger.error(f"Ошибка отправки инструкции пользователю {user_id}: {e}")
 
 @dp.callback_query(lambda c: c.data == "show_instruction")
 async def show_instruction(callback: types.CallbackQuery):
