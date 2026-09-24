@@ -699,18 +699,15 @@ def _clean_ai_answer(text: str) -> str:
         return text
     cleaned = text.strip()
 
-    # Убираем строки вида "User Safety: safe", "Safety: safe", "[Safety: safe]" и т.п.
     lines = cleaned.split('\n')
     result_lines = []
     for line in lines:
         low = line.lower().strip()
-        # Отсекаем короткие технические метки
         if ('safety' in low or 'moderation' in low or 'flagged' in low) and len(low) < 60:
             continue
         result_lines.append(line)
     cleaned = '\n'.join(result_lines).strip()
 
-    # Дополнительно регексы для меток в конце
     patterns = [
         r'\n*\s*\[?\s*user\s+safety\s*:\s*\w+\s*\]?\s*$',
         r'\n*\s*\[?\s*safety\s*:\s*\w+\s*\]?\s*$',
@@ -721,7 +718,6 @@ def _clean_ai_answer(text: str) -> str:
     for p in patterns:
         cleaned = re.sub(p, '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
 
-    # На случай, если метка в начале
     start_patterns = [
         r'^\s*\[?\s*user\s+safety\s*:\s*\w+\s*\]?\s*\n*',
         r'^\s*\[?\s*safety\s*:\s*\w+\s*\]?\s*\n*',
@@ -776,7 +772,6 @@ def get_ai_response_sync(user_id: int, user_message: str) -> str:
     prompt = db.get_ai_prompt(user_id) or DEFAULT_AI_PROMPT
     primary = db.get_ai_model(user_id) or DEFAULT_AI_MODEL
 
-    # Пробуем выбранную модель, затем — авто-роутер, затем перебор free-моделей
     candidates = [primary]
     if primary != "openrouter/free":
         candidates.append("openrouter/free")
@@ -1438,6 +1433,50 @@ async def download_files(message: types.Message, user_id: int) -> list:
 def format_user_info(user: types.User) -> str:
     name = (user.first_name or "") + (" " + user.last_name if user.last_name else "")
     return f"{name} (@{user.username})" if user.username else f"{name} (ID: {user.id})"
+
+NOTIF_DIVIDER = "________________________"
+NOTIF_FOOTER = "Бот @XrayGramRobot"
+
+
+def _format_sender_storage(user, dt=None) -> str:
+    """'@username · ID 123456789\\n24.09.2026 · 18:47'"""
+    if not user:
+        return "Неизвестный"
+    parts = []
+    if getattr(user, "username", None):
+        parts.append(f"@{user.username}")
+    parts.append(f"ID {user.id}")
+    sender_line = " · ".join(parts)
+    if dt is not None:
+        try:
+            dt_line = dt.strftime("%d.%m.%Y · %H:%M")
+            return f"{sender_line}\n{dt_line}"
+        except Exception:
+            pass
+    return sender_line
+
+
+def _get_media_label(message) -> str:
+    if getattr(message, "photo", None): return "📷 Фото"
+    if getattr(message, "video", None): return "🎥 Видео"
+    if getattr(message, "voice", None): return "🎤 Голосовое"
+    if getattr(message, "video_note", None): return "⭕ Видеосообщение"
+    if getattr(message, "audio", None): return "🎵 Аудио"
+    if getattr(message, "document", None): return "📄 Документ"
+    if getattr(message, "sticker", None): return "🖼 Стикер"
+    if getattr(message, "animation", None): return "🎬 GIF"
+    return "📎 Медиа"
+
+
+def _build_notif(header: str, fullname: str, content_lines: list) -> str:
+    lines = [header, "", fullname]
+    if content_lines:
+        lines.append("")
+        lines.extend(content_lines)
+    lines.append("")
+    lines.append(NOTIF_DIVIDER)
+    lines.append(NOTIF_FOOTER)
+    return "\n".join(lines)
 
 async def send_notification(chat_id: int, text: str, files: list = None, parse_mode: str = "HTML"):
     try:
@@ -3177,7 +3216,7 @@ async def handle_business_message(message: types.Message):
 
     msg_id = message.message_id
     sender = message.from_user
-    fullname = format_user_info(sender) if sender else "Неизвестный"
+    fullname = _format_sender_storage(sender, message.date)
     text = message.text or message.caption or ""
 
     files = await download_files(message, user_id)
@@ -3186,7 +3225,16 @@ async def handle_business_message(message: types.Message):
     logger.info(f"[SAVE] Сохранено {msg_id} для {user_id} (chat_id={chat_id})")
 
     if message.has_media_spoiler and files:
-        notif_text = premium(f"<b>⚠️ Самоуничтожающееся сообщение от {fullname}\n\n{text}</b>") if text else premium(f"<b>⚠️ Самоуничтожающееся медиа от {fullname}</b>")
+        media_label = _get_media_label(message)
+        content_lines = [media_label]
+        if text:
+            content_lines.append("Сообщение:")
+            content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
+        notif_text = _build_notif(
+            "👁 Одноразовое медиа\nОбнаружено одноразовое медиа",
+            fullname,
+            content_lines,
+        )
         await send_notification(user_id, notif_text, files)
 
 @dp.edited_business_message()
@@ -3212,13 +3260,23 @@ async def handle_edited_business_message(message: types.Message):
     db.update_message_text(bc_id, msg_id, new_text)
     new_sender = message.from_user
     if new_sender:
-        new_fullname = format_user_info(new_sender)
+        new_fullname = _format_sender_storage(new_sender, message.date)
         if new_fullname != old_fullname:
             db.update_message_fullname(bc_id, msg_id, new_fullname)
             old_fullname = new_fullname
     files = old_data["files"]
     files_list = json.loads(files) if files else []
-    notif_text = premium(f"<b>✏️ Сообщение изменено от {old_fullname}\n\nБыло: {old_text}\nСтало: {new_text}</b>")
+
+    content_lines = []
+    if new_text:
+        content_lines.append("Сообщение:")
+        content_lines.append(f"<blockquote>«{html.escape(new_text)}»</blockquote>")
+
+    notif_text = _build_notif(
+        "✏️ Изменённое сообщение\nОбнаружено изменённое сообщение",
+        old_fullname,
+        content_lines,
+    )
     await send_notification(user_id, notif_text, files_list)
     db.increment_stat(user_id, "edited_count")
 
@@ -3238,7 +3296,17 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
         text = data["text"] or ""
         files = data["files"]
         files_list = json.loads(files) if files else []
-        notif_text = premium(f"<b>❌ Сообщение удалено от {fullname}\n\n{text}</b>") if text else premium(f"<b>❌ Сообщение удалено от {fullname}</b>")
+
+        content_lines = []
+        if text:
+            content_lines.append("Сообщение:")
+            content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
+
+        notif_text = _build_notif(
+            "❌ Удалённое сообщение\nОбнаружено удалённое сообщение",
+            fullname,
+            content_lines,
+        )
         await send_notification(user_id, notif_text, files_list)
         db.delete_message(bc_id, msg_id)
         db.increment_stat(user_id, "deleted_count")
