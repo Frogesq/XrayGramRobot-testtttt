@@ -1924,10 +1924,12 @@ async def show_instruction_logic(user_id: int):
     instruction_text = premium(
         "<b>📖 Инструкция по подключению XrayGram</b>\n\n"
         "<blockquote>"
-        "1. Нажмите кнопку «Подключить»\n"
-        "2. Выберите «Автоматизация чатов»\n"
-        "3. Напишите в поле для ввода: <code>@XrayGramRobot</code>"
-        "</blockquote>"
+        "</b>1. Нажмите кнопку «Подключить»</b>\n"
+        "</b>2. Выберите «Автоматизация чатов»</b>\n"
+        "</b>3. Напишите в поле для ввода: <code>@XrayGramRobot</code></b>"
+        "</blockquote>\n\n"
+        "<b>Разрешения для бота:</b>"
+        "</b>Управление сообщениями 5/5 (для стабильной работы бота)</b>\n\n"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
