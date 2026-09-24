@@ -47,6 +47,7 @@ if not RANVIK_API_KEY:
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(BASE_DIR, "downloads")
 INSTRUCTION_VIDEO_PATH = os.path.join(BASE_DIR, "instruction.mp4")
+INSTRUCTION_IMAGE_PATH = os.path.join(BASE_DIR, "instruction.jpg")
 BANNER_PATH = os.path.join(BASE_DIR, "banner.png")
 MINI_APP_DIR = os.path.join(BASE_DIR, "mini_app")
 MINI_APP_URL = "https://xraygram.bothost.tech"
@@ -1929,12 +1930,22 @@ async def show_instruction_logic(user_id: int):
         "</blockquote>"
     )
     try:
-        await bot.send_message(
-            chat_id=user_id,
-            text=instruction_text,
-            parse_mode="HTML",
-            reply_markup=instruction_keyboard()
-        )
+        if os.path.exists(INSTRUCTION_IMAGE_PATH):
+            photo = FSInputFile(INSTRUCTION_IMAGE_PATH)
+            await bot.send_photo(
+                chat_id=user_id,
+                photo=photo,
+                caption=instruction_text,
+                parse_mode="HTML",
+                reply_markup=instruction_keyboard()
+            )
+        else:
+            await bot.send_message(
+                chat_id=user_id,
+                text=instruction_text,
+                parse_mode="HTML",
+                reply_markup=instruction_keyboard()
+            )
     except Exception as e:
         logger.error(f"Ошибка отправки инструкции пользователю {user_id}: {e}")
 
