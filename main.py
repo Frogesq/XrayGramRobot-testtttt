@@ -2056,7 +2056,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
         ".troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
         ".snos – запустить ВИЗУАЛЬНУЮ анимацию процесса сноса.\n"
-        ".id – показать Telegram ID собеседника.</blockquote>\n\n"
+        ".id – показать Telegram ID собеседника.\n\n"
     )
     await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
