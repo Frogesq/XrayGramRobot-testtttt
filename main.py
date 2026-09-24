@@ -1994,7 +1994,7 @@ async def show_commands(callback: types.CallbackQuery):
         "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
         "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
         "🧨 .snos – запустить визуальную анимацию процесса сноса.\n"
-        "🆔 .id – показать Telegram ID человека, отправившего команду.</blockquote>\n\n"
+        "🆔 .id – показать Telegram ID человека.</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
