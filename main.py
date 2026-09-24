@@ -1922,16 +1922,14 @@ async def check_subscription(callback: types.CallbackQuery):
 
 async def show_instruction_logic(user_id: int):
     instruction_text = premium(
-        instruction_text = premium(
-    instruction_text = premium(
-    "<b>📖 Инструкция по подключению XrayGram</b>\n\n"
-    "<blockquote>"
-    "1. Нажмите кнопку «Подключить»\n"
-    "2. Выберите «Автоматизация чатов»\n"
-    "3. Напишите в поле для ввода: <code>@XrayGramRobot</code>"
-    "</blockquote>\n\n"
-    "<b>Разрешения для бота:</b>\n"
-    "Управление сообщениями 5/5 (для стабильной работы бота)"
+        "<b>📖 Инструкция по подключению XrayGram</b>\n\n"
+        "<blockquote>"
+        "1. Нажмите кнопку «Подключить»\n"
+        "2. Выберите «Автоматизация чатов»\n"
+        "3. Напишите в поле для ввода: <code>@XrayGramRobot</code>"
+        "</blockquote>\n\n"
+        "<b>Разрешения для бота:</b>\n"
+        "Управление сообщениями 5/5 (для стабильной работы бота)"
     )
     try:
         if os.path.exists(INSTRUCTION_IMAGE_PATH):
