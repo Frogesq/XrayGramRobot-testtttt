@@ -3025,10 +3025,10 @@ async def handle_business_message(message: types.Message):
                 media_label = _get_media_label(replied)
                 content_lines = [media_label]
                 if replied.caption:
-                    content_lines.append("Сообщение:")
+                    content_lines.append("<b>Сообщение:</b>")
                     content_lines.append(f"<blockquote>«{html.escape(replied.caption)}»</blockquote>")
                 caption_text = _build_notif(
-                    "Обнаружено одноразовое медиа",
+                    "<b>👁 Обнаружено одноразовое медиа</b>",
                     sender_info,
                     content_lines,
                 )
@@ -3233,10 +3233,10 @@ async def handle_business_message(message: types.Message):
         media_label = _get_media_label(message)
         content_lines = [media_label]
         if text:
-            content_lines.append("<b>Сообщение:<b>")
+            content_lines.append("<b>Сообщение:</b>")
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
         notif_text = _build_notif(
-            "<b>👁 Обнаружено одноразовое медиа<b>",
+            "<b>👁 Обнаружено одноразовое медиа</b>",
             fullname,
             content_lines,
         )
@@ -3274,14 +3274,14 @@ async def handle_edited_business_message(message: types.Message):
 
     content_lines = []
     if old_text:
-        content_lines.append("<b>Было:<b>")
+        content_lines.append("<b>Было:</b>")
         content_lines.append(f"<blockquote>«{html.escape(old_text)}»</blockquote>")
     if new_text:
-        content_lines.append("<b>Стало:<b>")
+        content_lines.append("<b>Стало:</b>")
         content_lines.append(f"<blockquote>«{html.escape(new_text)}»</blockquote>")
 
     notif_text = _build_notif(
-        "<b>✏️ Обнаружено изменённое сообщение<b>",
+        "<b>✏️ Обнаружено изменённое сообщение</b>",
         old_fullname,
         content_lines,
     )
@@ -3307,11 +3307,11 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
         content_lines = []
         if text:
-            content_lines.append("<b>Сообщение:<b>")
+            content_lines.append("<b>Сообщение:</b>")
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
 
         notif_text = _build_notif(
-            "<b>🗑️ Обнаружено удалённое сообщение<b>",
+            "<b>🗑️ Обнаружено удалённое сообщение</b>",
             fullname,
             content_lines,
         )
