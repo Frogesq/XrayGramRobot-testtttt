@@ -3023,38 +3023,45 @@ async def handle_business_message(message: types.Message):
         if is_restricted_media(replied):
             media_type, file_id = extract_media(replied)
             if file_id and media_type:
-                sender_info = format_user_info(replied.from_user) if replied.from_user else "Неизвестный"
-                caption_text = f"💾 Сохранено одноразовое медиа от {sender_info}"
+                sender_info = _format_sender_storage(replied.from_user, replied.date)
+                media_label = _get_media_label(replied)
+                content_lines = [media_label]
                 if replied.caption:
-                    caption_text += f"\n\nПодпись: {replied.caption}"
+                    content_lines.append("Сообщение:")
+                    content_lines.append(f"<blockquote>«{html.escape(replied.caption)}»</blockquote>")
+                caption_text = _build_notif(
+                    "Обнаружено одноразовое медиа",
+                    sender_info,
+                    content_lines,
+                )
                 data = await load_media_to_buffer(file_id)
                 if data:
                     try:
                         if media_type == "photo":
-                            await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=caption_text)
+                            await bot.send_photo(user_id, BufferedInputFile(data, filename="photo.jpg"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "video":
-                            await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=caption_text)
+                            await bot.send_video(user_id, BufferedInputFile(data, filename="video.mp4"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "voice":
-                            await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=caption_text)
+                            await bot.send_voice(user_id, BufferedInputFile(data, filename="voice.ogg"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "video_note":
                             await bot.send_video_note(user_id, BufferedInputFile(data, filename="video_note.mp4"))
-                            await bot.send_message(user_id, caption_text)
+                            await bot.send_message(user_id, premium(caption_text), parse_mode="HTML")
                         elif media_type == "audio":
-                            await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=caption_text)
+                            await bot.send_audio(user_id, BufferedInputFile(data, filename="audio.mp3"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "document":
-                            await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=caption_text)
+                            await bot.send_document(user_id, BufferedInputFile(data, filename="document.bin"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "animation":
-                            await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=caption_text)
+                            await bot.send_animation(user_id, BufferedInputFile(data, filename="animation.mp4"), caption=premium(caption_text), parse_mode="HTML")
                         elif media_type == "sticker":
                             await bot.send_sticker(user_id, file_id)
-                            await bot.send_message(user_id, caption_text)
+                            await bot.send_message(user_id, premium(caption_text), parse_mode="HTML")
                         else:
-                            await bot.send_message(user_id, caption_text)
+                            await bot.send_message(user_id, premium(caption_text), parse_mode="HTML")
                         logger.info(f"[REPLY] Одноразовое медиа ({media_type}) сохранено для {user_id}")
                     except Exception as e:
                         logger.error(f"[REPLY] Ошибка отправки медиа: {e}")
                 else:
-                    await bot.send_message(user_id, f"⚠️ Не удалось скачать медиа.\n{caption_text}")
+                    await bot.send_message(user_id, premium(f"⚠️ Не удалось скачать медиа.\n\n{caption_text}"), parse_mode="HTML")
         else:
             logger.info(f"[REPLY] Ответ на обычное медиа (не одноразовое) – пропущено")
 
@@ -3231,7 +3238,7 @@ async def handle_business_message(message: types.Message):
             content_lines.append("Сообщение:")
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
         notif_text = _build_notif(
-            "👁 Одноразовое медиа\nОбнаружено одноразовое медиа",
+            "Обнаружено одноразовое медиа",
             fullname,
             content_lines,
         )
@@ -3273,7 +3280,7 @@ async def handle_edited_business_message(message: types.Message):
         content_lines.append(f"<blockquote>«{html.escape(new_text)}»</blockquote>")
 
     notif_text = _build_notif(
-        "✏️ Изменённое сообщение\nОбнаружено изменённое сообщение",
+        "Обнаружено изменённое сообщение",
         old_fullname,
         content_lines,
     )
@@ -3303,7 +3310,7 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
 
         notif_text = _build_notif(
-            "❌ Удалённое сообщение\nОбнаружено удалённое сообщение",
+            "Обнаружено удалённое сообщение",
             fullname,
             content_lines,
         )
