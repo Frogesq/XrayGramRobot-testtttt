@@ -552,7 +552,7 @@ AWAY_THROTTLE_SECONDS = 3600
 
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
-    ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".id",
+    ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".snos", ".id",
 )
 
 
@@ -644,6 +644,31 @@ async def animate_text(chat_id: int, text: str, message: types.Message, delay: f
             pass
         await asyncio.sleep(delay)
     await asyncio.sleep(0.5)
+
+
+async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None = None):
+    msg = await bot.send_message(
+        chat_id,
+        premium("<b>🔎 Поиск аккаунта...</b>"),
+        parse_mode="HTML",
+        business_connection_id=bc_id
+    )
+    stages = [
+        "🔎 Поиск аккаунта...",
+        "🔗 Проверка подключений...",
+        "⚙️ Запуск процесса...",
+        "📨 Подключение почтовых шлюзов...",
+        "🔄 Обработка подключений...",
+        "⏳ Финальная обработка...",
+        "✅ Процесс завершён.",
+    ]
+    for stage in stages[1:]:
+        await asyncio.sleep(0.7)
+        try:
+            await msg.edit_text(premium(f"<b>{stage}</b>"), parse_mode="HTML")
+        except Exception:
+            pass
+
 
 
 def _clean_ai_answer(text: str) -> str:
@@ -1946,7 +1971,8 @@ async def show_commands(callback: types.CallbackQuery):
         "❌⭕ .ttt – начать игру в крестики-нолики.\n"
         "🤖 .gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
         "🧨 .troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
-        "🆔 .id – показать ваш Telegram ID.</blockquote>\n\n"
+        "🧨 .snos – запустить визуальную анимацию процесса сноса.\n"
+        "🆔 .id – показать Telegram ID человека, отправившего команду.</blockquote>\n\n"
         "<b>Примеры:</b>\n"
         "<blockquote>.mute\n"
         ".unmute\n"
@@ -1957,6 +1983,7 @@ async def show_commands(callback: types.CallbackQuery):
         ".gn Как дела?\n"
         ".troll\n"
         ".stoptroll\n"
+        ".snos\n"
         ".id</blockquote>\n\n"
         "❓ Остались вопросы? Пишите @SupXrayGramRobot."
     )
@@ -2985,11 +3012,17 @@ async def handle_business_message(message: types.Message):
             logger.error(f"[CMD] Не удалось удалить команду: {e}")
 
         if text == ".id":
+            target_id = message.from_user.id if message.from_user else user_id
             await bot.send_message(
-                user_id,
-                premium(f"<b>🆔 Ваш Telegram ID:</b> <code>{user_id}</code>"),
-                parse_mode="HTML"
+                chat_id,
+                premium(f"<b>🆔 Telegram ID:</b> <code>{target_id}</code>"),
+                parse_mode="HTML",
+                business_connection_id=bc_id
             )
+            return
+
+        if text == ".snos":
+            await animate_snos(chat_id, message, bc_id)
             return
 
         if text == ".mute":
