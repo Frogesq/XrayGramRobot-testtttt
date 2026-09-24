@@ -284,7 +284,7 @@ PREMIUM_EMOJI = {
     "🗑": "5258130763148172425", "🔥": "5424972470023104089", "⭐": "5258165702707125574",
     "🔌": "5258093637450866522",
     "📷": "", "🎥": "", "🎤": "", "🎵": "",
-    "🖼": "", "🎬": "", "📎": "", "👁": "",
+    "🖼": "", "🎬": "", "📎": "", "👁": "5253959125838090076",
 }
 EMPTY = "ㅤ"
 
@@ -3233,10 +3233,10 @@ async def handle_business_message(message: types.Message):
         media_label = _get_media_label(message)
         content_lines = [media_label]
         if text:
-            content_lines.append("Сообщение:")
+            content_lines.append("<b>Сообщение:<b>")
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
         notif_text = _build_notif(
-            "Обнаружено одноразовое медиа",
+            "<b>👁 Обнаружено одноразовое медиа<b>",
             fullname,
             content_lines,
         )
@@ -3274,14 +3274,14 @@ async def handle_edited_business_message(message: types.Message):
 
     content_lines = []
     if old_text:
-        content_lines.append("Было:")
+        content_lines.append("<b>Было:<b>")
         content_lines.append(f"<blockquote>«{html.escape(old_text)}»</blockquote>")
     if new_text:
-        content_lines.append("Стало:")
+        content_lines.append("<b>Стало:<b>")
         content_lines.append(f"<blockquote>«{html.escape(new_text)}»</blockquote>")
 
     notif_text = _build_notif(
-        "Обнаружено изменённое сообщение",
+        "<b>✏️ Обнаружено изменённое сообщение<b>",
         old_fullname,
         content_lines,
     )
@@ -3307,11 +3307,11 @@ async def handle_deleted_business_messages(event: BusinessMessagesDeleted):
 
         content_lines = []
         if text:
-            content_lines.append("Сообщение:")
+            content_lines.append("<b>Сообщение:<b>")
             content_lines.append(f"<blockquote>«{html.escape(text)}»</blockquote>")
 
         notif_text = _build_notif(
-            "Обнаружено удалённое сообщение",
+            "<b>🗑️ Обнаружено удалённое сообщение<b>",
             fullname,
             content_lines,
         )
