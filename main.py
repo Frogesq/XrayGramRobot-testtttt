@@ -875,58 +875,53 @@ def back_to_admin_keyboard():
 # ============ МЕНЮ КОМАНД ============
 COMMAND_INFO = {
     "mute": {
-        "button": "🔇 .mute",
-        "title": "🔇 .mute",
+        "button": ".mute",
+        "title": ".mute",
         "desc": "Заглушить чат.\n\nСообщения собеседника будут удаляться, а не сохраняться.\n\n<b>Использование:</b>\n<code>.mute</code>"
     },
     "unmute": {
-        "button": "🔊 .unmute",
-        "title": "🔊 .unmute",
+        "button": ".unmute",
+        "title": ".unmute",
         "desc": "Размутить чат.\n\nСообщения снова будут сохраняться.\n\n<b>Использование:</b>\n<code>.unmute</code>"
     },
     "spam": {
-        "button": "💬 .spam",
-        "title": "💬 .spam",
+        "button": ".spam",
+        "title": ".spam",
         "desc": "Отправить одно сообщение несколько раз.\n\n<b>Использование:</b>\n<code>.spam &lt;число&gt; &lt;текст&gt;</code>\n\n<b>Пример:</b>\n<code>.spam 5 Привет!</code>"
     },
     "duel": {
-        "button": "⚔️ .duel",
-        "title": "⚔️ .duel",
+        "button": ".duel",
+        "title": ".duel",
         "desc": "Начать дуэль с собеседником.\n\nСлучайный исход.\n\n<b>Использование:</b>\n<code>.duel</code>"
     },
     "anim": {
-        "button": "🔄 .anim",
-        "title": "🔄 .anim",
+        "button": ".anim",
+        "title": ".anim",
         "desc": "Анимированное появление текста.\n\n<b>Использование:</b>\n<code>.anim &lt;текст&gt;</code>\n\n<b>Пример:</b>\n<code>.anim Привет мир!</code>"
     },
     "ttt": {
-        "button": "❌⭕ .ttt",
-        "title": "❌⭕ .ttt",
+        "button": ".ttt",
+        "title": ".ttt",
         "desc": "Начать игру в крестики-нолики прямо в чате.\n\n<b>Использование:</b>\n<code>.ttt</code>"
     },
     "gn": {
-        "button": "🤖 .gn",
-        "title": "🤖 .gn",
+        "button": ".gn",
+        "title": ".gn",
         "desc": "Задать вопрос XrayGPT 1.0. Ответ придёт в чат.\n\n<b>Использование:</b>\n<code>.gn &lt;вопрос&gt;</code>\n\n<b>Пример:</b>\n<code>.gn Как дела?</code>"
     },
     "troll": {
-        "button": "🧨 .troll",
-        "title": "🧨 .troll",
-        "desc": "Запустить бесконечный спам оскорбительными фразами.\n\nЧтобы остановить — используйте <code>.stoptroll</code>.\n\n<b>Использование:</b>\n<code>.troll</code>"
-    },
-    "stoptroll": {
-        "button": "⏹ .stoptroll",
-        "title": "⏹ .stoptroll",
-        "desc": "Остановить троллинг в текущем чате.\n\n<b>Использование:</b>\n<code>.stoptroll</code>"
+        "button": ".troll",
+        "title": ".troll",
+        "desc": "Запустить бесконечный спам оскорбительными фразами.\n\n<b>Использование:</b>\n<code>.troll</code>"
     },
     "snos": {
-        "button": "🧨 .snos",
-        "title": "🧨 .snos",
+        "button": ".snos",
+        "title": ".snos",
         "desc": "Запустить ВИЗУАЛЬНУЮ анимацию процесса сноса.\n\n<b>Использование:</b>\n<code>.snos</code>"
     },
     "id": {
-        "button": "🆔 .id",
-        "title": "🆔 .id",
+        "button": ".id",
+        "title": ".id",
         "desc": "Показать Telegram ID собеседника.\n\n<b>Использование:</b>\n<code>.id</code>"
     },
 }
@@ -3208,23 +3203,14 @@ async def handle_business_message(message: types.Message):
         if text == ".mute":
             db.add_muted_chat(user_id, chat_id)
 
-            unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="🔊 Анмут",
-                    callback_data=f"unmute_{user_id}_{chat_id}",
-                    style="success"
-                )]
-            ])
-
             try:
                 await bot.send_message(
                     chat_id,
                     premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
                     business_connection_id=bc_id,
-                    parse_mode="HTML",
-                    reply_markup=unmute_kb
+                    parse_mode="HTML"
                 )
-                logger.info(f"[MUTE] Уведомление с кнопкой Анмут отправлено в чат {chat_id}")
+                logger.info(f"[MUTE] Уведомление отправлено в чат {chat_id}")
             except Exception as e:
                 logger.error(f"[MUTE] Ошибка отправки в чат {chat_id}: {e}")
 
