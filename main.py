@@ -11,10 +11,18 @@ import requests
 import urllib3
 import hashlib
 import hmac
+import ast
+import operator
+import subprocess
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from urllib.parse import parse_qsl
 from dotenv import load_dotenv
+try:
+    import psutil
+except ImportError:
+    psutil = None
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
@@ -568,7 +576,121 @@ AWAY_THROTTLE_SECONDS = 3600
 KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
     ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".snos", ".id",
+    ".echo", ".noecho", ".flip", ".gif", ".ping", ".calc",
+    ".chk", ".word", ".ms",
 )
+
+BOT_START_TIME = time.time()
+
+# echo: (owner_id, chat_id) -> True
+echo_enabled = {}
+# mute TTL: (owner_id, chat_id) -> expire_ts (None = forever)
+mute_until = {}
+# games
+chk_games = {}
+word_games = {}
+ms_games = {}
+ms_setup = {}
+
+WORD_DICT = [
+    "яблоко", "солнце", "ракета", "облако", "телефон", "книга", "окно", "дверь",
+    "машина", "река", "гора", "лес", "море", "небо", "звезда", "луна", "дом",
+    "школа", "работа", "друг", "семья", "любовь", "счастье", "музыка", "фильм",
+    "игра", "спорт", "футбол", "хоккей", "зима", "лето", "весна", "осень",
+    "кофе", "чай", "хлеб", "сыр", "рыба", "птица", "кот", "собака", "мышь",
+    "тигр", "лев", "волк", "медведь", "заяц", "лиса", "еж", "слон", "жираф",
+]
+
+_CALC_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod,
+    ast.Pow: operator.pow, ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
+
+
+def _calc_eval(node):
+    if isinstance(node, ast.Expression):
+        return _calc_eval(node.body)
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return node.value
+    if isinstance(node, ast.Num):
+        return node.n
+    if isinstance(node, ast.BinOp):
+        op = _CALC_OPS.get(type(node.op))
+        if not op:
+            raise ValueError("op")
+        return op(_calc_eval(node.left), _calc_eval(node.right))
+    if isinstance(node, ast.UnaryOp):
+        op = _CALC_OPS.get(type(node.op))
+        if not op:
+            raise ValueError("op")
+        return op(_calc_eval(node.operand))
+    if isinstance(node, ast.Call):
+        raise ValueError("call")
+    raise ValueError("bad")
+
+
+def safe_calc(expr: str) -> str:
+    expr = expr.strip().replace(" ", "").replace("×", "*").replace("÷", "/").replace(",", ".")
+    expr = expr.replace("^", "**")
+    if not expr or len(expr) > 100:
+        raise ValueError("empty")
+    if not re.fullmatch(r"[0-9+\-*/().%*]+", expr):
+        raise ValueError("chars")
+    tree = ast.parse(expr, mode="eval")
+    result = _calc_eval(tree)
+    if isinstance(result, float) and result == int(result):
+        result = int(result)
+    return str(result)
+
+
+def parse_duration(s: str) -> int | None:
+    m = re.fullmatch(r"(\d+)([smhdSMHD])", (s or "").strip())
+    if not m:
+        return None
+    n, u = int(m.group(1)), m.group(2).lower()
+    if n <= 0:
+        return None
+    return n * {"s": 1, "m": 60, "h": 3600, "d": 86400}[u]
+
+
+def format_duration(sec: int) -> str:
+    if sec < 60:
+        return f"{sec}с"
+    if sec < 3600:
+        return f"{sec // 60}м"
+    if sec < 86400:
+        return f"{sec // 3600}ч"
+    return f"{sec // 86400}д"
+
+
+def is_muted_now(owner_id: int, chat_id: int) -> bool:
+    key = (owner_id, chat_id)
+    exp = mute_until.get(key)
+    if exp is not None and time.time() >= exp:
+        mute_until.pop(key, None)
+        try:
+            db.remove_muted_chat(owner_id, chat_id)
+        except Exception:
+            pass
+        return False
+    try:
+        return bool(db.is_chat_muted(owner_id, chat_id))
+    except Exception:
+        return False
+
+
+def set_mute(owner_id: int, chat_id: int, seconds: int | None):
+    db.add_muted_chat(owner_id, chat_id)
+    if seconds and seconds > 0:
+        mute_until[(owner_id, chat_id)] = time.time() + seconds
+    else:
+        mute_until.pop((owner_id, chat_id), None)
+
+
+def clear_mute(owner_id: int, chat_id: int):
+    mute_until.pop((owner_id, chat_id), None)
+    db.remove_muted_chat(owner_id, chat_id)
 
 
 def premium(text: str) -> str:
@@ -646,6 +768,192 @@ def ttt_keyboard(board, game_id):
         kb.append(row)
     kb.append([InlineKeyboardButton(text="🔴 Завершить", callback_data=f"ttt_end_{game_id}", style="danger")])
     return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+# ---- Шашки (упрощённые) ----
+def chk_new_board():
+    # 8x8, 1=white, 2=black, 3=white king, 4=black king, 0=empty
+    b = [[0] * 8 for _ in range(8)]
+    for r in range(3):
+        for c in range(8):
+            if (r + c) % 2 == 1:
+                b[r][c] = 2
+    for r in range(5, 8):
+        for c in range(8):
+            if (r + c) % 2 == 1:
+                b[r][c] = 1
+    return b
+
+
+def chk_cell_emoji(v):
+    return {0: "·", 1: "⚪", 2: "⚫", 3: "⬜", 4: "⬛"}.get(v, "·")
+
+
+def chk_board_text(board, turn):
+    lines = ["  a b c d e f g h"]
+    for r in range(8):
+        lines.append(f"{8 - r} " + " ".join(chk_cell_emoji(board[r][c]) for c in range(8)))
+    side = "⚪ белые" if turn == 1 else "⚫ чёрные"
+    return "<code>" + "\n".join(lines) + f"</code>\n\nХод: <b>{side}</b>\nКоординаты: <code>.a3b4</code>"
+
+
+def chk_parse_move(s: str):
+    m = re.fullmatch(r"\.?([a-hA-H])([1-8])([a-hA-H])([1-8])", s.strip())
+    if not m:
+        return None
+    c1 = ord(m.group(1).lower()) - ord("a")
+    r1 = 8 - int(m.group(2))
+    c2 = ord(m.group(3).lower()) - ord("a")
+    r2 = 8 - int(m.group(4))
+    return r1, c1, r2, c2
+
+
+def chk_apply_move(board, move, turn):
+    r1, c1, r2, c2 = move
+    piece = board[r1][c1]
+    if turn == 1 and piece not in (1, 3):
+        return False
+    if turn == 2 and piece not in (2, 4):
+        return False
+    if board[r2][c2] != 0:
+        return False
+    dr, dc = r2 - r1, c2 - c1
+    if abs(dr) == 1 and abs(dc) == 1:
+        if piece == 1 and dr != -1:
+            return False
+        if piece == 2 and dr != 1:
+            return False
+        board[r2][c2] = piece
+        board[r1][c1] = 0
+    elif abs(dr) == 2 and abs(dc) == 2:
+        mr, mc = r1 + dr // 2, c1 + dc // 2
+        mid = board[mr][mc]
+        if turn == 1 and mid not in (2, 4):
+            return False
+        if turn == 2 and mid not in (1, 3):
+            return False
+        board[r2][c2] = piece
+        board[r1][c1] = 0
+        board[mr][mc] = 0
+    else:
+        return False
+    if turn == 1 and r2 == 0 and board[r2][c2] == 1:
+        board[r2][c2] = 3
+    if turn == 2 and r2 == 7 and board[r2][c2] == 2:
+        board[r2][c2] = 4
+    return True
+
+
+def chk_has_pieces(board, turn):
+    need = (1, 3) if turn == 1 else (2, 4)
+    return any(board[r][c] in need for r in range(8) for c in range(8))
+
+
+# ---- Сапёр ----
+def ms_create(size: int, bombs: int):
+    field = [[0] * size for _ in range(size)]
+    cells = [(r, c) for r in range(size) for c in range(size)]
+    random.shuffle(cells)
+    for r, c in cells[:bombs]:
+        field[r][c] = -1
+    for r in range(size):
+        for c in range(size):
+            if field[r][c] == -1:
+                continue
+            n = 0
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    rr, cc = r + dr, c + dc
+                    if 0 <= rr < size and 0 <= cc < size and field[rr][cc] == -1:
+                        n += 1
+            field[r][c] = n
+    opened = [[False] * size for _ in range(size)]
+    flagged = [[False] * size for _ in range(size)]
+    return {"field": field, "opened": opened, "flagged": flagged, "size": size, "bombs": bombs, "dead": False, "won": False}
+
+
+def ms_open(game, r, c):
+    size = game["size"]
+    if game["dead"] or game["won"] or game["flagged"][r][c] or game["opened"][r][c]:
+        return
+    if game["field"][r][c] == -1:
+        game["opened"][r][c] = True
+        game["dead"] = True
+        return
+    stack = [(r, c)]
+    while stack:
+        rr, cc = stack.pop()
+        if not (0 <= rr < size and 0 <= cc < size):
+            continue
+        if game["opened"][rr][cc] or game["flagged"][rr][cc]:
+            continue
+        game["opened"][rr][cc] = True
+        if game["field"][rr][cc] == 0:
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr or dc:
+                        stack.append((rr + dr, cc + dc))
+    closed = sum(1 for i in range(size) for j in range(size) if not game["opened"][i][j])
+    if closed == game["bombs"] and not game["dead"]:
+        game["won"] = True
+
+
+def ms_cell_text(game, r, c):
+    if game["dead"] and game["field"][r][c] == -1:
+        return "💣"
+    if game["flagged"][r][c] and not game["opened"][r][c]:
+        return "🚩"
+    if not game["opened"][r][c]:
+        return "⬜"
+    v = game["field"][r][c]
+    if v == 0:
+        return "·"
+    return str(v)
+
+
+def ms_keyboard(game, gid, flag_mode=False):
+    size = game["size"]
+    kb = []
+    for r in range(size):
+        row = []
+        for c in range(size):
+            row.append(InlineKeyboardButton(
+                text=ms_cell_text(game, r, c),
+                callback_data=f"ms_{gid}_{r}_{c}"
+            ))
+        kb.append(row)
+    mode_label = "🚩 Флаг: ВКЛ" if flag_mode else "⬜ Открыть"
+    kb.append([
+        InlineKeyboardButton(text=mode_label, callback_data=f"msflag_{gid}"),
+        InlineKeyboardButton(text="🔴 Стоп", callback_data=f"msend_{gid}", style="danger"),
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=kb)
+
+
+def ms_status_text(game):
+    if game["dead"]:
+        return "<b>💥 Взрыв! Игра окончена.</b>"
+    if game["won"]:
+        return "<b>🏆 Победа! Все безопасные клетки открыты.</b>"
+    return f"<b>💣 Сапёр</b> {game['size']}×{game['size']} · бомб: {game['bombs']}"
+
+
+async def convert_media_to_gif(src_path: str) -> str | None:
+    out = src_path + ".gif"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-y", "-i", src_path,
+            "-vf", "fps=10,scale=320:-1:flags=lanczos",
+            "-t", "8", "-loop", "0", out,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await asyncio.wait_for(proc.wait(), timeout=60)
+        if proc.returncode == 0 and os.path.exists(out) and os.path.getsize(out) > 0:
+            return out
+    except Exception as e:
+        logger.error(f"[GIF] ffmpeg: {e}")
+    return None
 
 
 async def animate_text(chat_id: int, text: str, message: types.Message, delay: float = 0.3):
@@ -873,17 +1181,26 @@ def back_to_admin_keyboard():
 
 
 COMMAND_INFOS = {
-    "mute": "<b>.mute</b>\n\nЗаглушить чат. Сообщения собеседника будут удаляться.",
-    "unmute": "<b>.unmute</b>\n\nРазмутить чат. Сообщения снова сохраняются.",
-    "spam": "<b>.spam &lt;число&gt; &lt;текст&gt;</b>\n\nСпам одинаковых сообщений в чат.\nПример: <code>.spam 5 привет</code>",
-    "duel": "<b>.duel</b>\n\nНачать дуэль с собеседником.",
-    "anim": "<b>.anim &lt;текст&gt;</b>\n\nАнимация текста.\nПример: <code>.anim Привет мир!</code>",
-    "ttt": "<b>.ttt</b>\n\nНачать игру в крестики-нолики.",
-    "gn": "<b>.gn &lt;вопрос&gt;</b>\n\nЗадать вопрос XrayGPT 1.0.\nПример: <code>.gn Как дела?</code>",
-    "troll": "<b>.troll</b>\n\nЗапустить бесконечный спам оскорбительными фразами.",
+    "mute": "<b>.mute [время]</b>\n\nЗаглушить чат.\n<code>.mute</code> — навсегда\n<code>.mute 5s/5m/5h/5d</code> — на время",
+    "unmute": "<b>.unmute</b>\n\nРазмутить чат.",
+    "spam": "<b>.spam &lt;число&gt; &lt;текст&gt;</b>\n\nСпам сообщений.\nПример: <code>.spam 5 привет</code>",
+    "duel": "<b>.duel</b>\n\nДуэль с собеседником.",
+    "anim": "<b>.anim &lt;текст&gt;</b>\n\nАнимация текста.",
+    "ttt": "<b>.ttt</b>\n\nКрестики-нолики.",
+    "gn": "<b>.gn &lt;вопрос&gt;</b>\n\nВопрос XrayGPT 1.0.",
+    "troll": "<b>.troll</b>\n\nБесконечный троллинг.",
     "stoptroll": "<b>.stoptroll</b>\n\nОстановить троллинг.",
-    "snos": "<b>.snos</b>\n\nЗапустить визуальную анимацию процесса сноса.",
-    "id": "<b>.id</b>\n\nПоказать Telegram ID собеседника.",
+    "snos": "<b>.snos</b>\n\nАнимация «сноса».",
+    "id": "<b>.id</b>\n\nTelegram ID собеседника.",
+    "echo": "<b>.echo</b>\n\nБот повторяет сообщения собеседника от вашего имени.",
+    "noecho": "<b>.noecho</b>\n\nВыключить режим эха.",
+    "flip": "<b>.flip</b>\n\nПодбросить монетку.",
+    "gif": "<b>.gif</b>\n\nОтветьте на фото/видео командой — конвертация в GIF.",
+    "ping": "<b>.ping</b>\n\nUptime, RAM, Ping.",
+    "calc": "<b>.calc &lt;выражение&gt;</b>\n\nКалькулятор.\nПример: <code>.calc 2+2*(10/5)</code>",
+    "chk": "<b>.chk</b>\n\nШашки с собеседником.",
+    "word": "<b>.word [слово]</b>\n\nИгра «слово».\n<code>.word</code> — случайное\n<code>.word секрет</code> — своё\nХод: <code>.ответ</code>",
+    "ms": "<b>.ms</b>\n\nСапёр. Размеры 6×6 / 8×8 / 9×9, бомбы 5 / 8 / авто.",
 }
 
 
@@ -909,7 +1226,26 @@ def commands_keyboard():
             InlineKeyboardButton(text=".troll", callback_data="cmd_info_troll"),
             InlineKeyboardButton(text=".stoptroll", callback_data="cmd_info_stoptroll"),
         ],
-        [InlineKeyboardButton(text=".snos", callback_data="cmd_info_snos")],
+        [
+            InlineKeyboardButton(text=".snos", callback_data="cmd_info_snos"),
+            InlineKeyboardButton(text=".echo", callback_data="cmd_info_echo"),
+        ],
+        [
+            InlineKeyboardButton(text=".noecho", callback_data="cmd_info_noecho"),
+            InlineKeyboardButton(text=".flip", callback_data="cmd_info_flip"),
+        ],
+        [
+            InlineKeyboardButton(text=".gif", callback_data="cmd_info_gif"),
+            InlineKeyboardButton(text=".ping", callback_data="cmd_info_ping"),
+        ],
+        [
+            InlineKeyboardButton(text=".calc", callback_data="cmd_info_calc"),
+            InlineKeyboardButton(text=".chk", callback_data="cmd_info_chk"),
+        ],
+        [
+            InlineKeyboardButton(text=".word", callback_data="cmd_info_word"),
+            InlineKeyboardButton(text=".ms", callback_data="cmd_info_ms"),
+        ],
         [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")],
     ])
 
@@ -1930,6 +2266,130 @@ async def ttt_callback(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("mssetup_"))
+async def ms_setup_size(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    if len(parts) != 4:
+        await callback.answer("❌")
+        return
+    try:
+        owner_id = int(parts[1])
+        chat_id = int(parts[2])
+        size = int(parts[3])
+    except ValueError:
+        await callback.answer("❌")
+        return
+    if size not in (6, 8, 9):
+        await callback.answer("❌ Размер")
+        return
+    auto_bombs = {6: 6, 8: 9, 9: 12}[size]
+    kb = InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="5 бомб", callback_data=f"msstart_{owner_id}_{chat_id}_{size}_5"),
+            InlineKeyboardButton(text="8 бомб", callback_data=f"msstart_{owner_id}_{chat_id}_{size}_8"),
+        ],
+        [InlineKeyboardButton(text=f"Авто ({auto_bombs})", callback_data=f"msstart_{owner_id}_{chat_id}_{size}_{auto_bombs}")],
+    ])
+    try:
+        await callback.message.edit_text(
+            premium(f"<b>💣 Сапёр {size}×{size}</b>\nВыберите число бомб:"),
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+    except Exception:
+        pass
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("msstart_"))
+async def ms_start_game(callback: types.CallbackQuery):
+    parts = callback.data.split("_")
+    if len(parts) != 5:
+        await callback.answer("❌")
+        return
+    try:
+        size = int(parts[3])
+        bombs = int(parts[4])
+    except ValueError:
+        await callback.answer("❌")
+        return
+    gid = f"{callback.message.chat.id}_{int(time.time())}"
+    game = ms_create(size, bombs)
+    game["flag_mode"] = False
+    game["players"] = {callback.from_user.id}
+    ms_games[gid] = game
+    try:
+        await callback.message.edit_text(
+            premium(ms_status_text(game)),
+            parse_mode="HTML",
+            reply_markup=ms_keyboard(game, gid, False)
+        )
+    except Exception as e:
+        logger.error(f"[MS] start: {e}")
+    await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data and (c.data.startswith("msflag_") or c.data.startswith("msend_") or (c.data.startswith("ms_") and not c.data.startswith("mssetup_") and not c.data.startswith("msstart_"))))
+async def ms_click(callback: types.CallbackQuery):
+    data = callback.data
+    if data.startswith("msend_"):
+        gid = data.replace("msend_", "", 1)
+        ms_games.pop(gid, None)
+        try:
+            await callback.message.edit_text(premium("<b>🔴 Сапёр завершён.</b>"), parse_mode="HTML")
+        except Exception:
+            pass
+        await callback.answer()
+        return
+    if data.startswith("msflag_"):
+        gid = data.replace("msflag_", "", 1)
+        game = ms_games.get(gid)
+        if not game:
+            await callback.answer("Игра не найдена")
+            return
+        game["flag_mode"] = not game.get("flag_mode", False)
+        try:
+            await callback.message.edit_reply_markup(reply_markup=ms_keyboard(game, gid, game["flag_mode"]))
+        except Exception:
+            pass
+        await callback.answer("Флаг" if game["flag_mode"] else "Открыть")
+        return
+    parts = data.split("_")
+    if len(parts) < 4:
+        await callback.answer("❌")
+        return
+    try:
+        r = int(parts[-2])
+        c = int(parts[-1])
+        gid = "_".join(parts[1:-2])
+    except ValueError:
+        await callback.answer("❌")
+        return
+    game = ms_games.get(gid)
+    if not game:
+        await callback.answer("Игра не найдена")
+        return
+    if game["dead"] or game["won"]:
+        await callback.answer("Игра окончена")
+        return
+    game["players"].add(callback.from_user.id)
+    if game.get("flag_mode"):
+        if not game["opened"][r][c]:
+            game["flagged"][r][c] = not game["flagged"][r][c]
+    else:
+        ms_open(game, r, c)
+    try:
+        await callback.message.edit_text(
+            premium(ms_status_text(game)),
+            parse_mode="HTML",
+            reply_markup=ms_keyboard(game, gid, game.get("flag_mode", False))
+        )
+    except Exception:
+        pass
+    await callback.answer()
+
+
 @dp.callback_query(lambda c: c.data.startswith("check_subscription"))
 async def check_subscription(callback: types.CallbackQuery):
     user_id = callback.from_user.id
@@ -2056,7 +2516,7 @@ async def unmute_callback(callback: types.CallbackQuery):
         await callback.answer("⛔ Это не ваша кнопка.", show_alert=True)
         return
 
-    db.remove_muted_chat(target_user_id, target_chat_id)
+    clear_mute(target_user_id, target_chat_id)
 
     cursor = db.conn.cursor()
     cursor.execute("SELECT bc_id FROM connections WHERE user_id = ?", (target_user_id,))
@@ -3150,48 +3610,38 @@ async def handle_business_message(message: types.Message):
             await animate_snos(chat_id, message, bc_id)
             return
 
-        if text == ".mute":
-            db.add_muted_chat(user_id, chat_id)
-
+        if text == ".mute" or text.startswith(".mute "):
+            parts = text.split(maxsplit=1)
+            seconds = None
+            if len(parts) == 2:
+                seconds = parse_duration(parts[1])
+                if seconds is None:
+                    await bot.send_message(user_id, premium("<b>❌ Формат: .mute | .mute 5s/5m/5h/5d</b>"), parse_mode="HTML")
+                    return
+            set_mute(user_id, chat_id, seconds)
             unmute_kb = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(
-                    text="🔊 Анмут",
-                    callback_data=f"unmute_{user_id}_{chat_id}",
-                    style="success"
-                )]
+                [InlineKeyboardButton(text="🔊 Анмут", callback_data=f"unmute_{user_id}_{chat_id}", style="success")]
             ])
-
+            dur_txt = "навсегда" if not seconds else f"на {format_duration(seconds)}"
             try:
                 await bot.send_message(
                     chat_id,
-                    premium("<b>🔇 Вы были заглушены. Ваши сообщения будут удаляться.</b>\n\n<i>Бот - @XrayGramRobot</i>"),
-                    business_connection_id=bc_id,
-                    parse_mode="HTML",
-                    reply_markup=unmute_kb
+                    premium(f"<b>🔇 Вы были заглушены ({dur_txt}).</b>\n\n<i>Бот - @XrayGramRobot</i>"),
+                    business_connection_id=bc_id, parse_mode="HTML", reply_markup=unmute_kb
                 )
-                logger.info(f"[MUTE] Уведомление с кнопкой Анмут отправлено в чат {chat_id}")
             except Exception as e:
-                logger.error(f"[MUTE] Ошибка отправки в чат {chat_id}: {e}")
-
+                logger.error(f"[MUTE] {e}")
             try:
-                await bot.send_message(
-                    user_id,
-                    premium(f"<b>🔇 Чат {chat_id} замучен.\nСообщения от собеседника не будут сохраняться и будут удаляться.</b>"),
-                    parse_mode="HTML"
-                )
-            except Exception as e:
-                logger.error(f"[MUTE] Ошибка отправки уведомления пользователю {user_id}: {e}")
-
-            logger.info(f"[CMD] .mute выполнен для чата {chat_id}")
+                await bot.send_message(user_id, premium(f"<b>🔇 Чат {chat_id} замучен {dur_txt}.</b>"), parse_mode="HTML")
+            except Exception:
+                pass
             return
 
         if text == ".unmute":
-            db.remove_muted_chat(user_id, chat_id)
+            clear_mute(user_id, chat_id)
             await bot.send_message(chat_id, premium("<b>🔊 Вы размучены. Ваши сообщения больше не будут удаляться.</b>"),
                                    business_connection_id=bc_id, parse_mode="HTML")
-            await bot.send_message(user_id, premium(f"<b>🔊 Чат {chat_id} размучен.\nСообщения снова сохраняются.</b>"),
-                                   parse_mode="HTML")
-            logger.info(f"[CMD] .unmute выполнен для чата {chat_id}")
+            await bot.send_message(user_id, premium(f"<b>🔊 Чат {chat_id} размучен.</b>"), parse_mode="HTML")
             return
 
         if text.startswith(".spam "):
@@ -3268,9 +3718,267 @@ async def handle_business_message(message: types.Message):
                 await bot.send_message(user_id, "❌ Троллинг не был запущен.", parse_mode="HTML")
             return
 
+        if text == ".echo":
+            echo_enabled[(user_id, chat_id)] = True
+            await bot.send_message(user_id, premium("<b>✅ Эхо включено.</b>"), parse_mode="HTML")
+            return
+
+        if text == ".noecho":
+            echo_enabled.pop((user_id, chat_id), None)
+            await bot.send_message(user_id, premium("<b>⏹ Эхо выключено.</b>"), parse_mode="HTML")
+            return
+
+        if text == ".flip":
+            msg = await bot.send_message(chat_id, premium("<b>🪙 ...</b>"), parse_mode="HTML", business_connection_id=bc_id)
+            for frame in ("🪙 ↺", "🪙 ↻", "🪙 ↺", "🪙 ↻"):
+                await asyncio.sleep(0.35)
+                try:
+                    await msg.edit_text(premium(f"<b>{frame}</b>"), parse_mode="HTML")
+                except Exception:
+                    pass
+            result = random.choice(["🦅 Орёл", "⚪ Решка"])
+            try:
+                await msg.edit_text(premium(f"<b>{result}</b>"), parse_mode="HTML")
+            except Exception:
+                await bot.send_message(chat_id, premium(f"<b>{result}</b>"), parse_mode="HTML", business_connection_id=bc_id)
+            return
+
+        if text == ".gif":
+            replied = message.reply_to_message
+            if not replied:
+                await bot.send_message(user_id, premium("<b>❌ Ответьте на фото или видео командой .gif</b>"), parse_mode="HTML")
+                return
+            media_type, file_id = extract_media(replied)
+            if media_type not in ("photo", "video", "animation", "document"):
+                await bot.send_message(user_id, premium("<b>❌ Нужно фото или видео.</b>"), parse_mode="HTML")
+                return
+            try:
+                tg_file = await bot.get_file(file_id)
+                ext = ".mp4" if media_type in ("video", "animation") else ".jpg"
+                src = os.path.join(get_user_download_dir(user_id), f"gif_src_{message.message_id}{ext}")
+                await bot.download_file(tg_file.file_path, src)
+                gif_path = await convert_media_to_gif(src)
+                if not gif_path:
+                    await bot.send_message(user_id, premium("<b>❌ Не удалось конвертировать.</b>"), parse_mode="HTML")
+                else:
+                    await bot.send_animation(
+                        chat_id,
+                        FSInputFile(gif_path),
+                        business_connection_id=bc_id
+                    )
+                    try:
+                        os.remove(gif_path)
+                    except Exception:
+                        pass
+                try:
+                    os.remove(src)
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.error(f"[GIF] {e}")
+                await bot.send_message(user_id, premium(f"<b>❌ Ошибка GIF: {html.escape(str(e)[:100])}</b>"), parse_mode="HTML")
+            return
+
+        if text == ".ping":
+            t0 = time.time()
+            try:
+                await bot.get_me()
+            except Exception:
+                pass
+            ping_ms = int((time.time() - t0) * 1000)
+            uptime_s = int(time.time() - BOT_START_TIME)
+            h, rem = divmod(uptime_s, 3600)
+            m, s = divmod(rem, 60)
+            ram = "n/a"
+            if psutil:
+                try:
+                    p = psutil.Process(os.getpid())
+                    ram = f"{p.memory_info().rss / 1024 / 1024:.1f} MB"
+                except Exception:
+                    pass
+            await bot.send_message(
+                chat_id,
+                premium(
+                    f"<b>🏓 Pong</b>\n"
+                    f"Ping: <code>{ping_ms} ms</code>\n"
+                    f"Uptime: <code>{h}ч {m}м {s}с</code>\n"
+                    f"RAM: <code>{ram}</code>"
+                ),
+                parse_mode="HTML",
+                business_connection_id=bc_id
+            )
+            return
+
+        if text.startswith(".calc"):
+            expr = text[5:].strip()
+            if not expr:
+                await bot.send_message(user_id, premium("<b>❌ Пример: .calc 2+2*(10/5)</b>"), parse_mode="HTML")
+                return
+            try:
+                result = safe_calc(expr)
+                await bot.send_message(
+                    chat_id,
+                    premium(f"<b>🧮</b> <code>{html.escape(expr)}</code> = <b>{html.escape(result)}</b>"),
+                    parse_mode="HTML",
+                    business_connection_id=bc_id
+                )
+            except Exception:
+                await bot.send_message(user_id, premium("<b>❌ Неверное выражение.</b>"), parse_mode="HTML")
+            return
+
+        if text == ".chk":
+            if chat_id in chk_games:
+                await bot.send_message(user_id, premium("<b>⚠️ Шашки уже идут.</b>"), parse_mode="HTML")
+                return
+            board = chk_new_board()
+            chk_games[chat_id] = {"board": board, "turn": 1, "p1": user_id, "p2": 0, "bc_id": bc_id}
+            await bot.send_message(
+                chat_id,
+                premium("<b>⚫⚪ Шашки</b>\n\n" + chk_board_text(board, 1) + "\n\nХод: <code>.a3b4</code>"),
+                parse_mode="HTML",
+                business_connection_id=bc_id
+            )
+            return
+
+        if text == ".word" or text.startswith(".word "):
+            if chat_id in word_games:
+                await bot.send_message(user_id, premium("<b>⚠️ Игра уже идёт. Ход: .слово</b>"), parse_mode="HTML")
+                return
+            parts = text.split(maxsplit=1)
+            secret = parts[1].strip().lower() if len(parts) == 2 else random.choice(WORD_DICT)
+            if len(secret) < 2 or not re.fullmatch(r"[a-zа-яё]+", secret, re.I):
+                await bot.send_message(user_id, premium("<b>❌ Слово: только буквы, мин. 2.</b>"), parse_mode="HTML")
+                return
+            word_games[chat_id] = {"word": secret, "host": user_id, "guesses": [], "bc_id": bc_id}
+            hide = "•" * len(secret)
+            await bot.send_message(
+                chat_id,
+                premium(
+                    f"<b>🔤 Слово</b>\nДлина: <b>{len(secret)}</b> ({hide})\n"
+                    f"Ход: напишите <code>.ответ</code>"
+                ),
+                parse_mode="HTML",
+                business_connection_id=bc_id
+            )
+            try:
+                await bot.send_message(
+                    user_id,
+                    premium(f"<b>Слово загадано:</b> <tg-spoiler>{html.escape(secret)}</tg-spoiler>"),
+                    parse_mode="HTML"
+                )
+            except Exception:
+                pass
+            return
+
+        if text == ".ms":
+            kb = InlineKeyboardMarkup(inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="6×6", callback_data=f"mssetup_{user_id}_{chat_id}_6"),
+                    InlineKeyboardButton(text="8×8", callback_data=f"mssetup_{user_id}_{chat_id}_8"),
+                    InlineKeyboardButton(text="9×9", callback_data=f"mssetup_{user_id}_{chat_id}_9"),
+                ],
+            ])
+            await bot.send_message(
+                chat_id,
+                premium("<b>💣 Сапёр</b>\nВыберите размер поля:"),
+                parse_mode="HTML",
+                business_connection_id=bc_id,
+                reply_markup=kb
+            )
+            return
+
         return
 
-    if db.is_chat_muted(user_id, chat_id) and not is_owner:
+    # ход в шашках: .a3b4
+    if message.text and chat_id in chk_games and re.fullmatch(r"\.[a-hA-H][1-8][a-hA-H][1-8]", message.text.strip()):
+        game = chk_games[chat_id]
+        move = chk_parse_move(message.text.strip())
+        if move:
+            turn = game["turn"]
+            if turn == 1 and sender_id != game["p1"]:
+                pass
+            elif turn == 2 and game["p2"] == 0:
+                game["p2"] = sender_id
+            elif turn == 2 and sender_id != game["p2"]:
+                pass
+            else:
+                if chk_apply_move(game["board"], move, turn):
+                    next_turn = 2 if turn == 1 else 1
+                    if not chk_has_pieces(game["board"], next_turn):
+                        await bot.send_message(
+                            chat_id,
+                            premium(f"<b>🏆 Победа!</b>\n\n" + chk_board_text(game["board"], turn)),
+                            parse_mode="HTML",
+                            business_connection_id=bc_id
+                        )
+                        del chk_games[chat_id]
+                    else:
+                        game["turn"] = next_turn
+                        await bot.send_message(
+                            chat_id,
+                            premium(chk_board_text(game["board"], next_turn)),
+                            parse_mode="HTML",
+                            business_connection_id=bc_id
+                        )
+                else:
+                    await bot.send_message(chat_id, premium("<b>❌ Недопустимый ход</b>"), parse_mode="HTML", business_connection_id=bc_id)
+        # don't return — continue saving message flow optionally
+        return
+
+    # ход в слове: .ответ
+    if message.text and chat_id in word_games and message.text.startswith(".") and message.text.strip() not in KNOWN_COMMANDS:
+        guess = message.text.strip()[1:].lower()
+        if guess and re.fullmatch(r"[a-zа-яё]+", guess, re.I):
+            game = word_games[chat_id]
+            if guess == game["word"]:
+                await bot.send_message(
+                    chat_id,
+                    premium(f"<b>🏆 Угадано!</b> Слово: <b>{html.escape(game['word'])}</b>"),
+                    parse_mode="HTML",
+                    business_connection_id=bc_id
+                )
+                del word_games[chat_id]
+            else:
+                game["guesses"].append(guess)
+                await bot.send_message(
+                    chat_id,
+                    premium(f"<b>❌ Нет.</b> Попыток: {len(game['guesses'])}"),
+                    parse_mode="HTML",
+                    business_connection_id=bc_id
+                )
+            return
+
+    # echo
+    if not is_owner and sender_id and echo_enabled.get((user_id, chat_id)) and message.text and not message.text.startswith("."):
+        try:
+            await bot.send_message(chat_id, message.text, business_connection_id=bc_id)
+        except Exception as e:
+            logger.error(f"[ECHO] {e}")
+
+    # .ms доступен любому участнику чата
+    if message.text and message.text.strip() == ".ms" and not is_owner:
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [
+                InlineKeyboardButton(text="6×6", callback_data=f"mssetup_{user_id}_{chat_id}_6"),
+                InlineKeyboardButton(text="8×8", callback_data=f"mssetup_{user_id}_{chat_id}_8"),
+                InlineKeyboardButton(text="9×9", callback_data=f"mssetup_{user_id}_{chat_id}_9"),
+            ],
+        ])
+        try:
+            await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
+        except Exception:
+            pass
+        await bot.send_message(
+            chat_id,
+            premium("<b>💣 Сапёр</b>\nВыберите размер поля:"),
+            parse_mode="HTML",
+            business_connection_id=bc_id,
+            reply_markup=kb
+        )
+        return
+
+    if is_muted_now(user_id, chat_id) and not is_owner:
+
         try:
             await bot.delete_business_messages(business_connection_id=bc_id, message_ids=[message.message_id])
             logger.info(f"[MUTE] Сообщение {message.message_id} удалено")
@@ -3311,7 +4019,7 @@ async def handle_edited_business_message(message: types.Message):
     if not await ensure_subscription(user_id, notify=False):
         return
     chat_id = message.chat.id
-    if db.is_chat_muted(user_id, chat_id):
+    if is_muted_now(user_id, chat_id):
         return
     msg_id = message.message_id
     new_text = message.text or message.caption or ""
