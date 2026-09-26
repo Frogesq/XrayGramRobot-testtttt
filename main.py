@@ -872,8 +872,52 @@ def back_to_admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад в админ-панель", callback_data="back_to_admin", style="primary", icon_custom_emoji_id="5877536313623711363")]])
 
 
+COMMAND_INFOS = {
+    "mute": "<b>.mute</b>\n\nЗаглушить чат. Сообщения собеседника будут удаляться.",
+    "unmute": "<b>.unmute</b>\n\nРазмутить чат. Сообщения снова сохраняются.",
+    "spam": "<b>.spam &lt;число&gt; &lt;текст&gt;</b>\n\nСпам одинаковых сообщений в чат.\nПример: <code>.spam 5 привет</code>",
+    "duel": "<b>.duel</b>\n\nНачать дуэль с собеседником.",
+    "anim": "<b>.anim &lt;текст&gt;</b>\n\nАнимация текста.\nПример: <code>.anim Привет мир!</code>",
+    "ttt": "<b>.ttt</b>\n\nНачать игру в крестики-нолики.",
+    "gn": "<b>.gn &lt;вопрос&gt;</b>\n\nЗадать вопрос XrayGPT 1.0.\nПример: <code>.gn Как дела?</code>",
+    "troll": "<b>.troll</b>\n\nЗапустить бесконечный спам оскорбительными фразами.",
+    "stoptroll": "<b>.stoptroll</b>\n\nОстановить троллинг.",
+    "snos": "<b>.snos</b>\n\nЗапустить визуальную анимацию процесса сноса.",
+    "id": "<b>.id</b>\n\nПоказать Telegram ID собеседника.",
+}
+
+
 def commands_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")]])
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=".mute", callback_data="cmd_info_mute"),
+            InlineKeyboardButton(text=".unmute", callback_data="cmd_info_unmute"),
+        ],
+        [
+            InlineKeyboardButton(text=".spam", callback_data="cmd_info_spam"),
+            InlineKeyboardButton(text=".duel", callback_data="cmd_info_duel"),
+        ],
+        [
+            InlineKeyboardButton(text=".anim", callback_data="cmd_info_anim"),
+            InlineKeyboardButton(text=".ttt", callback_data="cmd_info_ttt"),
+        ],
+        [
+            InlineKeyboardButton(text=".gn", callback_data="cmd_info_gn"),
+            InlineKeyboardButton(text=".id", callback_data="cmd_info_id"),
+        ],
+        [
+            InlineKeyboardButton(text=".troll", callback_data="cmd_info_troll"),
+            InlineKeyboardButton(text=".stoptroll", callback_data="cmd_info_stoptroll"),
+        ],
+        [InlineKeyboardButton(text=".snos", callback_data="cmd_info_snos")],
+        [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")],
+    ])
+
+
+def cmd_info_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="Назад", callback_data="show_commands", style="danger", icon_custom_emoji_id="5877536313623711363")
+    ]])
 
 
 def profile_keyboard():
@@ -2046,20 +2090,24 @@ async def unmute_callback(callback: types.CallbackQuery):
 
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
-    commands_text = premium(
-        "<b>📋 Список доступных команд</b>\n\n"
-        ".mute – заглушить чат. (.unmute чтобы размутить)\n"
-        ".spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
-        ".duel – начать дуэль с собеседником.\n"
-        ".anim &lt;текст&gt; – анимация текста.\n"
-        ".ttt – начать игру в крестики-нолики.\n"
-        ".gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
-        ".troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
-        ".snos – запустить ВИЗУАЛЬНУЮ анимацию процесса сноса.\n"
-        ".id – показать Telegram ID собеседника.\n\n"
+    await safe_edit_or_send(
+        callback.message,
+        premium("<b>📋 Команды</b>\n\nВыберите команду:"),
+        commands_keyboard()
     )
-    await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
+
+
+@dp.callback_query(lambda c: c.data and c.data.startswith("cmd_info_"))
+async def cmd_info(callback: types.CallbackQuery):
+    key = callback.data.replace("cmd_info_", "", 1)
+    text = COMMAND_INFOS.get(key)
+    if not text:
+        await callback.answer("❌ Неизвестная команда.", show_alert=True)
+        return
+    await safe_edit_or_send(callback.message, premium(text), cmd_info_keyboard())
+    await callback.answer()
+
 
 @dp.callback_query(lambda c: c.data == "profile")
 async def show_profile(callback: types.CallbackQuery):
