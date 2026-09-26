@@ -2044,55 +2044,21 @@ async def unmute_callback(callback: types.CallbackQuery):
     logger.info(f"[CMD] Мут снят через кнопку для чата {target_chat_id}")
     await callback.answer("✅ Мут снят")
 
-# Справочник команд: каждая команда открывается отдельной кнопкой.
-COMMAND_INFO = {
-    "mute": (" .mute".strip(), "Заглушить текущий чат.\n\nИспользование:\n<code>.mute</code> — включить мут.\n<code>.unmute</code> — снять мут (служебная команда, отдельной кнопки нет)."),
-    "spam": (".spam", "Отправить сообщение несколько раз.\n\n<code>.spam &lt;число&gt; &lt;текст&gt;</code>\nПример: <code>.spam 5 Привет!</code>"),
-    "duel": (".duel", "Запустить дуэль с собеседником.\n\nИспользование: <code>.duel</code>"),
-    "anim": (".anim", "Анимированно показать текст.\n\n<code>.anim &lt;текст&gt;</code>\nПример: <code>.anim Привет мир!</code>"),
-    "ttt": (".ttt", "Начать игру в крестики-нолики.\n\nИспользование: <code>.ttt</code>"),
-    "gn": (".gn", "Задать вопрос XrayGPT.\n\n<code>.gn &lt;вопрос&gt;</code>\nПример: <code>.gn Как дела?</code>"),
-    "troll": (".troll", "Запустить отправку фраз в чат.\n\nИспользование: <code>.troll</code>\nОстановить: <code>.stoptroll</code> — остановить запущенный процесс."),
-    "stoptroll": (".stoptroll", "Остановить запущенный троллинг.\n\nИспользование: <code>.stoptroll</code>\nТакже команда остановки указана в справке <code>.troll</code>."),
-    "snos": (".snos", "Показать визуальную анимацию процесса.\n\nИспользование: <code>.snos</code>"),
-    "id": (".id", "Показать Telegram ID собеседника.\n\nИспользование: <code>.id</code>"),
-}
-
-def commands_list_keyboard():
-    rows = []
-    for key, (label, _) in COMMAND_INFO.items():
-        rows.append([InlineKeyboardButton(text=label, callback_data=f"command_info_{key}")])
-    rows.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")])
-    return InlineKeyboardMarkup(inline_keyboard=rows)
-
-def command_detail_keyboard(key: str):
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="⬅️ К списку команд", callback_data="show_commands")],
-        [InlineKeyboardButton(text="Назад в меню", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")],
-    ])
-
 @dp.callback_query(lambda c: c.data == "show_commands")
 async def show_commands(callback: types.CallbackQuery):
-    await safe_edit_or_send(
-        callback.message,
-        premium("<b>📋 Доступные команды</b>\\n\\nВыберите команду, чтобы посмотреть описание и примеры использования."),
-        commands_list_keyboard()
+    commands_text = premium(
+        "<b>📋 Список доступных команд</b>\n\n"
+        ".mute – заглушить чат. (.unmute чтобы размутить)\n"
+        ".spam &lt;число&gt; &lt;текст&gt; – спам одинаковых сообщений в чат.\n"
+        ".duel – начать дуэль с собеседником.\n"
+        ".anim &lt;текст&gt; – анимация текста.\n"
+        ".ttt – начать игру в крестики-нолики.\n"
+        ".gn &lt;вопрос&gt; – задать вопрос XrayGPT 1.0.\n"
+        ".troll – запустить бесконечный спам оскорбительными фразами. (.stoptroll чтобы остановить.)\n"
+        ".snos – запустить ВИЗУАЛЬНУЮ анимацию процесса сноса.\n"
+        ".id – показать Telegram ID собеседника.\n\n"
     )
-    await callback.answer()
-
-@dp.callback_query(lambda c: c.data.startswith("command_info_"))
-async def show_command_info(callback: types.CallbackQuery):
-    key = callback.data.removeprefix("command_info_")
-    info = COMMAND_INFO.get(key)
-    if not info:
-        await callback.answer("Команда не найдена", show_alert=True)
-        return
-    label, description = info
-    await safe_edit_or_send(
-        callback.message,
-        premium(f"<b>📖 Команда {label}</b>\\n\\n{description}"),
-        command_detail_keyboard(key)
-    )
+    await safe_edit_or_send(callback.message, commands_text, commands_keyboard())
     await callback.answer()
 
 @dp.callback_query(lambda c: c.data == "profile")
