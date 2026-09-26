@@ -577,7 +577,7 @@ KNOWN_COMMANDS = (
     ".mute", ".unmute", ".spam", ".duel",
     ".anim", ".ttt", ".gn", ".troll", ".stoptroll", ".snos", ".id",
     ".echo", ".noecho", ".flip", ".gif", ".ping", ".calc",
-    ".chk", ".word", ".ms",
+    ".chk", ".chkstop", ".word", ".ms", ".dox",
 )
 
 BOT_START_TIME = time.time()
@@ -786,15 +786,22 @@ def chk_new_board():
 
 
 def chk_cell_emoji(v):
-    return {0: "·", 1: "⚪", 2: "⚫", 3: "⬜", 4: "⬛"}.get(v, "·")
+    return {0: "▪️", 1: "⚪", 2: "⚫", 3: "👑", 4: "🎩"}.get(v, "▪️")
 
 
 def chk_board_text(board, turn):
-    lines = ["  a b c d e f g h"]
+    header = "　　a　b　c　d　e　f　g　h"
+    lines = [header]
     for r in range(8):
-        lines.append(f"{8 - r} " + " ".join(chk_cell_emoji(board[r][c]) for c in range(8)))
+        row = "　".join(chk_cell_emoji(board[r][c]) for c in range(8))
+        lines.append(f"{8 - r}　{row}")
     side = "⚪ белые" if turn == 1 else "⚫ чёрные"
-    return "<code>" + "\n".join(lines) + f"</code>\n\nХод: <b>{side}</b>\nКоординаты: <code>.a3b4</code>"
+    return (
+        "\n".join(lines)
+        + f"\n\n▶️ Ход: <b>{side}</b>"
+        + "\n📝 Ход: <code>.c3d4</code> (откуда→куда)"
+        + "\n⏹ Стоп: <code>.chkstop</code>"
+    )
 
 
 def chk_parse_move(s: str):
@@ -904,11 +911,9 @@ def ms_cell_text(game, r, c):
     if game["flagged"][r][c] and not game["opened"][r][c]:
         return "🚩"
     if not game["opened"][r][c]:
-        return "⬜"
+        return "⬛"
     v = game["field"][r][c]
-    if v == 0:
-        return "·"
-    return str(v)
+    return {0: "⬜", 1: "1️⃣", 2: "2️⃣", 3: "3️⃣", 4: "4️⃣", 5: "5️⃣", 6: "6️⃣", 7: "7️⃣", 8: "8️⃣"}.get(v, str(v))
 
 
 def ms_keyboard(game, gid, flag_mode=False):
@@ -922,9 +927,13 @@ def ms_keyboard(game, gid, flag_mode=False):
                 callback_data=f"ms_{gid}_{r}_{c}"
             ))
         kb.append(row)
-    mode_label = "🚩 Флаг: ВКЛ" if flag_mode else "⬜ Открыть"
+    left = sum(1 for i in range(size) for j in range(size)
+               if not game["opened"][i][j] and not game["flagged"][i][j])
+    flags = sum(1 for i in range(size) for j in range(size) if game["flagged"][i][j])
+    mode_label = "🚩 Режим флага" if flag_mode else "🔍 Режим открытия"
+    kb.append([InlineKeyboardButton(text=mode_label, callback_data=f"msflag_{gid}")])
     kb.append([
-        InlineKeyboardButton(text=mode_label, callback_data=f"msflag_{gid}"),
+        InlineKeyboardButton(text=f"💣{game['bombs']} 🚩{flags} ⬛{left}", callback_data="ms_noop"),
         InlineKeyboardButton(text="🔴 Стоп", callback_data=f"msend_{gid}", style="danger"),
     ])
     return InlineKeyboardMarkup(inline_keyboard=kb)
@@ -1012,6 +1021,63 @@ async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None =
             ),
             parse_mode="HTML"
         )
+    except Exception:
+        pass
+
+
+async def animate_dox(chat_id: int, message: types.Message, bc_id: str | None = None):
+    cities = ["Москва", "Санкт-Петербург", "Казань", "Новосибирск", "Екатеринбург", "Самара", "Ростов-на-Дону"]
+    streets = ["ул. Ленина", "пр. Мира", "ул. Советская", "ул. Пушкина", "ул. Гагарина", "пер. Садовый"]
+    names = ["Иван", "Алексей", "Дмитрий", "Сергей", "Андрей", "Никита", "Максим"]
+    surnames = ["Иванов", "Петров", "Сидоров", "Смирнов", "Кузнецов", "Попов", "Васильев"]
+    fathers = ["Иванович", "Петрович", "Сергеевич", "Александрович", "Дмитриевич", "Андреевич"]
+
+    city = random.choice(cities)
+    street = random.choice(streets)
+    house = random.randint(1, 120)
+    apt = random.randint(1, 90)
+    name = random.choice(names)
+    surname = random.choice(surnames)
+    father = random.choice(fathers)
+    phone = f"+7 ({random.randint(900,999)}) {random.randint(100,999)}-{random.randint(10,99)}-{random.randint(10,99)}"
+    ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
+
+    msg = await bot.send_message(
+        chat_id,
+        premium("<b>📡 Сканирование...</b>\n<b>Прогресс: 0%</b>"),
+        parse_mode="HTML",
+        business_connection_id=bc_id
+    )
+    stages = [
+        (15, "Поиск цифровых следов..."),
+        (30, "Анализ геолокации..."),
+        (45, "Сбор открытых источников..."),
+        (60, "Сверка баз..."),
+        (75, "Формирование профиля..."),
+        (90, "Финальная проверка..."),
+        (100, "Готово"),
+    ]
+    for pct, st in stages:
+        await asyncio.sleep(0.5)
+        try:
+            await msg.edit_text(
+                premium(f"<b>📡 Сканирование...</b>\n<b>Прогресс: {pct}%</b>\n<b>{st}</b>"),
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+    await asyncio.sleep(0.4)
+    result = (
+        "<b>📄 Результат</b>\n\n"
+        f"<b>ФИО:</b> {surname} {name} {father}\n"
+        f"<b>Город:</b> {city}\n"
+        f"<b>Адрес:</b> {street}, д. {house}, кв. {apt}\n"
+        f"<b>Телефон:</b> <code>{phone}</code>\n"
+        f"<b>IP:</b> <code>{ip}</code>\n\n"
+        "<i>⚠️ Вымышленные данные. Только визуальный эффект.</i>"
+    )
+    try:
+        await msg.edit_text(premium(result), parse_mode="HTML")
     except Exception:
         pass
 
@@ -1191,6 +1257,7 @@ COMMAND_INFOS = {
     "troll": "<b>.troll</b>\n\nБесконечный троллинг.",
     "stoptroll": "<b>.stoptroll</b>\n\nОстановить троллинг.",
     "snos": "<b>.snos</b>\n\nАнимация «сноса».",
+    "dox": "<b>.dox</b>\n\nВизуальная анимация «докса» (фейк).",
     "id": "<b>.id</b>\n\nTelegram ID собеседника.",
     "echo": "<b>.echo</b>\n\nБот повторяет сообщения собеседника от вашего имени.",
     "noecho": "<b>.noecho</b>\n\nВыключить режим эха.",
@@ -1198,56 +1265,31 @@ COMMAND_INFOS = {
     "gif": "<b>.gif</b>\n\nОтветьте на фото/видео командой — конвертация в GIF.",
     "ping": "<b>.ping</b>\n\nUptime, RAM, Ping.",
     "calc": "<b>.calc &lt;выражение&gt;</b>\n\nКалькулятор.\nПример: <code>.calc 2+2*(10/5)</code>",
-    "chk": "<b>.chk</b>\n\nШашки с собеседником.",
+    "chk": "<b>.chk</b>\n\nШашки. Ход: <code>.c3d4</code>. Стоп: <code>.chkstop</code>",
     "word": "<b>.word [слово]</b>\n\nИгра «слово».\n<code>.word</code> — случайное\n<code>.word секрет</code> — своё\nХод: <code>.ответ</code>",
-    "ms": "<b>.ms</b>\n\nСапёр. Размеры 6×6 / 8×8 / 9×9, бомбы 5 / 8 / авто.",
+    "ms": "<b>.ms</b>\n\nСапёр. 6×6 / 8×8 / 9×9, бомбы 5 / 8 / авто.",
 }
 
 
 def commands_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text=".mute", callback_data="cmd_info_mute"),
-            InlineKeyboardButton(text=".unmute", callback_data="cmd_info_unmute"),
-        ],
-        [
-            InlineKeyboardButton(text=".spam", callback_data="cmd_info_spam"),
-            InlineKeyboardButton(text=".duel", callback_data="cmd_info_duel"),
-        ],
-        [
-            InlineKeyboardButton(text=".anim", callback_data="cmd_info_anim"),
-            InlineKeyboardButton(text=".ttt", callback_data="cmd_info_ttt"),
-        ],
-        [
-            InlineKeyboardButton(text=".gn", callback_data="cmd_info_gn"),
-            InlineKeyboardButton(text=".id", callback_data="cmd_info_id"),
-        ],
-        [
-            InlineKeyboardButton(text=".troll", callback_data="cmd_info_troll"),
-            InlineKeyboardButton(text=".stoptroll", callback_data="cmd_info_stoptroll"),
-        ],
-        [
-            InlineKeyboardButton(text=".snos", callback_data="cmd_info_snos"),
-            InlineKeyboardButton(text=".echo", callback_data="cmd_info_echo"),
-        ],
-        [
-            InlineKeyboardButton(text=".noecho", callback_data="cmd_info_noecho"),
-            InlineKeyboardButton(text=".flip", callback_data="cmd_info_flip"),
-        ],
-        [
-            InlineKeyboardButton(text=".gif", callback_data="cmd_info_gif"),
-            InlineKeyboardButton(text=".ping", callback_data="cmd_info_ping"),
-        ],
-        [
-            InlineKeyboardButton(text=".calc", callback_data="cmd_info_calc"),
-            InlineKeyboardButton(text=".chk", callback_data="cmd_info_chk"),
-        ],
-        [
-            InlineKeyboardButton(text=".word", callback_data="cmd_info_word"),
-            InlineKeyboardButton(text=".ms", callback_data="cmd_info_ms"),
-        ],
-        [InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")],
-    ])
+    cmds = [
+        (".mute", "mute"), (".unmute", "unmute"), (".spam", "spam"),
+        (".duel", "duel"), (".anim", "anim"), (".ttt", "ttt"),
+        (".gn", "gn"), (".id", "id"), (".troll", "troll"),
+        (".stoptroll", "stoptroll"), (".snos", "snos"), (".dox", "dox"),
+        (".echo", "echo"), (".noecho", "noecho"), (".flip", "flip"),
+        (".gif", "gif"), (".ping", "ping"), (".calc", "calc"),
+        (".chk", "chk"), (".word", "word"), (".ms", "ms"),
+    ]
+    rows = []
+    for i in range(0, len(cmds), 3):
+        chunk = cmds[i:i+3]
+        rows.append([
+            InlineKeyboardButton(text=label, callback_data=f"cmd_info_{key}")
+            for label, key in chunk
+        ])
+    rows.append([InlineKeyboardButton(text="Назад", callback_data="back_to_main", style="danger", icon_custom_emoji_id="5877536313623711363")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def cmd_info_keyboard():
@@ -2333,6 +2375,9 @@ async def ms_start_game(callback: types.CallbackQuery):
 @dp.callback_query(lambda c: c.data and (c.data.startswith("msflag_") or c.data.startswith("msend_") or (c.data.startswith("ms_") and not c.data.startswith("mssetup_") and not c.data.startswith("msstart_"))))
 async def ms_click(callback: types.CallbackQuery):
     data = callback.data
+    if data == "ms_noop":
+        await callback.answer()
+        return
     if data.startswith("msend_"):
         gid = data.replace("msend_", "", 1)
         ms_games.pop(gid, None)
@@ -3608,6 +3653,18 @@ async def handle_business_message(message: types.Message):
 
         if text == ".snos":
             await animate_snos(chat_id, message, bc_id)
+            return
+
+        if text == ".dox":
+            await animate_dox(chat_id, message, bc_id)
+            return
+
+        if text == ".chkstop":
+            if chat_id in chk_games:
+                del chk_games[chat_id]
+                await bot.send_message(chat_id, premium("<b>⏹ Шашки остановлены.</b>"), parse_mode="HTML", business_connection_id=bc_id)
+            else:
+                await bot.send_message(user_id, premium("<b>❌ Шашки не запущены.</b>"), parse_mode="HTML")
             return
 
         if text == ".mute" or text.startswith(".mute "):
