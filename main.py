@@ -1026,22 +1026,6 @@ async def animate_snos(chat_id: int, message: types.Message, bc_id: str | None =
 
 
 async def animate_dox(chat_id: int, message: types.Message, bc_id: str | None = None):
-    cities = ["Москва", "Санкт-Петербург", "Казань", "Новосибирск", "Екатеринбург", "Самара", "Ростов-на-Дону"]
-    streets = ["ул. Ленина", "пр. Мира", "ул. Советская", "ул. Пушкина", "ул. Гагарина", "пер. Садовый"]
-    names = ["Иван", "Алексей", "Дмитрий", "Сергей", "Андрей", "Никита", "Максим"]
-    surnames = ["Иванов", "Петров", "Сидоров", "Смирнов", "Кузнецов", "Попов", "Васильев"]
-    fathers = ["Иванович", "Петрович", "Сергеевич", "Александрович", "Дмитриевич", "Андреевич"]
-
-    city = random.choice(cities)
-    street = random.choice(streets)
-    house = random.randint(1, 120)
-    apt = random.randint(1, 90)
-    name = random.choice(names)
-    surname = random.choice(surnames)
-    father = random.choice(fathers)
-    phone = f"+7 ({random.randint(900,999)}) {random.randint(100,999)}-{random.randint(10,99)}-{random.randint(10,99)}"
-    ip = f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}"
-
     msg = await bot.send_message(
         chat_id,
         premium("<b>📡 Сканирование...</b>\n<b>Прогресс: 0%</b>"),
@@ -1049,16 +1033,14 @@ async def animate_dox(chat_id: int, message: types.Message, bc_id: str | None = 
         business_connection_id=bc_id
     )
     stages = [
-        (15, "Поиск цифровых следов..."),
-        (30, "Анализ геолокации..."),
-        (45, "Сбор открытых источников..."),
-        (60, "Сверка баз..."),
-        (75, "Формирование профиля..."),
-        (90, "Финальная проверка..."),
+        (20, "Поиск по вселенной..."),
+        (40, "Сканирование Млечного Пути..."),
+        (60, "Проверка Солнечной системы..."),
+        (80, "Локализация объекта..."),
         (100, "Готово"),
     ]
     for pct, st in stages:
-        await asyncio.sleep(0.5)
+        await asyncio.sleep(0.45)
         try:
             await msg.edit_text(
                 premium(f"<b>📡 Сканирование...</b>\n<b>Прогресс: {pct}%</b>\n<b>{st}</b>"),
@@ -1066,15 +1048,16 @@ async def animate_dox(chat_id: int, message: types.Message, bc_id: str | None = 
             )
         except Exception:
             pass
-    await asyncio.sleep(0.4)
+    await asyncio.sleep(0.35)
     result = (
-        "<b>📄 Результат</b>\n\n"
-        f"<b>ФИО:</b> {surname} {name} {father}\n"
-        f"<b>Город:</b> {city}\n"
-        f"<b>Адрес:</b> {street}, д. {house}, кв. {apt}\n"
-        f"<b>Телефон:</b> <code>{phone}</code>\n"
-        f"<b>IP:</b> <code>{ip}</code>\n\n"
-        "<i>⚠️ Вымышленные данные. Только визуальный эффект.</i>"
+        "<b>📄 Результат «докса»</b>\n\n"
+        "<b>Местоположение:</b> планета Земля\n"
+        "<b>Система:</b> Солнечная\n"
+        "<b>Галактика:</b> Млечный Путь\n"
+        "<b>Вселенная:</b> эта\n"
+        "<b>Возраст:</b> примерно как у всех\n"
+        "<b>Статус:</b> жив, дышит, в интернете\n\n"
+        "<i>😂 Это шутка. Никаких реальных данных.</i>"
     )
     try:
         await msg.edit_text(premium(result), parse_mode="HTML")
